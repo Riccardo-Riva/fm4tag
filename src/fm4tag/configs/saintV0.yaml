@@ -1,0 +1,62 @@
+global_object:
+  jets
+constituent_objects:
+  - tracks
+
+variables:
+  jets:
+    inputs:
+      - pt_btagJes                                                                                                                                   
+      - eta_btagJes
+    label:
+      flavour_label
+    unique_labels: [0,1,2,3]
+
+  tracks:
+    inputs:
+      continuous:
+        - d0
+        - z0SinTheta
+        - dphi
+        - deta
+        - qOverP
+        - lifetimeSignedD0Significance
+        - lifetimeSignedZ0SinThetaSignificance
+        - phiUncertainty
+        - thetaUncertainty
+        - qOverPUncertainty
+      categorical:
+        - numberOfPixelHits
+        - numberOfSCTHits
+        - numberOfInnermostPixelLayerHits
+        - numberOfNextToInnermostPixelLayerHits
+        - numberOfInnermostPixelLayerSharedHits
+        - numberOfInnermostPixelLayerSplitHits
+        - numberOfPixelSharedHits
+        - numberOfPixelSplitHits
+        - numberOfSCTSharedHits
+        #- leptonID
+      cat_classes:
+        numberOfPixelHits: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+        numberOfSCTHits: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24]
+        numberOfInnermostPixelLayerHits: [0, 1, 2, 3]
+        numberOfNextToInnermostPixelLayerHits: [0, 1, 2, 3]
+        numberOfInnermostPixelLayerSharedHits: [0, 1]
+        numberOfInnermostPixelLayerSplitHits: [0, 1, 2, 3]
+        numberOfPixelSharedHits: [0, 1]
+        numberOfPixelSplitHits: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+        numberOfSCTSharedHits: [0, 1, 2, 3]
+        #leptonID: [-13 -11   0  11  13]
+
+# ── Pretrain phase ─────────────────────────────────────────────────────────
+pretrain_file: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_112137/pretrain/output/pp_output_pretrain.h5
+# pretrain_val_file: null       # uncomment to enable val during pretraining
+# pretrain_dataloader:          # uncomment to override batch size etc. for pretrain
+#   batch_size: 2048
+
+# ── Finetune / supervised phase ─────────────────────────────────────────────
+train_file: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_112137/train/output/pp_output_train.h5
+val_file: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_112137/val/output/pp_output_val.h5
+test_file: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_112137/test/output/pp_output_test.h5
+norm_dict: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_112137/pretrain/output/norm_dict.yaml
+class_dict: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_112137/pretrain/output/class_dict.yaml
