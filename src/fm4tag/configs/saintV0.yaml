@@ -1,16 +1,34 @@
-global_object:
-  jets
+# ════════════════════════════════════════════════════════════════════════════
+# fm4tag — SAINT v0 configuration
+#
+# SAINT encoder with column-only attention (the simplest / fastest variant).
+# All data paths, features, and training infrastructure are identical to
+# default.yaml.  Only the encoder architecture differs.
+#
+# Select this config with:
+#   python -m fm4tag.train --config-name saintV0 phase=pretrain action=fit
+# ════════════════════════════════════════════════════════════════════════════
+
+# ── Run control ─────────────────────────────────────────────────────────────
+phase:  finetune
+action: fit
+seed:   42
+experiment_name: fm4tag-saintV0
+output_dir: outputs
+
+# ── Data — objects ──────────────────────────────────────────────────────────
+global_object: jets
 constituent_objects:
   - tracks
 
+# ── Data — feature definitions ──────────────────────────────────────────────
 variables:
   jets:
     inputs:
-      - pt_btagJes                                                                                                                                   
+      - pt_btagJes
       - eta_btagJes
-    label:
-      flavour_label
-    unique_labels: [0,1,2,3]
+    label: flavour_label
+    unique_labels: [0, 1, 2, 3]
 
   tracks:
     inputs:
@@ -35,28 +53,113 @@ variables:
         - numberOfPixelSharedHits
         - numberOfPixelSplitHits
         - numberOfSCTSharedHits
-        #- leptonID
       cat_classes:
-        numberOfPixelHits: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
-        numberOfSCTHits: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24]
-        numberOfInnermostPixelLayerHits: [0, 1, 2, 3]
-        numberOfNextToInnermostPixelLayerHits: [0, 1, 2, 3]
-        numberOfInnermostPixelLayerSharedHits: [0, 1]
-        numberOfInnermostPixelLayerSplitHits: [0, 1, 2, 3]
-        numberOfPixelSharedHits: [0, 1]
-        numberOfPixelSplitHits: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
-        numberOfSCTSharedHits: [0, 1, 2, 3]
-        #leptonID: [-13 -11   0  11  13]
+        numberOfPixelHits:                        [0,1,2,3,4,5,6,7,8,9,10,11,12]
+        numberOfSCTHits:                          [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24]
+        numberOfInnermostPixelLayerHits:          [0,1,2,3]
+        numberOfNextToInnermostPixelLayerHits:    [0,1,2,3]
+        numberOfInnermostPixelLayerSharedHits:    [0,1]
+        numberOfInnermostPixelLayerSplitHits:     [0,1,2,3]
+        numberOfPixelSharedHits:                  [0,1]
+        numberOfPixelSplitHits:                   [0,1,2,3,4,5,6,7,8,9,10,11]
+        numberOfSCTSharedHits:                    [0,1,2,3]
 
-# ── Pretrain phase ─────────────────────────────────────────────────────────
-pretrain_file: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_112137/pretrain/output/pp_output_pretrain.h5
-# pretrain_val_file: null       # uncomment to enable val during pretraining
-# pretrain_dataloader:          # uncomment to override batch size etc. for pretrain
-#   batch_size: 2048
+# ── Data — file paths ────────────────────────────────────────────────────────
+pretrain_file:     /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_112137/pretrain/output/pp_output_pretrain.h5
+pretrain_val_file: null
 
-# ── Finetune / supervised phase ─────────────────────────────────────────────
 train_file: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_112137/train/output/pp_output_train.h5
-val_file: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_112137/val/output/pp_output_val.h5
-test_file: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_112137/test/output/pp_output_test.h5
-norm_dict: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_112137/pretrain/output/norm_dict.yaml
+val_file:   /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_112137/val/output/pp_output_val.h5
+test_file:  /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_112137/test/output/pp_output_test.h5
+
+norm_dict:  /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_112137/pretrain/output/norm_dict.yaml
 class_dict: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_112137/pretrain/output/class_dict.yaml
+
+# ── Data — loader settings ───────────────────────────────────────────────────
+dataloader:
+  batch_size:      1024
+  num_workers:     4
+  prefetch_factor: 2
+  pin_memory:      true
+
+pretrain_dataloader:
+  batch_size: 2048
+
+# ── Encoder architecture — SAINT v0 ──────────────────────────────────────────
+# Column-only attention: each constituent's features attend to each other.
+# Lightest / fastest variant; good baseline.
+encoder:
+  dim:              32
+  depth:            6
+  heads:            8
+  dim_head:         16
+  dim_row_head:     64
+  attn_dropout:     0.0
+  ff_dropout:       0.0
+  ff_mult:          1
+  cont_embeddings:  MLP
+  attentiontype:    col
+  final_mlp_style:  sep
+
+# ── Classifier head ───────────────────────────────────────────────────────────
+head:
+  mlp_dropout:  0.1
+  ff_dropout:   0.0
+  attn_dropout: 0.0
+  ff_mult:      4
+  heads:        8
+  dim_head:     16
+  depth:        3
+
+# ── Fine-tuning settings ──────────────────────────────────────────────────────
+freeze_encoder: false
+encoder_ckpt:   null
+ckpt_path:      null
+class_weights:  null
+
+# ── Pretraining settings ──────────────────────────────────────────────────────
+pretrain:
+  tasks:           [contrastive, denoising]
+  aug:             [mixup, cutmix]
+  aug_lambda:      0.1
+  projhead_style:  diff
+  nce_temp:        0.7
+  lam0:            1.0
+  lam1:            1.0
+  lam2:            10.0
+
+# ── Optimiser ─────────────────────────────────────────────────────────────────
+optimizer:
+  lr:           1.0e-3
+  backbone_lr:  1.0e-4
+  weight_decay: 1.0e-5
+
+# ── Trainer ───────────────────────────────────────────────────────────────────
+trainer:
+  max_epochs:        100
+  accelerator:       gpu
+  devices:           1
+  precision:         "16-mixed"
+  log_every_n_steps: 50
+  gradient_clip_val: 1.0
+
+# ── Callbacks ─────────────────────────────────────────────────────────────────
+callbacks:
+  model_summary:
+    max_depth: 2
+
+  model_checkpoint:
+    monitor:    val/loss
+    save_top_k: 3
+    mode:       min
+
+  early_stopping:
+    monitor:  val/loss
+    patience: 15
+    mode:     min
+
+  backbone_finetuning:
+    enabled:                    true
+    unfreeze_backbone_at_epoch: 10
+    backbone_initial_ratio_lr:  0.1
+    train_bn:                   false

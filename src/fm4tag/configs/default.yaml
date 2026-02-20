@@ -1,0 +1,160 @@
+# ════════════════════════════════════════════════════════════════════════════
+# fm4tag — default configuration
+#
+# All keys can be overridden from the command line via Hydra dot-notation, e.g.
+#   python -m fm4tag.train phase=pretrain trainer.max_epochs=50
+# ════════════════════════════════════════════════════════════════════════════
+
+# ── Run control ─────────────────────────────────────────────────────────────
+phase:  finetune      # pretrain | finetune
+action: fit           # fit | test | predict
+seed:   42
+experiment_name: fm4tag
+output_dir: outputs
+
+# ── Data — objects ──────────────────────────────────────────────────────────
+global_object: jets
+constituent_objects:
+  - tracks
+
+# ── Data — feature definitions ──────────────────────────────────────────────
+variables:
+  jets:
+    inputs:
+      - pt_btagJes
+      - eta_btagJes
+    label: flavour_label
+    unique_labels: [0, 1, 2, 3]
+
+  tracks:
+    inputs:
+      continuous:
+        - d0
+        - z0SinTheta
+        - dphi
+        - deta
+        - qOverP
+        - lifetimeSignedD0Significance
+        - lifetimeSignedZ0SinThetaSignificance
+        - phiUncertainty
+        - thetaUncertainty
+        - qOverPUncertainty
+      categorical:
+        - numberOfPixelHits
+        - numberOfSCTHits
+        - numberOfInnermostPixelLayerHits
+        - numberOfNextToInnermostPixelLayerHits
+        - numberOfInnermostPixelLayerSharedHits
+        - numberOfInnermostPixelLayerSplitHits
+        - numberOfPixelSharedHits
+        - numberOfPixelSplitHits
+        - numberOfSCTSharedHits
+      cat_classes:
+        numberOfPixelHits:                        [0,1,2,3,4,5,6,7,8,9,10,11,12]
+        numberOfSCTHits:                          [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24]
+        numberOfInnermostPixelLayerHits:          [0,1,2,3]
+        numberOfNextToInnermostPixelLayerHits:    [0,1,2,3]
+        numberOfInnermostPixelLayerSharedHits:    [0,1]
+        numberOfInnermostPixelLayerSplitHits:     [0,1,2,3]
+        numberOfPixelSharedHits:                  [0,1]
+        numberOfPixelSplitHits:                   [0,1,2,3,4,5,6,7,8,9,10,11]
+        numberOfSCTSharedHits:                    [0,1,2,3]
+
+# ── Data — file paths ────────────────────────────────────────────────────────
+pretrain_file:     /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_112137/pretrain/output/pp_output_pretrain.h5
+pretrain_val_file: null   # set to a path to enable validation during pretraining
+
+train_file: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_112137/train/output/pp_output_train.h5
+val_file:   /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_112137/val/output/pp_output_val.h5
+test_file:  /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_112137/test/output/pp_output_test.h5
+
+norm_dict:  /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_112137/pretrain/output/norm_dict.yaml
+class_dict: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_112137/pretrain/output/class_dict.yaml
+
+# ── Data — loader settings ───────────────────────────────────────────────────
+dataloader:
+  batch_size:      1024
+  num_workers:     4
+  prefetch_factor: 2
+  pin_memory:      true
+
+pretrain_dataloader:
+  batch_size: 2048   # larger batches help contrastive learning
+
+# ── Encoder architecture ─────────────────────────────────────────────────────
+encoder:
+  dim:              32
+  depth:            6
+  heads:            8
+  dim_head:         16
+  dim_row_head:     64
+  attn_dropout:     0.0
+  ff_dropout:       0.0
+  ff_mult:          1
+  cont_embeddings:  MLP         # MLP | pos_singleMLP | Noemb
+  attentiontype:    col         # col | colrow | row | concat
+  final_mlp_style:  sep         # sep | common
+
+# ── Classifier head (finetune only) ──────────────────────────────────────────
+head:
+  mlp_dropout:  0.1
+  ff_dropout:   0.0
+  attn_dropout: 0.0
+  ff_mult:      4
+  heads:        8
+  dim_head:     16
+  depth:        3
+
+# ── Fine-tuning settings ──────────────────────────────────────────────────────
+freeze_encoder: false   # true → encoder frozen initially; BackboneFinetuning
+                        #        callback unfreezes at unfreeze_backbone_at_epoch
+encoder_ckpt:   null    # path to a PretrainModule checkpoint to load the encoder
+ckpt_path:      null    # Lightning checkpoint to resume fit / run test / predict
+class_weights:  null    # [w0, w1, w2, w3] — leave null for uniform weights
+
+# ── Pretraining settings ──────────────────────────────────────────────────────
+pretrain:
+  tasks:           [contrastive, denoising]
+  aug:             [mixup, cutmix]
+  aug_lambda:      0.1
+  projhead_style:  diff   # diff (two separate projection heads) | same
+  nce_temp:        0.7
+  lam0:            1.0    # contrastive loss weight
+  lam1:            1.0    # categorical denoising loss weight
+  lam2:            10.0   # continuous denoising loss weight
+
+# ── Optimiser ─────────────────────────────────────────────────────────────────
+optimizer:
+  lr:           1.0e-3
+  backbone_lr:  1.0e-4   # backbone LR when freeze_encoder=false (lower than head)
+  weight_decay: 1.0e-5
+
+# ── PyTorch Lightning Trainer ─────────────────────────────────────────────────
+trainer:
+  max_epochs:         100
+  accelerator:        gpu
+  devices:            1
+  precision:          "16-mixed"   # use bf16-mixed on Ampere+ GPUs
+  log_every_n_steps:  50
+  gradient_clip_val:  1.0
+
+# ── Callbacks ─────────────────────────────────────────────────────────────────
+callbacks:
+  model_summary:
+    max_depth: 2
+
+  model_checkpoint:
+    monitor:    val/loss
+    save_top_k: 3
+    mode:       min
+
+  early_stopping:
+    monitor:  val/loss
+    patience: 15
+    mode:     min
+
+  backbone_finetuning:
+    enabled:                    true
+    unfreeze_backbone_at_epoch: 10
+    backbone_initial_ratio_lr:  0.1   # backbone LR = current head LR * ratio
+    train_bn:                   false

@@ -5,12 +5,17 @@ description = "Library for development and training of Embedding models for HEP 
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "einops>=0.8.2",
     "h5py>=3.15.1",
     "hydra-core>=1.3.2",
     "ipykernel>=7.1.0",
     "lightning>=2.6.0",
     "omegaconf>=2.3.0",
+    "typer>=0.15.0",
 ]
+
+[project.scripts]
+fm4tag = "fm4tag.cli:main"
 
 [dependency-groups]
 dev = [
