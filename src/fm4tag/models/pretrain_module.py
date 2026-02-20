@@ -41,7 +41,7 @@ class PretrainModule(L.LightningModule):
     def __init__(self, encoder: saint_encoder, cfg: DictConfig) -> None:
         super().__init__()
         # Do not save encoder as hyperparameter (non-serialisable nn.Module).
-        self.save_hyperparameters(ignore=["encoder"])
+        self.save_hyperparameters(ignore=['encoder'])
 
         self.encoder = encoder
         self.cfg = cfg
@@ -62,26 +62,28 @@ class PretrainModule(L.LightningModule):
             ``x_categ`` – ``(N_valid, F_cat)`` long
             ``x_cont``  – ``(N_valid, F_con)`` float
         """
-        const = batch["constituents"][obj_name]
-        x_categ = const["categorical"]  # (B, C, F_cat)
-        x_cont = const["continuous"]    # (B, C, F_con)
-        valids = const["valid"]         # (B, C)
+        const = batch['constituents'][obj_name]
+        x_categ = const['categorical']  # (B, C, F_cat)
+        x_cont = const['continuous']  # (B, C, F_con)
+        valids = const['valid']  # (B, C)
 
-        valids_flat = rearrange(valids, "b c -> (b c)")
-        x_categ_flat = rearrange(x_categ, "b c f -> (b c) f")
-        x_cont_flat = rearrange(x_cont, "b c f -> (b c) f")
+        valids_flat = rearrange(valids, 'b c -> (b c)')
+        x_categ_flat = rearrange(x_categ, 'b c f -> (b c) f')
+        x_cont_flat = rearrange(x_cont, 'b c f -> (b c) f')
 
         return x_categ_flat[valids_flat], x_cont_flat[valids_flat]
 
-    def _compute_loss(self, batch: dict) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
+    def _compute_loss(
+        self, batch: dict
+    ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
         cfg_pt = self.cfg.pretrain
-        obj_name = list(self.cfg.constituent_objects)[0]   # primary constituent type
+        obj_name = list(self.cfg.constituent_objects)[0]  # primary constituent type
 
         # ── Raw (uncorrupted) constituents ──────────────────────────────────
         x_categ, x_cont = self._get_valid_constituents(batch, obj_name)
 
         # ── Build corrupted view 2 (before embedding) ───────────────────────
-        if "cutmix" in cfg_pt.aug:
+        if 'cutmix' in cfg_pt.aug:
             x_categ_2, x_cont_2 = add_noise(x_categ, x_cont, lam=cfg_pt.aug_lambda)
         else:
             x_categ_2, x_cont_2 = x_categ, x_cont
@@ -91,7 +93,7 @@ class PretrainModule(L.LightningModule):
         x_cat_enc_2, x_con_enc_2 = embed_data(x_categ_2, x_cont_2, self.encoder)
 
         # ── Mixup in embedding space (applied to view 2) ─────────────────────
-        if "mixup" in cfg_pt.aug:
+        if 'mixup' in cfg_pt.aug:
             x_cat_enc_2, x_con_enc_2 = mixup_data(
                 x_cat_enc_2, x_con_enc_2, lam=cfg_pt.aug_lambda
             )
@@ -106,36 +108,36 @@ class PretrainModule(L.LightningModule):
         total_loss = X_1.new_zeros(())
         log_dict: dict[str, torch.Tensor] = {}
 
-        if "contrastive" in cfg_pt.tasks:
+        if 'contrastive' in cfg_pt.tasks:
             # Flatten feature tokens and project.
-            aug_1 = X_1.flatten(1, 2)   # (N, F*dim)
+            aug_1 = X_1.flatten(1, 2)  # (N, F*dim)
             aug_2 = X_2.flatten(1, 2)
 
             proj1 = self.encoder.pt_mlp1
             proj2 = (
                 self.encoder.pt_mlp2
-                if cfg_pt.projhead_style == "diff"
+                if cfg_pt.projhead_style == 'diff'
                 else self.encoder.pt_mlp1
             )
 
-            z1 = proj1(aug_1)   # (N, proj_dim)
+            z1 = proj1(aug_1)  # (N, proj_dim)
             z2 = proj2(aug_2)
 
             l_cont = self.contrastive_loss(z1, z2)
-            log_dict["loss_contrastive"] = l_cont
+            log_dict['loss_contrastive'] = l_cont
             total_loss = total_loss + cfg_pt.lam0 * l_cont
 
-        if "denoising" in cfg_pt.tasks:
+        if 'denoising' in cfg_pt.tasks:
             # Reconstruct original features from the corrupted view.
             cat_outs = self.encoder.mlp1(X_2[:, : self.encoder.num_categories, :])
             con_outs = self.encoder.mlp2(X_2[:, self.encoder.num_categories :, :])
 
             l_cat, l_con = self.denoising_loss(cat_outs, x_categ, con_outs, x_cont)
-            log_dict["loss_denoising_cat"] = l_cat
-            log_dict["loss_denoising_con"] = l_con
+            log_dict['loss_denoising_cat'] = l_cat
+            log_dict['loss_denoising_con'] = l_con
             total_loss = total_loss + cfg_pt.lam1 * l_cat + cfg_pt.lam2 * l_con
 
-        log_dict["loss"] = total_loss
+        log_dict['loss'] = total_loss
         return total_loss, log_dict
 
     # ------------------------------------------------------------------
@@ -144,18 +146,22 @@ class PretrainModule(L.LightningModule):
 
     def training_step(self, batch: dict, batch_idx: int) -> torch.Tensor:
         loss, log_dict = self._compute_loss(batch)
-        self.log("train/loss", log_dict["loss"], on_step=True, on_epoch=True, prog_bar=True)
+        self.log(
+            'train/loss', log_dict['loss'], on_step=True, on_epoch=True, prog_bar=True
+        )
         for k, v in log_dict.items():
-            if k != "loss":
-                self.log(f"train/{k}", v, on_step=False, on_epoch=True)
+            if k != 'loss':
+                self.log(f'train/{k}', v, on_step=False, on_epoch=True)
         return loss
 
     def validation_step(self, batch: dict, batch_idx: int) -> torch.Tensor:
         loss, log_dict = self._compute_loss(batch)
-        self.log("val/loss", log_dict["loss"], on_step=False, on_epoch=True, prog_bar=True)
+        self.log(
+            'val/loss', log_dict['loss'], on_step=False, on_epoch=True, prog_bar=True
+        )
         for k, v in log_dict.items():
-            if k != "loss":
-                self.log(f"val/{k}", v, on_step=False, on_epoch=True)
+            if k != 'loss':
+                self.log(f'val/{k}', v, on_step=False, on_epoch=True)
         return loss
 
     def configure_optimizers(self):  # type: ignore[override]
@@ -163,7 +169,7 @@ class PretrainModule(L.LightningModule):
         optimizer = torch.optim.AdamW(
             self.parameters(),
             lr=opt_cfg.lr,
-            weight_decay=opt_cfg.get("weight_decay", 1e-5),
+            weight_decay=opt_cfg.get('weight_decay', 1e-5),
         )
 
         # Cosine annealing with a short linear warm-up (10 % of total steps).
@@ -181,6 +187,6 @@ class PretrainModule(L.LightningModule):
         )
 
         return {
-            "optimizer": optimizer,
-            "lr_scheduler": {"scheduler": scheduler, "interval": "step"},
+            'optimizer': optimizer,
+            'lr_scheduler': {'scheduler': scheduler, 'interval': 'step'},
         }

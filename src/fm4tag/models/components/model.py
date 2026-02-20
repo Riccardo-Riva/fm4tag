@@ -4,6 +4,7 @@ from torch import nn
 import numpy as np
 from einops import rearrange
 
+
 # helpers
 def exists(val):
     return val is not None
@@ -85,15 +86,15 @@ class Attention(nn.Module):
 
         # Compute Q,K,V
         q, k, v = self.to_qkv(x).chunk(3, dim=-1)
-        q = rearrange(q, "b n (h d) -> b h n d", h=h)
-        k = rearrange(k, "b n (h d) -> b h n d", h=h)
-        v = rearrange(v, "b n (h d) -> b h n d", h=h)
+        q = rearrange(q, 'b n (h d) -> b h n d', h=h)
+        k = rearrange(k, 'b n (h d) -> b h n d', h=h)
+        v = rearrange(v, 'b n (h d) -> b h n d', h=h)
 
         # Build attention mask for SDPA
         attn_mask = None
         if mask is not None:
             attn_mask = mask[:, None, None, None].repeat(1, 1, 1, n)
-            attn_mask = torch.where(attn_mask, 0.0, float("-inf"))
+            attn_mask = torch.where(attn_mask, 0.0, float('-inf'))
 
         # Fast scaled dot-product attention
         out = F.scaled_dot_product_attention(
@@ -106,7 +107,7 @@ class Attention(nn.Module):
         )
 
         # Merge heads
-        out = rearrange(out, "b h n d -> b n (h d)")
+        out = rearrange(out, 'b h n d -> b n (h d)')
         return self.to_out(out)
 
 
@@ -136,15 +137,15 @@ class RowAttention(nn.Module):
 
         # Compute Q,K,V
         q, k, v = self.to_qkv(x).chunk(3, dim=-1)
-        q = rearrange(q, "b (h d) -> h b d", h=h)
-        k = rearrange(k, "b (h d) -> h b d", h=h)
-        v = rearrange(v, "b (h d) -> h b d", h=h)
+        q = rearrange(q, 'b (h d) -> h b d', h=h)
+        k = rearrange(k, 'b (h d) -> h b d', h=h)
+        v = rearrange(v, 'b (h d) -> h b d', h=h)
 
         # Build attention mask for SDPA
         attn_mask = None
         if mask is not None:
             attn_mask = mask[:, None, None]
-            attn_mask = torch.where(attn_mask, 0.0, float("-inf"))
+            attn_mask = torch.where(attn_mask, 0.0, float('-inf'))
 
         # Fast scaled dot-product attention
         out = F.scaled_dot_product_attention(
@@ -157,7 +158,7 @@ class RowAttention(nn.Module):
         )
 
         # Merge heads
-        out = rearrange(out, "h b d -> b (h d)")
+        out = rearrange(out, 'h b d -> b (h d)')
         return self.to_out(out)
 
 
@@ -253,10 +254,10 @@ class RowTransformer(nn.Module):
         b, n, d = x.shape
 
         for attn_row, ff_row in self.layers:
-            x = rearrange(x, "b n d -> b (n d)")
+            x = rearrange(x, 'b n d -> b (n d)')
             x = attn_row(x, mask=mask)
             x = ff_row(x)
-            x = rearrange(x, "b (n d) -> b n d", n=n)
+            x = rearrange(x, 'b (n d) -> b n d', n=n)
 
         return x
 
@@ -328,10 +329,10 @@ class RowColTransformer(nn.Module):
         for attn, ff, attn_row, ff_row in self.layers:
             x = attn(x, mask=mask)
             x = ff(x)
-            x = rearrange(x, "b n d -> b (n d)")
+            x = rearrange(x, 'b n d -> b (n d)')
             x = attn_row(x, mask=mask)
             x = ff_row(x)
-            x = rearrange(x, "b (n d) -> b n d", n=n)
+            x = rearrange(x, 'b (n d) -> b n d', n=n)
 
         return x
 
@@ -372,15 +373,15 @@ class Classifier_Attention(nn.Module):
 
         # Compute Q,K,V
         q, k, v = self.to_qkv(x).chunk(3, dim=-1)
-        q = rearrange(q, "b c (h d) -> b h c d", h=h)
-        k = rearrange(k, "b c (h d) -> b h c d", h=h)
-        v = rearrange(v, "b c (h d) -> b h c d", h=h)
+        q = rearrange(q, 'b c (h d) -> b h c d', h=h)
+        k = rearrange(k, 'b c (h d) -> b h c d', h=h)
+        v = rearrange(v, 'b c (h d) -> b h c d', h=h)
 
         # Build attention mask for SDPA
         attn_mask = None
         if mask is not None:
             attn_mask = mask[:, None, None, :]
-            attn_mask = torch.where(attn_mask, 0.0, float("-inf"))
+            attn_mask = torch.where(attn_mask, 0.0, float('-inf'))
 
         # Fast scaled dot-product attention
         out = F.scaled_dot_product_attention(
@@ -393,7 +394,7 @@ class Classifier_Attention(nn.Module):
         )
 
         # Merge heads
-        out = rearrange(out, "b h c d -> b c (h d)")
+        out = rearrange(out, 'b h c d -> b c (h d)')
         return self.to_out(out)
 
 
@@ -435,6 +436,7 @@ class Classifier_Transformer(nn.Module):
             x = ff(x)
 
         return x
+
 
 # mlp
 class MLP(nn.Module):

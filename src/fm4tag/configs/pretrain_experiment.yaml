@@ -1,16 +1,16 @@
 # ════════════════════════════════════════════════════════════════════════════
-# fm4tag — default configuration
+# fm4tag — pretrain experiment config
 #
 # All keys can be overridden from the command line via Hydra dot-notation, e.g.
 #   python -m fm4tag.train phase=pretrain trainer.max_epochs=50
 # ════════════════════════════════════════════════════════════════════════════
 
 # ── Run control ─────────────────────────────────────────────────────────────
-phase:  finetune      # pretrain | finetune
+phase:  pretrain      # pretrain | finetune
 action: fit           # fit | test | predict
 seed:   42
-experiment_name: fm4tag
-output_dir: outputs
+experiment_name: pt_emb_0
+output_dir: pretrained_embeddings
 
 # ── Data — objects ──────────────────────────────────────────────────────────
 global_object: jets
@@ -61,35 +61,39 @@ variables:
         numberOfSCTSharedHits:                    [0,1,2,3]
 
 # ── Data — file paths ────────────────────────────────────────────────────────
-pretrain_file:     /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_112137/pretrain/output/pp_output_pretrain.h5
-pretrain_val_file: null   # set to a path to enable validation during pretraining
+pretrain_file:     /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_152051/pretrain/output/pp_output_pretrain.h5
+# TODO: I want it mandatory, in the sense that if it is not defined it uses the same file as pretrain_file but it is better to be explicit about it
+pretrain_val_file: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_152051/val/output/pp_output_val.h5   # set to a path to enable validation during pretraining
 
-train_file: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_112137/train/output/pp_output_train.h5
-val_file:   /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_112137/val/output/pp_output_val.h5
-test_file:  /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_112137/test/output/pp_output_test.h5
+train_file: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_152051/train/output/pp_output_train.h5
+val_file:   /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_152051/val/output/pp_output_val.h5
+test_file:  /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_152051/test/output/pp_output_test.h5
 
-norm_dict:  /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_112137/pretrain/output/norm_dict.yaml
-class_dict: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_112137/pretrain/output/class_dict.yaml
+norm_dict:  /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_152051/pretrain/output/norm_dict.yaml
+class_dict: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_152051/pretrain/output/class_dict.yaml
 
 # ── Data — loader settings ───────────────────────────────────────────────────
 dataloader:
   batch_size:      1024
-  num_workers:     4
+  num_workers:     24
   prefetch_factor: 2
   pin_memory:      true
 
 pretrain_dataloader:
   batch_size: 2048   # larger batches help contrastive learning
+  num_workers:     24
+  prefetch_factor: 2
+  pin_memory:      true
 
 # ── Encoder architecture ─────────────────────────────────────────────────────
 encoder:
-  dim:              32
+  dim:              128
   depth:            6
   heads:            8
   dim_head:         16
   dim_row_head:     64
-  attn_dropout:     0.0
-  ff_dropout:       0.0
+  attn_dropout:     0.05
+  ff_dropout:       0.1
   ff_mult:          1
   cont_embeddings:  MLP         # MLP | pos_singleMLP | Noemb
   attentiontype:    col         # col | colrow | row | concat
@@ -98,12 +102,12 @@ encoder:
 # ── Classifier head (finetune only) ──────────────────────────────────────────
 head:
   mlp_dropout:  0.1
-  ff_dropout:   0.0
-  attn_dropout: 0.0
+  ff_dropout:   0.1
+  attn_dropout: 0.05
   ff_mult:      4
   heads:        8
   dim_head:     16
-  depth:        3
+  depth:        6
 
 # ── Fine-tuning settings ──────────────────────────────────────────────────────
 freeze_encoder: false   # true → encoder frozen initially; BackboneFinetuning
@@ -116,12 +120,12 @@ class_weights:  null    # [w0, w1, w2, w3] — leave null for uniform weights
 pretrain:
   tasks:           [contrastive, denoising]
   aug:             [mixup, cutmix]
-  aug_lambda:      0.1
+  aug_lambda:      0.05
   projhead_style:  diff   # diff (two separate projection heads) | same
   nce_temp:        0.7
   lam0:            1.0    # contrastive loss weight
-  lam1:            1.0    # categorical denoising loss weight
-  lam2:            10.0   # continuous denoising loss weight
+  lam1:            3.0    # categorical denoising loss weight
+  lam2:            5.0   # continuous denoising loss weight
 
 # ── Optimiser ─────────────────────────────────────────────────────────────────
 optimizer:
@@ -133,7 +137,7 @@ optimizer:
 trainer:
   max_epochs:         100
   accelerator:        gpu
-  devices:            1
+  devices:            2
   precision:          "16-mixed"   # use bf16-mixed on Ampere+ GPUs
   log_every_n_steps:  50
   gradient_clip_val:  1.0

@@ -2,7 +2,14 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from .model import Concat, RowColTransformer, RowTransformer, Transformer, sep_MLP, simple_MLP
+from .model import (
+    Concat,
+    RowColTransformer,
+    RowTransformer,
+    Transformer,
+    sep_MLP,
+    simple_MLP,
+)
 
 
 class saint_encoder(nn.Module):
@@ -20,13 +27,13 @@ class saint_encoder(nn.Module):
         attn_dropout=0.0,
         ff_dropout=0.0,
         ff_mult=1,
-        cont_embeddings="MLP",
-        attentiontype="col",
-        final_mlp_style="sep",
+        cont_embeddings='MLP',
+        attentiontype='col',
+        final_mlp_style='sep',
     ):
         super().__init__()
         assert all(map(lambda n: n > 0, categories)), (
-            "number of each category must be positive"
+            'number of each category must be positive'
         )
 
         # categories related calculations
@@ -45,7 +52,7 @@ class saint_encoder(nn.Module):
         )
         categories_offset = categories_offset.cumsum(dim=-1)[:-1]
 
-        self.register_buffer("categories_offset", categories_offset)
+        self.register_buffer('categories_offset', categories_offset)
 
         self.norm = nn.LayerNorm(num_continuous)
         self.num_continuous = num_continuous
@@ -55,7 +62,7 @@ class saint_encoder(nn.Module):
         self.final_mlp_style = final_mlp_style
 
         # TODO(check for a better continuous feature embedding strategy)
-        if num_continuous > 0 and self.cont_embeddings == "MLP":
+        if num_continuous > 0 and self.cont_embeddings == 'MLP':
             nfeats = self.num_categories + num_continuous
             H = 2 * dim  # hidden size in each MLP
             self.cont_fc1 = nn.Conv1d(
@@ -67,20 +74,20 @@ class saint_encoder(nn.Module):
                 kernel_size=1,
                 groups=num_continuous,
             )
-        elif self.cont_embeddings == "pos_singleMLP":
+        elif self.cont_embeddings == 'pos_singleMLP':
             self.cont_MLP = nn.ModuleList(
                 [simple_MLP([1, 2 * self.dim, self.dim]) for _ in range(1)]
             )
             nfeats = self.num_categories + num_continuous
         else:
-            print("Continous features are not passed through attention")
+            print('Continous features are not passed through attention')
             nfeats = self.num_categories
 
         # embedding layer for categorical features
         self.embeds = nn.Embedding(self.total_tokens, self.dim)
 
         # transformer
-        if attentiontype == "col":
+        if attentiontype == 'col':
             self.transformer = Transformer(
                 dim=dim,
                 depth=depth,
@@ -90,7 +97,7 @@ class saint_encoder(nn.Module):
                 ff_dropout=ff_dropout,
                 ff_mult=ff_mult,
             )
-        elif attentiontype == "colrow":
+        elif attentiontype == 'colrow':
             self.transformer = RowColTransformer(
                 dim=dim,
                 nfeats=nfeats,
@@ -102,7 +109,7 @@ class saint_encoder(nn.Module):
                 ff_dropout=ff_dropout,
                 ff_mult=ff_mult,
             )
-        elif attentiontype == "row":
+        elif attentiontype == 'row':
             self.transformer = RowTransformer(
                 dim=dim,
                 nfeats=nfeats,
@@ -113,15 +120,15 @@ class saint_encoder(nn.Module):
                 ff_dropout=ff_dropout,
                 ff_mult=ff_mult,
             )
-        elif attentiontype == "concat":
+        elif attentiontype == 'concat':
             # the self.transofrmer simply concatenates the categorical and continuous features
             self.transformer = Concat()
         else:
-            raise NotImplementedError(f"Attention type {attentiontype} not implemented")
+            raise NotImplementedError(f'Attention type {attentiontype} not implemented')
 
         # self.pos_encodings = nn.Embedding(self.num_categories+ self.num_continuous, self.dim)
 
-        if self.final_mlp_style == "common":
+        if self.final_mlp_style == 'common':
             self.mlp1 = simple_MLP([dim, (self.total_tokens) * 2, self.total_tokens])
             self.mlp2 = simple_MLP([dim, (self.num_continuous), 1])
 

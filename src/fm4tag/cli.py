@@ -33,7 +33,8 @@ app = typer.Typer(
 
 _CONFIG_OPTION = typer.Option(
     ...,
-    '-c', '--config',
+    '-c',
+    '--config',
     help='Path to the YAML configuration file.',
     exists=True,
     file_okay=True,
@@ -51,6 +52,7 @@ _CKPT_OPTION = typer.Option(
 # ---------------------------------------------------------------------------
 # Commands
 # ---------------------------------------------------------------------------
+
 
 @app.command()
 def pretrain_encoder(
@@ -158,6 +160,7 @@ def predict_classifier(
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
+
 
 def main() -> None:
     app()

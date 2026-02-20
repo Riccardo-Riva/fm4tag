@@ -70,15 +70,15 @@ class ClassifierHead(nn.Module):
         Returns:
             ``(B, y_dim)`` class logits (unnormalised).
         """
-        x = x[:, :, 0, :]                              # (B, C, dim)
-        x = self.mlpphi(x)                             # (B, C, dim)
+        x = x[:, :, 0, :]  # (B, C, dim)
+        x = self.mlpphi(x)  # (B, C, dim)
 
         # Zero out padding positions before attention.
         x = torch.where(valids.unsqueeze(-1), x, 0.0)  # (B, C, dim)
-        x = self.transformer(x, valids)                 # (B, C, dim)
+        x = self.transformer(x, valids)  # (B, C, dim)
 
         # Masked mean pooling over valid constituents.
         n_valids = valids.sum(dim=1, keepdim=True).float().clamp(min=1.0)  # (B, 1)
-        x = x.sum(dim=1) / n_valids                    # (B, dim)
+        x = x.sum(dim=1) / n_valids  # (B, dim)
 
-        return self.mlpfory(x)                          # (B, y_dim)
+        return self.mlpfory(x)  # (B, y_dim)

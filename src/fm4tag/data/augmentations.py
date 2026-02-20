@@ -31,15 +31,15 @@ def embed_data(
 
     x_cont_enc: torch.Tensor | None = None
     if encoder.num_continuous > 0:
-        if encoder.cont_embeddings == "MLP":
-            x = x_cont.unsqueeze(-1)           # (N, F_con, 1)
-            h = F.relu(encoder.cont_fc1(x))    # (N, F_con*H, 1)
-            out = encoder.cont_fc2(h)           # (N, F_con*dim, 1)
+        if encoder.cont_embeddings == 'MLP':
+            x = x_cont.unsqueeze(-1)  # (N, F_con, 1)
+            h = F.relu(encoder.cont_fc1(x))  # (N, F_con*H, 1)
+            out = encoder.cont_fc2(h)  # (N, F_con*dim, 1)
             x_cont_enc = out.view(
                 x_cont.size(0), encoder.num_continuous, encoder.dim
-            )                                   # (N, F_con, dim)
+            )  # (N, F_con, dim)
 
-        elif encoder.cont_embeddings == "pos_singleMLP":
+        elif encoder.cont_embeddings == 'pos_singleMLP':
             # Single shared MLP; apply to each feature independently.
             x_cont_enc = encoder.cont_MLP[0](x_cont.unsqueeze(-1))  # (N, F_con, dim)
 
@@ -75,11 +75,10 @@ def add_noise(
 
     # Bernoulli mask: True = keep original, False = replace with shuffled sample.
     cat_keep = torch.bernoulli(
-        (1.0 - lam) * torch.ones(x_categ.shape, dtype=torch.float, device=x_categ.device)
+        (1.0 - lam)
+        * torch.ones(x_categ.shape, dtype=torch.float, device=x_categ.device)
     ).bool()
-    con_keep = torch.bernoulli(
-        (1.0 - lam) * torch.ones_like(x_cont)
-    ).bool()
+    con_keep = torch.bernoulli((1.0 - lam) * torch.ones_like(x_cont)).bool()
 
     x_categ_corr = torch.where(cat_keep, x_categ, x_categ[index])
     x_cont_corr = torch.where(con_keep, x_cont, x_cont[index])

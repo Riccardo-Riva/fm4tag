@@ -47,17 +47,17 @@ class FinetuneModule(L.LightningModule):
         cfg: DictConfig,
     ) -> None:
         super().__init__()
-        self.save_hyperparameters(ignore=["backbone", "head"])
+        self.save_hyperparameters(ignore=['backbone', 'head'])
 
         # Named 'backbone' for BackboneFinetuning callback compatibility.
         self.backbone = backbone
         self.head = head
         self.cfg = cfg
 
-        class_weights = cfg.get("class_weights")
+        class_weights = cfg.get('class_weights')
         if class_weights is not None:
             self.register_buffer(
-                "class_weights", torch.tensor(class_weights, dtype=torch.float)
+                'class_weights', torch.tensor(class_weights, dtype=torch.float)
             )
         else:
             self.class_weights: torch.Tensor | None = None  # type: ignore[assignment]
@@ -76,17 +76,17 @@ class FinetuneModule(L.LightningModule):
             ``(B, y_dim)`` class logits.
         """
         obj_name = list(self.cfg.constituent_objects)[0]
-        const = batch["constituents"][obj_name]
+        const = batch['constituents'][obj_name]
 
-        x_categ = const["categorical"]  # (B, C, F_cat)
-        x_cont = const["continuous"]    # (B, C, F_con)
-        valids = const["valid"]         # (B, C)
+        x_categ = const['categorical']  # (B, C, F_cat)
+        x_cont = const['continuous']  # (B, C, F_con)
+        valids = const['valid']  # (B, C)
 
         B, C, _ = x_categ.shape
 
-        valids_flat = rearrange(valids, "b c -> (b c)")           # (B*C,)
-        x_categ_flat = rearrange(x_categ, "b c f -> (b c) f")    # (B*C, F_cat)
-        x_cont_flat = rearrange(x_cont, "b c f -> (b c) f")      # (B*C, F_con)
+        valids_flat = rearrange(valids, 'b c -> (b c)')  # (B*C,)
+        x_categ_flat = rearrange(x_categ, 'b c f -> (b c) f')  # (B*C, F_cat)
+        x_cont_flat = rearrange(x_cont, 'b c f -> (b c) f')  # (B*C, F_con)
 
         # Embed and encode only valid constituents for efficiency.
         x_cat_enc, x_con_enc = embed_data(
@@ -98,9 +98,9 @@ class FinetuneModule(L.LightningModule):
         F_feat, dim = x_valid_encoded.shape[1], x_valid_encoded.shape[2]
         x_encoded = x_valid_encoded.new_zeros(B * C, F_feat, dim)
         x_encoded[valids_flat] = x_valid_encoded
-        x_encoded = x_encoded.reshape(B, C, F_feat, dim)       # (B, C, F, dim)
+        x_encoded = x_encoded.reshape(B, C, F_feat, dim)  # (B, C, F, dim)
 
-        return self.head(x_encoded, valids)                     # (B, y_dim)
+        return self.head(x_encoded, valids)  # (B, y_dim)
 
     # ------------------------------------------------------------------
     # Shared step
@@ -115,7 +115,7 @@ class FinetuneModule(L.LightningModule):
             ``(loss, preds, labels)``
         """
         logits = self(batch)
-        labels = batch["label"]
+        labels = batch['label']
         loss = F.cross_entropy(logits, labels, weight=self.class_weights)
         preds = logits.argmax(dim=-1)
         return loss, preds, labels
@@ -127,21 +127,21 @@ class FinetuneModule(L.LightningModule):
     def training_step(self, batch: dict, batch_idx: int) -> torch.Tensor:
         loss, preds, labels = self._shared_step(batch)
         acc = (preds == labels).float().mean()
-        self.log("train/loss", loss, on_step=True, on_epoch=True, prog_bar=True)
-        self.log("train/acc", acc, on_step=False, on_epoch=True)
+        self.log('train/loss', loss, on_step=True, on_epoch=True, prog_bar=True)
+        self.log('train/acc', acc, on_step=False, on_epoch=True)
         return loss
 
     def validation_step(self, batch: dict, batch_idx: int) -> None:
         loss, preds, labels = self._shared_step(batch)
         acc = (preds == labels).float().mean()
-        self.log("val/loss", loss, on_step=False, on_epoch=True, prog_bar=True)
-        self.log("val/acc", acc, on_step=False, on_epoch=True)
+        self.log('val/loss', loss, on_step=False, on_epoch=True, prog_bar=True)
+        self.log('val/acc', acc, on_step=False, on_epoch=True)
 
     def test_step(self, batch: dict, batch_idx: int) -> None:
         loss, preds, labels = self._shared_step(batch)
         acc = (preds == labels).float().mean()
-        self.log("test/loss", loss)
-        self.log("test/acc", acc)
+        self.log('test/loss', loss)
+        self.log('test/acc', acc)
 
     def predict_step(self, batch: dict, batch_idx: int) -> torch.Tensor:
         """Return class probabilities (softmax of logits)."""
@@ -153,7 +153,7 @@ class FinetuneModule(L.LightningModule):
 
     def configure_optimizers(self):  # type: ignore[override]
         opt_cfg = self.cfg.optimizer
-        freeze = self.cfg.get("freeze_encoder", False)
+        freeze = self.cfg.get('freeze_encoder', False)
 
         if freeze:
             # Backbone starts frozen; the BackboneFinetuning callback will
@@ -162,19 +162,19 @@ class FinetuneModule(L.LightningModule):
             optimizer = torch.optim.AdamW(
                 params,
                 lr=opt_cfg.lr,
-                weight_decay=opt_cfg.get("weight_decay", 1e-5),
+                weight_decay=opt_cfg.get('weight_decay', 1e-5),
             )
         else:
             # Both backbone and head are optimised from epoch 0.
             # The backbone can have a lower learning rate to reduce the risk
             # of catastrophic forgetting of pretrained representations.
-            backbone_lr = opt_cfg.get("backbone_lr", opt_cfg.lr)
+            backbone_lr = opt_cfg.get('backbone_lr', opt_cfg.lr)
             optimizer = torch.optim.AdamW(
                 [
-                    {"params": list(self.backbone.parameters()), "lr": backbone_lr},
-                    {"params": list(self.head.parameters()), "lr": opt_cfg.lr},
+                    {'params': list(self.backbone.parameters()), 'lr': backbone_lr},
+                    {'params': list(self.head.parameters()), 'lr': opt_cfg.lr},
                 ],
-                weight_decay=opt_cfg.get("weight_decay", 1e-5),
+                weight_decay=opt_cfg.get('weight_decay', 1e-5),
             )
 
         # Cosine annealing with a short linear warm-up (10 % of total steps).
@@ -192,6 +192,6 @@ class FinetuneModule(L.LightningModule):
         )
 
         return {
-            "optimizer": optimizer,
-            "lr_scheduler": {"scheduler": scheduler, "interval": "step"},
+            'optimizer': optimizer,
+            'lr_scheduler': {'scheduler': scheduler, 'interval': 'step'},
         }

@@ -32,7 +32,7 @@ class InfoNCELoss(nn.Module):
         z1 = F.normalize(z1, dim=-1)
         z2 = F.normalize(z2, dim=-1)
 
-        logits = (z1 @ z2.t()) / self.temperature   # (N, N)
+        logits = (z1 @ z2.t()) / self.temperature  # (N, N)
         targets = torch.arange(logits.size(0), device=logits.device)
 
         loss = 0.5 * (
@@ -85,7 +85,7 @@ class DenoisingLoss(nn.Module):
         # Continuous loss.
         loss_con = x_cont.new_zeros(1, dtype=torch.float).squeeze()
         if con_outs:
-            con_pred = torch.cat(con_outs, dim=1)   # (N, F_con)
+            con_pred = torch.cat(con_outs, dim=1)  # (N, F_con)
             loss_con = F.mse_loss(con_pred, x_cont)
 
         return loss_cat, loss_con

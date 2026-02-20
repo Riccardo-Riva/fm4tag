@@ -53,17 +53,17 @@ class PT_FT_DataModule(L.LightningDataModule):
             pin_memory:      true
     """
 
-    def __init__(self, cfg: DictConfig, phase: str = "finetune") -> None:
+    def __init__(self, cfg: DictConfig, phase: str = 'finetune') -> None:
         super().__init__()
-        if phase not in ("pretrain", "finetune"):
+        if phase not in ('pretrain', 'finetune'):
             raise ValueError(f"phase must be 'pretrain' or 'finetune', got {phase!r}")
         self.cfg = cfg
         self.phase = phase
         self.save_hyperparameters()
 
         # Loaded once in the main process; shared across both phases.
-        self._norm_dict = self._load_yaml(cfg.get("norm_dict"))
-        self._class_dict = self._load_yaml(cfg.get("class_dict"))
+        self._norm_dict = self._load_yaml(cfg.get('norm_dict'))
+        self._class_dict = self._load_yaml(cfg.get('class_dict'))
 
         self._pretrain_dataset: DatasetCatCon | None = None
         self._pretrain_val_dataset: DatasetCatCon | None = None
@@ -93,26 +93,26 @@ class PT_FT_DataModule(L.LightningDataModule):
         )
 
     def _make_dataloader(
-        self, dataset: DatasetCatCon, *, shuffle: bool, phase: str = "finetune"
+        self, dataset: DatasetCatCon, *, shuffle: bool, phase: str = 'finetune'
     ) -> DataLoader:
         # Use a phase-specific dataloader block if provided, else fall back to
         # the shared one (pretrain often benefits from a larger batch size).
-        dl_key = "pretrain_dataloader" if phase == "pretrain" else "dataloader"
-        dl = self.cfg.get(dl_key) or self.cfg.get("dataloader") or {}
-        num_workers = dl.get("num_workers", 4)
+        dl_key = 'pretrain_dataloader' if phase == 'pretrain' else 'dataloader'
+        dl = self.cfg.get(dl_key) or self.cfg.get('dataloader') or {}
+        num_workers = dl.get('num_workers', 4)
         return DataLoader(
             dataset,
-            batch_size=dl.get("batch_size", 1024),
+            batch_size=dl.get('batch_size', 1024),
             shuffle=shuffle,
             # Drop last incomplete batch during training for stable batch stats.
             drop_last=shuffle,
             num_workers=num_workers,
             collate_fn=cat_con_collate_fn,
-            prefetch_factor=dl.get("prefetch_factor", 2) if num_workers > 0 else None,
+            prefetch_factor=dl.get('prefetch_factor', 2) if num_workers > 0 else None,
             # Keep worker processes alive between epochs so HDF5 file handles
             # opened lazily in DatasetCatCon.__getitem__ are reused.
             persistent_workers=num_workers > 0,
-            pin_memory=dl.get("pin_memory", True),
+            pin_memory=dl.get('pin_memory', True),
         )
 
     # ------------------------------------------------------------------
@@ -142,9 +142,9 @@ class PT_FT_DataModule(L.LightningDataModule):
         """
         kwargs = self._dataset_kwargs()
 
-        if stage in ("fit", "all"):
-            if self.phase == "pretrain":
-                pretrain_file = self.cfg.get("pretrain_file")
+        if stage in ('fit', 'all'):
+            if self.phase == 'pretrain':
+                pretrain_file = self.cfg.get('pretrain_file')
                 if pretrain_file is None:
                     raise ValueError(
                         "phase='pretrain' requires cfg.pretrain_file to be set."
@@ -152,7 +152,7 @@ class PT_FT_DataModule(L.LightningDataModule):
                 self._pretrain_dataset = DatasetCatCon(
                     file_path=pretrain_file, **kwargs
                 )
-                pretrain_val_file = self.cfg.get("pretrain_val_file")
+                pretrain_val_file = self.cfg.get('pretrain_val_file')
                 if pretrain_val_file is not None:
                     self._pretrain_val_dataset = DatasetCatCon(
                         file_path=pretrain_val_file, **kwargs
@@ -161,19 +161,15 @@ class PT_FT_DataModule(L.LightningDataModule):
                 self._train_dataset = DatasetCatCon(
                     file_path=self.cfg.train_file, **kwargs
                 )
-                self._val_dataset = DatasetCatCon(
-                    file_path=self.cfg.val_file, **kwargs
-                )
+                self._val_dataset = DatasetCatCon(file_path=self.cfg.val_file, **kwargs)
 
-        if stage in ("test", "predict", "all"):
-            self._test_dataset = DatasetCatCon(
-                file_path=self.cfg.test_file, **kwargs
-            )
+        if stage in ('test', 'predict', 'all'):
+            self._test_dataset = DatasetCatCon(file_path=self.cfg.test_file, **kwargs)
 
     def train_dataloader(self) -> DataLoader:
-        if self.phase == "pretrain":
+        if self.phase == 'pretrain':
             return self._make_dataloader(
-                self._pretrain_dataset, shuffle=True, phase="pretrain"
+                self._pretrain_dataset, shuffle=True, phase='pretrain'
             )
         return self._make_dataloader(self._train_dataset, shuffle=True)
 
@@ -183,11 +179,11 @@ class PT_FT_DataModule(L.LightningDataModule):
         During pretraining, returns an empty list (Lightning skips validation)
         when no ``pretrain_val_file`` was provided in cfg.
         """
-        if self.phase == "pretrain":
+        if self.phase == 'pretrain':
             if self._pretrain_val_dataset is None:
                 return []  # Lightning treats [] as "no validation this phase"
             return self._make_dataloader(
-                self._pretrain_val_dataset, shuffle=False, phase="pretrain"
+                self._pretrain_val_dataset, shuffle=False, phase='pretrain'
             )
         return self._make_dataloader(self._val_dataset, shuffle=False)
 

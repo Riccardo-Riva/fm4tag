@@ -27,25 +27,25 @@ def cat_con_collate_fn(batch: list[dict]) -> dict:
                                     continuous:  (B, N, F_con)  float32
                                     valid:       (B, N)         bool } }
     """
-    labels = torch.stack([s["label"] for s in batch])           # (B,)
-    globals = torch.stack([s["global"] for s in batch]).float()  # (B, F_g)
+    labels = torch.stack([s['label'] for s in batch])  # (B,)
+    globals = torch.stack([s['global'] for s in batch]).float()  # (B, F_g)
 
-    object_names = batch[0]["constituents"].keys()
+    object_names = batch[0]['constituents'].keys()
     constituents = {}
     for name in object_names:
         constituents[name] = {
-            "categorical": torch.stack(
-                [s["constituents"][name]["categorical"] for s in batch]
-            ).long(),    # (B, N, F_cat)
-            "continuous": torch.stack(
-                [s["constituents"][name]["continuous"] for s in batch]
-            ).float(),   # (B, N, F_con)
-            "valid": torch.stack(
-                [s["constituents"][name]["valid"] for s in batch]
-            ).bool(),    # (B, N)
+            'categorical': torch.stack(
+                [s['constituents'][name]['categorical'] for s in batch]
+            ).long(),  # (B, N, F_cat)
+            'continuous': torch.stack(
+                [s['constituents'][name]['continuous'] for s in batch]
+            ).float(),  # (B, N, F_con)
+            'valid': torch.stack(
+                [s['constituents'][name]['valid'] for s in batch]
+            ).bool(),  # (B, N)
         }
 
-    return {"label": labels, "global": globals, "constituents": constituents}
+    return {'label': labels, 'global': globals, 'constituents': constituents}
 
 
 class DatasetCatCon(Dataset):
@@ -61,23 +61,23 @@ class DatasetCatCon(Dataset):
         super().__init__()
 
         if not os.path.exists(file_path):
-            raise FileNotFoundError(f"File {file_path} not found.")
+            raise FileNotFoundError(f'File {file_path} not found.')
 
         self.file_path = file_path
         self.variables = variables
         self.global_object = global_object
         self.constituent_objects = constituent_objects or []
-        self.label_name = variables[self.global_object]["label"]
+        self.label_name = variables[self.global_object]['label']
         self.class_dict = class_dict
 
         # Pre-build per-object mean/std tensors once so __getitem__ does no
         # dict lookups or tensor allocations for normalization.
         self._build_norm_tensors(norm_dict)
 
-        with h5py.File(self.file_path, "r") as file:
-            print(f"\nDatasetCatCon: {self.file_path}")
+        with h5py.File(self.file_path, 'r') as file:
+            print(f'\nDatasetCatCon: {self.file_path}')
             self.len = file[self.global_object].shape[0]
-            print(f"  samples : {self.len}")
+            print(f'  samples : {self.len}')
 
         self.file = None  # lazy file opening: one handle opened per worker
 
@@ -113,11 +113,11 @@ class DatasetCatCon(Dataset):
                 else self.variables[obj_name].inputs.continuous
             )
             self._norm[obj_name] = {
-                "mean": torch.tensor(
-                    [obj_norm[f]["mean"] for f in features], dtype=torch.float32
+                'mean': torch.tensor(
+                    [obj_norm[f]['mean'] for f in features], dtype=torch.float32
                 ),
-                "std": torch.tensor(
-                    [obj_norm[f]["std"] for f in features], dtype=torch.float32
+                'std': torch.tensor(
+                    [obj_norm[f]['std'] for f in features], dtype=torch.float32
                 ),
             }
 
@@ -130,7 +130,7 @@ class DatasetCatCon(Dataset):
 
     def _open_file(self) -> None:
         """Open the HDF5 file once per worker process and cache dataset handles."""
-        self.file = h5py.File(self.file_path, "r", swmr=True, libver="latest")
+        self.file = h5py.File(self.file_path, 'r', swmr=True, libver='latest')
         self.g_dset = self.file[self.global_object]
         self.c_dsets = {name: self.file[name] for name in self.constituent_objects}
 
@@ -150,8 +150,8 @@ class DatasetCatCon(Dataset):
         ).float()
 
         if self.global_object in self._norm:
-            mean = self._norm[self.global_object]["mean"]
-            std = self._norm[self.global_object]["std"]
+            mean = self._norm[self.global_object]['mean']
+            std = self._norm[self.global_object]['std']
             X_g = (X_g - mean) / std.clamp(min=1e-8)
 
         # Constituent features, one dict entry per object
@@ -177,20 +177,22 @@ class DatasetCatCon(Dataset):
 
             # Normalise continuous features with pre-computed tensors
             if obj_name in self._norm:
-                mean = self._norm[obj_name]["mean"]
-                std = self._norm[obj_name]["std"]
-                X_con = (X_con - mean) / std.clamp(min=1e-8) # avoid div by zero (limits values in a tensor)
+                mean = self._norm[obj_name]['mean']
+                std = self._norm[obj_name]['std']
+                X_con = (X_con - mean) / std.clamp(
+                    min=1e-8
+                )  # avoid div by zero (limits values in a tensor)
 
-            valid = torch.from_numpy(self.c_dsets[obj_name][idx]["valid"])
+            valid = torch.from_numpy(self.c_dsets[obj_name][idx]['valid'])
 
             constituents[obj_name] = {
-                "categorical": X_cat,   # (N, F_cat)
-                "continuous": X_con,    # (N, F_con)
-                "valid": valid,         # (N,)
+                'categorical': X_cat,  # (N, F_cat)
+                'continuous': X_con,  # (N, F_con)
+                'valid': valid,  # (N,)
             }
 
         return {
-            "label": label,
-            "global": X_g,
-            "constituents": constituents,
+            'label': label,
+            'global': X_g,
+            'constituents': constituents,
         }

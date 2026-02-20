@@ -10,7 +10,7 @@
 # ════════════════════════════════════════════════════════════════════════════
 
 # ── Run control ─────────────────────────────────────────────────────────────
-phase:  finetune
+phase:  finetune # TODO: I put the stuff here or in the cli?
 action: fit
 seed:   42
 experiment_name: fm4tag-saintV0

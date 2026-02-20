@@ -40,6 +40,7 @@ from fm4tag.models.components.heads import ClassifierHead
 # Builder helpers
 # ---------------------------------------------------------------------------
 
+
 def _build_encoder(cfg: DictConfig) -> saint_encoder:
     """Instantiate a :class:`saint_encoder` from the config.
 
@@ -50,9 +51,7 @@ def _build_encoder(cfg: DictConfig) -> saint_encoder:
     obj_name = list(cfg.constituent_objects)[0]
     obj_vars = cfg.variables[obj_name].inputs
 
-    categories = [
-        len(classes) for classes in obj_vars.cat_classes.values()
-    ]
+    categories = [len(classes) for classes in obj_vars.cat_classes.values()]
     num_continuous = len(obj_vars.continuous)
 
     enc = cfg.encoder
@@ -62,14 +61,14 @@ def _build_encoder(cfg: DictConfig) -> saint_encoder:
         dim=enc.dim,
         depth=enc.depth,
         heads=enc.heads,
-        dim_head=enc.get("dim_head", 16),
-        dim_row_head=enc.get("dim_row_head", 64),
-        attn_dropout=enc.get("attn_dropout", 0.0),
-        ff_dropout=enc.get("ff_dropout", 0.0),
-        ff_mult=enc.get("ff_mult", 1),
-        cont_embeddings=enc.get("cont_embeddings", "MLP"),
-        attentiontype=enc.get("attentiontype", "col"),
-        final_mlp_style=enc.get("final_mlp_style", "sep"),
+        dim_head=enc.get('dim_head', 16),
+        dim_row_head=enc.get('dim_row_head', 64),
+        attn_dropout=enc.get('attn_dropout', 0.0),
+        ff_dropout=enc.get('ff_dropout', 0.0),
+        ff_mult=enc.get('ff_mult', 1),
+        cont_embeddings=enc.get('cont_embeddings', 'MLP'),
+        attentiontype=enc.get('attentiontype', 'col'),
+        final_mlp_style=enc.get('final_mlp_style', 'sep'),
     )
 
 
@@ -81,20 +80,16 @@ def _load_pretrained_encoder(encoder: saint_encoder, ckpt_path: str) -> saint_en
     instance — a raw ``torch.save`` of the state dict also works if the
     keys are prefixed with ``encoder.``.
     """
-    ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
-    state = ckpt.get("state_dict", ckpt)
+    ckpt = torch.load(ckpt_path, map_location='cpu', weights_only=False)
+    state = ckpt.get('state_dict', ckpt)
 
-    prefix = "encoder."
-    enc_state = {
-        k[len(prefix):]: v
-        for k, v in state.items()
-        if k.startswith(prefix)
-    }
+    prefix = 'encoder.'
+    enc_state = {k[len(prefix) :]: v for k, v in state.items() if k.startswith(prefix)}
 
     if not enc_state:
         raise KeyError(
             f"No keys starting with '{prefix}' found in checkpoint {ckpt_path}. "
-            "Make sure the checkpoint comes from a PretrainModule."
+            'Make sure the checkpoint comes from a PretrainModule.'
         )
 
     encoder.load_state_dict(enc_state)
@@ -103,59 +98,58 @@ def _load_pretrained_encoder(encoder: saint_encoder, ckpt_path: str) -> saint_en
 
 def _build_callbacks(cfg: DictConfig) -> list:
     """Build the list of Lightning callbacks from the config."""
-    cb_cfg = cfg.get("callbacks", {})
+    cb_cfg = cfg.get('callbacks', {})
     callbacks = []
 
     # Default monitor: val/loss when a validation file is configured, else train/loss.
-    _phase = cfg.get("phase", "finetune")
-    _val_key = "pretrain_val_file" if _phase == "pretrain" else "val_file"
-    _has_val = bool(cfg.get(_val_key))
-    _default_monitor = "val/loss" if _has_val else "train/loss"
+    _phase = cfg.get('phase', 'finetune')
+    _val_key = 'pretrain_val_file' if _phase == 'pretrain' else 'val_file'
+    _default_monitor = 'val/loss'
 
     # ── ModelSummary ────────────────────────────────────────────────────────
-    ms = cb_cfg.get("model_summary", {})
-    callbacks.append(ModelSummary(max_depth=ms.get("max_depth", 2)))
+    ms = cb_cfg.get('model_summary', {})
+    callbacks.append(ModelSummary(max_depth=ms.get('max_depth', 2)))
 
     # ── ModelCheckpoint ──────────────────────────────────────────────────────
-    ckpt = cb_cfg.get("model_checkpoint", {})
+    ckpt = cb_cfg.get('model_checkpoint', {})
     # If there is no validation set, force train/loss regardless of what the config says.
-    _ckpt_monitor = _default_monitor if not _has_val else ckpt.get("monitor", _default_monitor)
-    _metric_key = _ckpt_monitor.replace("/", "_")
+    _ckpt_monitor = ckpt.get('monitor', _default_monitor)
+    _metric_key = _ckpt_monitor.replace('/', '_')
     callbacks.append(
         ModelCheckpoint(
             monitor=_ckpt_monitor,
-            save_top_k=ckpt.get("save_top_k", 3),
-            mode=ckpt.get("mode", "min"),
+            save_top_k=ckpt.get('save_top_k', 3),
+            mode=ckpt.get('mode', 'min'),
             save_last=True,
-            filename="{epoch:03d}-{" + _metric_key + ":.4f}",
+            filename='{epoch:03d}-{' + _metric_key + ':.4f}',
             verbose=True,
         )
     )
 
     # ── EarlyStopping ────────────────────────────────────────────────────────
-    es = cb_cfg.get("early_stopping", {})
-    _es_monitor = _default_monitor if not _has_val else es.get("monitor", _default_monitor)
+    es = cb_cfg.get('early_stopping', {})
+    _es_monitor = es.get('monitor', _default_monitor)
     callbacks.append(
         EarlyStopping(
             monitor=_es_monitor,
-            patience=es.get("patience", 15),
-            mode=es.get("mode", "min"),
+            patience=es.get('patience', 15),
+            mode=es.get('mode', 'min'),
             verbose=True,
             check_finite=True,
             # When monitoring a train metric there is no validation loop to hook into.
-            check_on_train_epoch_end=not _has_val,
+            check_on_train_epoch_end=False,
         )
     )
 
     # ── BackboneFinetuning (finetune phase + freeze_encoder only) ────────────
-    if cfg.phase == "finetune" and cfg.get("freeze_encoder", False):
-        bf = cb_cfg.get("backbone_finetuning", {})
-        if bf.get("enabled", True):
+    if cfg.phase == 'finetune' and cfg.get('freeze_encoder', False):
+        bf = cb_cfg.get('backbone_finetuning', {})
+        if bf.get('enabled', True):
             callbacks.append(
                 BackboneFinetuning(
-                    unfreeze_backbone_at_epoch=bf.get("unfreeze_backbone_at_epoch", 10),
-                    backbone_initial_ratio_lr=bf.get("backbone_initial_ratio_lr", 0.1),
-                    train_bn=bf.get("train_bn", False),
+                    unfreeze_backbone_at_epoch=bf.get('unfreeze_backbone_at_epoch', 10),
+                    backbone_initial_ratio_lr=bf.get('backbone_initial_ratio_lr', 0.1),
+                    train_bn=bf.get('train_bn', False),
                 )
             )
 
@@ -165,6 +159,7 @@ def _build_callbacks(cfg: DictConfig) -> list:
 # ---------------------------------------------------------------------------
 # Public engine
 # ---------------------------------------------------------------------------
+
 
 def run(
     cfg: DictConfig,
@@ -192,17 +187,17 @@ def run(
                       ``test`` / ``predict``.  Overrides ``cfg.ckpt_path``.
     """
     # ── Resolve overrides ─────────────────────────────────────────────────────
-    _phase = phase or cfg.get("phase", "finetune")
-    _action = action or cfg.get("action", "fit")
-    _enc_ckpt = encoder_ckpt or cfg.get("encoder_ckpt")
-    _ckpt = ckpt_path or cfg.get("ckpt_path")
+    _phase = phase or cfg.get('phase', 'finetune')
+    _action = action or cfg.get('action', 'fit')
+    _enc_ckpt = encoder_ckpt or cfg.get('encoder_ckpt')
+    _ckpt = ckpt_path or cfg.get('ckpt_path')
 
-    L.seed_everything(cfg.get("seed", 42), workers=True)
+    L.seed_everything(cfg.get('seed', 42), workers=True)
 
     # ── Logger ────────────────────────────────────────────────────────────────
     logger = CSVLogger(
-        save_dir=cfg.get("output_dir", "outputs"),
-        name=cfg.get("experiment_name", "fm4tag"),
+        save_dir=cfg.get('output_dir', 'outputs'),
+        name=cfg.get('experiment_name', 'fm4tag'),
     )
 
     # ── Callbacks ─────────────────────────────────────────────────────────────
@@ -224,11 +219,11 @@ def run(
     dm = PT_FT_DataModule(cfg, phase=_phase)
 
     # ── Lightning module ──────────────────────────────────────────────────────
-    if _phase == "pretrain":
+    if _phase == 'pretrain':
         encoder = _build_encoder(cfg)
         module: L.LightningModule = PretrainModule(encoder, cfg)
 
-    elif _phase == "finetune":
+    elif _phase == 'finetune':
         encoder = _build_encoder(cfg)
 
         if _enc_ckpt is not None:
@@ -239,13 +234,13 @@ def run(
         head = ClassifierHead(
             dim=encoder.dim,
             y_dim=n_classes,
-            mlp_dropout=head_cfg.get("mlp_dropout", 0.0),
-            ff_dropout=head_cfg.get("ff_dropout", 0.0),
-            attn_dropout=head_cfg.get("attn_dropout", 0.0),
-            ff_mult=head_cfg.get("ff_mult", 4),
-            heads=head_cfg.get("heads", 8),
-            dim_head=head_cfg.get("dim_head", 16),
-            depth=head_cfg.get("depth", 3),
+            mlp_dropout=head_cfg.get('mlp_dropout', 0.0),
+            ff_dropout=head_cfg.get('ff_dropout', 0.0),
+            attn_dropout=head_cfg.get('attn_dropout', 0.0),
+            ff_mult=head_cfg.get('ff_mult', 4),
+            heads=head_cfg.get('heads', 8),
+            dim_head=head_cfg.get('dim_head', 16),
+            depth=head_cfg.get('depth', 3),
         )
         module = FinetuneModule(encoder, head, cfg)
 
@@ -253,19 +248,17 @@ def run(
         raise ValueError(f"phase must be 'pretrain' or 'finetune', got {_phase!r}")
 
     # ── Dispatch ──────────────────────────────────────────────────────────────
-    if _action == "fit":
+    if _action == 'fit':
         trainer.fit(module, dm, ckpt_path=_ckpt)
 
-    elif _action == "test":
-        trainer.test(module, dm, ckpt_path=_ckpt or "best")
+    elif _action == 'test':
+        trainer.test(module, dm, ckpt_path=_ckpt or 'best')
 
-    elif _action == "predict":
-        predictions = trainer.predict(module, dm, ckpt_path=_ckpt or "best")
+    elif _action == 'predict':
+        predictions = trainer.predict(module, dm, ckpt_path=_ckpt or 'best')
         out_dir = logger.log_dir
         os.makedirs(out_dir, exist_ok=True)
-        torch.save(predictions, os.path.join(out_dir, "predictions.pt"))
+        torch.save(predictions, os.path.join(out_dir, 'predictions.pt'))
 
     else:
-        raise ValueError(
-            f"action must be 'fit', 'test', or 'predict', got {_action!r}"
-        )
+        raise ValueError(f"action must be 'fit', 'test', or 'predict', got {_action!r}")
