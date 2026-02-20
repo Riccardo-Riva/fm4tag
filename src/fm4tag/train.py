@@ -19,7 +19,7 @@ from __future__ import annotations
 import os
 
 import torch
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig, OmegaConf, open_dict
 
 import lightning as L
 from lightning.pytorch.callbacks import (
@@ -106,33 +106,44 @@ def _build_callbacks(cfg: DictConfig) -> list:
     cb_cfg = cfg.get("callbacks", {})
     callbacks = []
 
+    # Default monitor: val/loss when a validation file is configured, else train/loss.
+    _phase = cfg.get("phase", "finetune")
+    _val_key = "pretrain_val_file" if _phase == "pretrain" else "val_file"
+    _has_val = bool(cfg.get(_val_key))
+    _default_monitor = "val/loss" if _has_val else "train/loss"
+
     # ── ModelSummary ────────────────────────────────────────────────────────
     ms = cb_cfg.get("model_summary", {})
     callbacks.append(ModelSummary(max_depth=ms.get("max_depth", 2)))
 
     # ── ModelCheckpoint ──────────────────────────────────────────────────────
     ckpt = cb_cfg.get("model_checkpoint", {})
+    # If there is no validation set, force train/loss regardless of what the config says.
+    _ckpt_monitor = _default_monitor if not _has_val else ckpt.get("monitor", _default_monitor)
+    _metric_key = _ckpt_monitor.replace("/", "_")
     callbacks.append(
         ModelCheckpoint(
-            monitor=ckpt.get("monitor", "val/loss"),
+            monitor=_ckpt_monitor,
             save_top_k=ckpt.get("save_top_k", 3),
             mode=ckpt.get("mode", "min"),
             save_last=True,
-            filename="{epoch:03d}-{val_loss:.4f}",
+            filename="{epoch:03d}-{" + _metric_key + ":.4f}",
             verbose=True,
         )
     )
 
     # ── EarlyStopping ────────────────────────────────────────────────────────
     es = cb_cfg.get("early_stopping", {})
+    _es_monitor = _default_monitor if not _has_val else es.get("monitor", _default_monitor)
     callbacks.append(
         EarlyStopping(
-            monitor=es.get("monitor", "val/loss"),
+            monitor=_es_monitor,
             patience=es.get("patience", 15),
             mode=es.get("mode", "min"),
             verbose=True,
-            # Stops also if monitored metric becomes NaN / Inf.
             check_finite=True,
+            # When monitoring a train metric there is no validation loop to hook into.
+            check_on_train_epoch_end=not _has_val,
         )
     )
 
@@ -197,7 +208,7 @@ def run(
     # ── Callbacks ─────────────────────────────────────────────────────────────
     # BackboneFinetuning is only added when freeze_encoder=true and phase=finetune.
     # Temporarily patch phase so _build_callbacks sees the resolved value.
-    with OmegaConf.open_dict(cfg):
+    with open_dict(cfg):
         cfg.phase = _phase
     callbacks = _build_callbacks(cfg)
 

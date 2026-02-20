@@ -1,19 +1,15 @@
 # ════════════════════════════════════════════════════════════════════════════
-# fm4tag — SAINT v0 configuration
+# fm4tag — default configuration
 #
-# SAINT encoder with column-only attention (the simplest / fastest variant).
-# All data paths, features, and training infrastructure are identical to
-# default.yaml.  Only the encoder architecture differs.
-#
-# Select this config with:
-#   python -m fm4tag.train --config-name saintV0 phase=pretrain action=fit
+# All keys can be overridden from the command line via Hydra dot-notation, e.g.
+#   python -m fm4tag.train phase=pretrain trainer.max_epochs=50
 # ════════════════════════════════════════════════════════════════════════════
 
 # ── Run control ─────────────────────────────────────────────────────────────
-phase:  finetune
-action: fit
+phase:  finetune      # pretrain | finetune
+action: fit           # fit | test | predict
 seed:   42
-experiment_name: fm4tag-saintV0
+experiment_name: fm4tag
 output_dir: outputs
 
 # ── Data — objects ──────────────────────────────────────────────────────────
@@ -66,7 +62,7 @@ variables:
 
 # ── Data — file paths ────────────────────────────────────────────────────────
 pretrain_file:     /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_112137/pretrain/output/pp_output_pretrain.h5
-pretrain_val_file: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_112137/val/output/pp_output_val.h5
+pretrain_val_file: null   # set to a path to enable validation during pretraining
 
 train_file: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_112137/train/output/pp_output_train.h5
 val_file:   /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_112137/val/output/pp_output_val.h5
@@ -78,16 +74,14 @@ class_dict: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_
 # ── Data — loader settings ───────────────────────────────────────────────────
 dataloader:
   batch_size:      1024
-  num_workers:     16
+  num_workers:     4
   prefetch_factor: 2
   pin_memory:      true
 
 pretrain_dataloader:
-  batch_size: 2048
-  num_workers:     16
-# ── Encoder architecture — SAINT v0 ──────────────────────────────────────────
-# Column-only attention: each constituent's features attend to each other.
-# Lightest / fastest variant; good baseline.
+  batch_size: 2048   # larger batches help contrastive learning
+
+# ── Encoder architecture ─────────────────────────────────────────────────────
 encoder:
   dim:              32
   depth:            6
@@ -97,11 +91,11 @@ encoder:
   attn_dropout:     0.0
   ff_dropout:       0.0
   ff_mult:          1
-  cont_embeddings:  MLP
-  attentiontype:    col
-  final_mlp_style:  sep
+  cont_embeddings:  MLP         # MLP | pos_singleMLP | Noemb
+  attentiontype:    col         # col | colrow | row | concat
+  final_mlp_style:  sep         # sep | common
 
-# ── Classifier head ───────────────────────────────────────────────────────────
+# ── Classifier head (finetune only) ──────────────────────────────────────────
 head:
   mlp_dropout:  0.1
   ff_dropout:   0.0
@@ -112,36 +106,37 @@ head:
   depth:        3
 
 # ── Fine-tuning settings ──────────────────────────────────────────────────────
-freeze_encoder: false
-encoder_ckpt:   null
-ckpt_path:      null
-class_weights:  null
+freeze_encoder: false   # true → encoder frozen initially; BackboneFinetuning
+                        #        callback unfreezes at unfreeze_backbone_at_epoch
+encoder_ckpt:   null    # path to a PretrainModule checkpoint to load the encoder
+ckpt_path:      null    # Lightning checkpoint to resume fit / run test / predict
+class_weights:  null    # [w0, w1, w2, w3] — leave null for uniform weights
 
 # ── Pretraining settings ──────────────────────────────────────────────────────
 pretrain:
   tasks:           [contrastive, denoising]
   aug:             [mixup, cutmix]
   aug_lambda:      0.1
-  projhead_style:  diff
+  projhead_style:  diff   # diff (two separate projection heads) | same
   nce_temp:        0.7
-  lam0:            1.0
-  lam1:            1.0
-  lam2:            10.0
+  lam0:            1.0    # contrastive loss weight
+  lam1:            1.0    # categorical denoising loss weight
+  lam2:            10.0   # continuous denoising loss weight
 
 # ── Optimiser ─────────────────────────────────────────────────────────────────
 optimizer:
   lr:           1.0e-3
-  backbone_lr:  1.0e-4
+  backbone_lr:  1.0e-4   # backbone LR when freeze_encoder=false (lower than head)
   weight_decay: 1.0e-5
 
-# ── Trainer ───────────────────────────────────────────────────────────────────
+# ── PyTorch Lightning Trainer ─────────────────────────────────────────────────
 trainer:
-  max_epochs:        100
-  accelerator:       gpu
-  devices:           1
-  precision:         "16-mixed"
-  log_every_n_steps: 50
-  gradient_clip_val: 1.0
+  max_epochs:         100
+  accelerator:        gpu
+  devices:            1
+  precision:          "16-mixed"   # use bf16-mixed on Ampere+ GPUs
+  log_every_n_steps:  50
+  gradient_clip_val:  1.0
 
 # ── Callbacks ─────────────────────────────────────────────────────────────────
 callbacks:
@@ -161,5 +156,5 @@ callbacks:
   backbone_finetuning:
     enabled:                    true
     unfreeze_backbone_at_epoch: 10
-    backbone_initial_ratio_lr:  0.1
+    backbone_initial_ratio_lr:  0.1   # backbone LR = current head LR * ratio
     train_bn:                   false

@@ -1,5 +1,7 @@
-from .model import *
-# from einops import rearrange
+import torch
+from torch import nn
+
+from .model import Classifier_Transformer, MLP_dropout
 
 
 class classifier(nn.Module):
