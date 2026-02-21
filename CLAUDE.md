@@ -31,21 +31,20 @@ uv run ruff format src/          # format (single-quote style enforced)
 uv run pytest tests/             # run all tests
 uv run pytest tests/test_foo.py  # run a single file
 
-# CLI — install the package first so the entry point is available
+# Run — install the package first so the entry point is available
 uv sync
 
-fm4tag pretrain-encoder  -c src/fm4tag/configs/default.yaml
-fm4tag train-classifier  -c src/fm4tag/configs/default.yaml --encoder-ckpt <path>
-fm4tag train-classifier  -c src/fm4tag/configs/default.yaml --ckpt-path <path>   # resume
-fm4tag test-classifier   -c src/fm4tag/configs/default.yaml --ckpt-path <path>
-fm4tag predict-classifier -c src/fm4tag/configs/default.yaml --ckpt-path <path>
+# All configuration lives in the YAML file.  Use Hydra dot-notation to
+# override individual keys without editing the file:
+fm4tag --config-name=saintV0                                            # uses saintV0.yaml defaults
+fm4tag --config-name=saintV0 phase=pretrain action=fit                  # pretrain
+fm4tag --config-name=saintV0 phase=finetune encoder_ckpt=<path>         # finetune from pretrained encoder
+fm4tag --config-name=saintV0 phase=finetune ckpt_path=<path>            # resume finetune
+fm4tag --config-name=saintV0 phase=finetune action=test ckpt_path=<path>
+fm4tag --config-name=saintV0 phase=finetune action=predict ckpt_path=<path>
 
-fm4tag --help                    # list all subcommands
-fm4tag train-classifier --help   # per-command help
-
-# To change hyperparameters, edit the YAML config file directly.
-# To use a different architecture config:
-fm4tag pretrain-encoder -c src/fm4tag/configs/saintV0.yaml
+# Equivalent using Python module syntax (no install required):
+python -m fm4tag.engine --config-name=saintV0 phase=pretrain
 ```
 
 ## Architecture
@@ -95,13 +94,11 @@ Token at `F`-index 0 (first categorical feature) plays the role of a CLS token:
 | `FinetuneModule` | `models/finetune_module.py` | LightningModule: supervised fine-tuning |
 | `embed_data` | `data/augmentations.py` | Embeds raw indices/floats using encoder's tables |
 
-### CLI and config system
+### Config and engine
 
-The CLI (`cli.py`) is built with **Typer**. Each subcommand loads a YAML file with `OmegaConf.load()` and calls `train.run(cfg, ...)`. Path arguments (`--encoder-ckpt`, `--ckpt-path`) override the corresponding values in the config at call time.
+Configs live in `src/fm4tag/configs/`. They are plain OmegaConf YAML loaded by Hydra. Required top-level keys: `phase`, `action`, `global_object`, `constituent_objects`, `variables`, `encoder`, `head`, `pretrain`, `optimizer`, `trainer`, `callbacks`. Add a new config by copying `default.yaml` and changing the relevant sections.
 
-Configs live in `src/fm4tag/configs/`. They are plain OmegaConf YAML — no Hydra composition. Required top-level keys: `global_object`, `constituent_objects`, `variables`, `encoder`, `head`, `pretrain`, `optimizer`, `trainer`, `callbacks`. Add a new config by copying `default.yaml` and changing the relevant sections.
-
-`train.py` is the engine (not the CLI). Its public function `run(cfg, *, phase, action, encoder_ckpt, ckpt_path)` can be called directly from notebooks.
+`engine.py` is the core engine. The `@hydra.main` decorator makes it the entry point for `fm4tag` / `python -m fm4tag.engine`. Its public function `run(cfg, *, phase, action, encoder_ckpt, ckpt_path)` can also be called directly from notebooks without Hydra.
 
 ### BackboneFinetuning callback
 

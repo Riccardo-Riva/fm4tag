@@ -6,11 +6,11 @@
 # default.yaml.  Only the encoder architecture differs.
 #
 # Select this config with:
-#   python -m fm4tag.train --config-name saintV0 phase=pretrain action=fit
+#   fm4tag --config-name=saintV0 phase=pretrain action=fit
 # ════════════════════════════════════════════════════════════════════════════
 
 # ── Run control ─────────────────────────────────────────────────────────────
-phase:  finetune # TODO: I put the stuff here or in the cli?
+phase:  finetune
 action: fit
 seed:   42
 experiment_name: fm4tag-saintV0
@@ -139,6 +139,7 @@ trainer:
   max_epochs:        100
   accelerator:       gpu
   devices:           1
+  strategy:          ddp_find_unused_parameters_true
   precision:         "16-mixed"
   log_every_n_steps: 50
   gradient_clip_val: 1.0

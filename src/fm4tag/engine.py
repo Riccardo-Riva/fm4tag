@@ -1,25 +1,35 @@
-"""Core training / evaluation / prediction engine for fm4tag.
+"""Core engine for fm4tag.
 
-This module is the internal engine called by the CLI (``fm4tag.cli``).
-It exposes a single public function :func:`run` that accepts a fully resolved
-OmegaConf ``DictConfig`` (loaded from a YAML config file) together with
-optional path overrides, and dispatches to the appropriate Lightning workflow.
+Run with Hydra (from the project root)::
 
-It can also be imported and called directly from notebooks or scripts::
+    # Uses the default config (default.yaml) with its phase/action values.
+    python -m fm4tag.engine
+
+    # Switch config file — all keys can be overridden via dot-notation:
+    python -m fm4tag.engine --config-name=saintV0
+    python -m fm4tag.engine --config-name=saintV0 phase=pretrain action=fit
+    python -m fm4tag.engine --config-name=saintV0 phase=finetune encoder_ckpt=/path/to/ckpt.pt
+    python -m fm4tag.engine --config-name=saintV0 phase=finetune ckpt_path=/path/to/ckpt.pt
+
+    # Or via the installed entry-point (equivalent):
+    fm4tag --config-name=saintV0 phase=pretrain
+
+For notebooks / scripts (Hydra not involved)::
 
     from omegaconf import OmegaConf
-    from fm4tag.train import run
+    from fm4tag.engine import run
 
-    cfg = OmegaConf.load("src/fm4tag/configs/default.yaml")
-    run(cfg, phase="pretrain", action="fit")
+    cfg = OmegaConf.load('src/fm4tag/configs/saintV0.yaml')
+    run(cfg, phase='pretrain', action='fit')
 """
 
 from __future__ import annotations
 
 import os
 
+import hydra
 import torch
-from omegaconf import DictConfig, OmegaConf, open_dict
+from omegaconf import DictConfig, OmegaConf
 
 import lightning as L
 from lightning.pytorch.callbacks import (
@@ -42,12 +52,7 @@ from fm4tag.models.components.heads import ClassifierHead
 
 
 def _build_encoder(cfg: DictConfig) -> saint_encoder:
-    """Instantiate a :class:`saint_encoder` from the config.
-
-    The number of category classes and continuous features are derived
-    automatically from ``cfg.variables`` so there is no duplication between
-    the data config and the model config.
-    """
+    """Instantiate a :class:`saint_encoder` from the config."""
     obj_name = list(cfg.constituent_objects)[0]
     obj_vars = cfg.variables[obj_name].inputs
 
@@ -73,13 +78,7 @@ def _build_encoder(cfg: DictConfig) -> saint_encoder:
 
 
 def _load_pretrained_encoder(encoder: saint_encoder, ckpt_path: str) -> saint_encoder:
-    """Load encoder weights from a :class:`PretrainModule` checkpoint.
-
-    Only the ``encoder.*`` keys in the Lightning state dict are extracted,
-    so the checkpoint does not need to be a full :class:`PretrainModule`
-    instance — a raw ``torch.save`` of the state dict also works if the
-    keys are prefixed with ``encoder.``.
-    """
+    """Load encoder weights from a :class:`PretrainModule` checkpoint."""
     ckpt = torch.load(ckpt_path, map_location='cpu', weights_only=False)
     state = ckpt.get('state_dict', ckpt)
 
@@ -96,15 +95,22 @@ def _load_pretrained_encoder(encoder: saint_encoder, ckpt_path: str) -> saint_en
     return encoder
 
 
-def _build_callbacks(cfg: DictConfig) -> list:
-    """Build the list of Lightning callbacks from the config."""
+def _build_callbacks(cfg: DictConfig, phase: str) -> list:
+    """Build the list of Lightning callbacks from the config.
+
+    ``phase`` is passed explicitly so this function does not need to read it
+    from the config — it works correctly both when called from Hydra (where
+    ``cfg.phase`` is already set) and when called from a notebook with an
+    override.
+    """
     cb_cfg = cfg.get('callbacks', {})
     callbacks = []
 
-    # Default monitor: val/loss when a validation file is configured, else train/loss.
-    _phase = cfg.get('phase', 'finetune')
-    _val_key = 'pretrain_val_file' if _phase == 'pretrain' else 'val_file'
-    _default_monitor = 'val/loss'
+    # Choose the right monitor metric.  Fall back to train/loss when no
+    # validation file is configured for the current phase.
+    _val_key = 'pretrain_val_file' if phase == 'pretrain' else 'val_file'
+    _has_val = bool(cfg.get(_val_key))
+    _default_monitor = 'val/loss' if _has_val else 'train/loss'
 
     # ── ModelSummary ────────────────────────────────────────────────────────
     ms = cb_cfg.get('model_summary', {})
@@ -112,8 +118,10 @@ def _build_callbacks(cfg: DictConfig) -> list:
 
     # ── ModelCheckpoint ──────────────────────────────────────────────────────
     ckpt = cb_cfg.get('model_checkpoint', {})
-    # If there is no validation set, force train/loss regardless of what the config says.
-    _ckpt_monitor = ckpt.get('monitor', _default_monitor)
+    # When there is no val set, force train/loss regardless of the config value.
+    _ckpt_monitor = (
+        _default_monitor if not _has_val else ckpt.get('monitor', _default_monitor)
+    )
     _metric_key = _ckpt_monitor.replace('/', '_')
     callbacks.append(
         ModelCheckpoint(
@@ -128,7 +136,9 @@ def _build_callbacks(cfg: DictConfig) -> list:
 
     # ── EarlyStopping ────────────────────────────────────────────────────────
     es = cb_cfg.get('early_stopping', {})
-    _es_monitor = es.get('monitor', _default_monitor)
+    _es_monitor = (
+        _default_monitor if not _has_val else es.get('monitor', _default_monitor)
+    )
     callbacks.append(
         EarlyStopping(
             monitor=_es_monitor,
@@ -137,12 +147,12 @@ def _build_callbacks(cfg: DictConfig) -> list:
             verbose=True,
             check_finite=True,
             # When monitoring a train metric there is no validation loop to hook into.
-            check_on_train_epoch_end=False,
+            check_on_train_epoch_end=not _has_val,
         )
     )
 
     # ── BackboneFinetuning (finetune phase + freeze_encoder only) ────────────
-    if cfg.phase == 'finetune' and cfg.get('freeze_encoder', False):
+    if phase == 'finetune' and cfg.get('freeze_encoder', False):
         bf = cb_cfg.get('backbone_finetuning', {})
         if bf.get('enabled', True):
             callbacks.append(
@@ -157,7 +167,7 @@ def _build_callbacks(cfg: DictConfig) -> list:
 
 
 # ---------------------------------------------------------------------------
-# Public engine
+# Public API
 # ---------------------------------------------------------------------------
 
 
@@ -186,7 +196,6 @@ def run(
         ckpt_path:    Lightning checkpoint path for resuming ``fit``, or for
                       ``test`` / ``predict``.  Overrides ``cfg.ckpt_path``.
     """
-    # ── Resolve overrides ─────────────────────────────────────────────────────
     _phase = phase or cfg.get('phase', 'finetune')
     _action = action or cfg.get('action', 'fit')
     _enc_ckpt = encoder_ckpt or cfg.get('encoder_ckpt')
@@ -201,11 +210,7 @@ def run(
     )
 
     # ── Callbacks ─────────────────────────────────────────────────────────────
-    # BackboneFinetuning is only added when freeze_encoder=true and phase=finetune.
-    # Temporarily patch phase so _build_callbacks sees the resolved value.
-    with open_dict(cfg):
-        cfg.phase = _phase
-    callbacks = _build_callbacks(cfg)
+    callbacks = _build_callbacks(cfg, _phase)
 
     # ── Trainer ───────────────────────────────────────────────────────────────
     trainer_kwargs = OmegaConf.to_container(cfg.trainer, resolve=True)
@@ -262,3 +267,13 @@ def run(
 
     else:
         raise ValueError(f"action must be 'fit', 'test', or 'predict', got {_action!r}")
+
+
+# ---------------------------------------------------------------------------
+# Hydra entry point
+# ---------------------------------------------------------------------------
+
+
+@hydra.main(version_base=None, config_path='configs', config_name='default')
+def main(cfg: DictConfig) -> None:
+    run(cfg)

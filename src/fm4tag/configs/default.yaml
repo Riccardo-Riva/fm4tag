@@ -2,7 +2,7 @@
 # fm4tag — default configuration
 #
 # All keys can be overridden from the command line via Hydra dot-notation, e.g.
-#   python -m fm4tag.train phase=pretrain trainer.max_epochs=50
+#   fm4tag phase=pretrain trainer.max_epochs=50
 # ════════════════════════════════════════════════════════════════════════════
 
 # ── Run control ─────────────────────────────────────────────────────────────
@@ -134,6 +134,7 @@ trainer:
   max_epochs:         100
   accelerator:        gpu
   devices:            1
+  strategy:           ddp_find_unused_parameters_true
   precision:          "16-mixed"   # use bf16-mixed on Ampere+ GPUs
   log_every_n_steps:  50
   gradient_clip_val:  1.0
