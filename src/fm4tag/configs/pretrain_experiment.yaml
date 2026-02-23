@@ -75,15 +75,15 @@ class_dict: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_
 # ── Data — loader settings ───────────────────────────────────────────────────
 dataloader:
   batch_size:      1024
-  num_workers:     24
+  num_workers:     12
   prefetch_factor: 2
-  pin_memory:      true
+  pin_memory:      false
 
 pretrain_dataloader:
-  batch_size: 2048   # larger batches help contrastive learning
-  num_workers:     24
+  batch_size:      1024   # larger batches help contrastive learning
+  num_workers:     12
   prefetch_factor: 2
-  pin_memory:      true
+  pin_memory:      false
 
 # ── Encoder architecture ─────────────────────────────────────────────────────
 encoder:

@@ -109,9 +109,7 @@ class PT_FT_DataModule(L.LightningDataModule):
             num_workers=num_workers,
             collate_fn=cat_con_collate_fn,
             prefetch_factor=dl.get('prefetch_factor', 2) if num_workers > 0 else None,
-            # Keep worker processes alive between epochs so HDF5 file handles
-            # opened lazily in DatasetCatCon.__getitem__ are reused.
-            persistent_workers=num_workers > 0,
+            persistent_workers=False,
             pin_memory=dl.get('pin_memory', True),
         )
 
