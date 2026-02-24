@@ -36,15 +36,15 @@ uv sync
 
 # All configuration lives in the YAML file.  Use Hydra dot-notation to
 # override individual keys without editing the file:
-fm4tag --config-name=saintV0                                            # uses saintV0.yaml defaults
-fm4tag --config-name=saintV0 phase=pretrain action=fit                  # pretrain
-fm4tag --config-name=saintV0 phase=finetune encoder_ckpt=<path>         # finetune from pretrained encoder
-fm4tag --config-name=saintV0 phase=finetune ckpt_path=<path>            # resume finetune
-fm4tag --config-name=saintV0 phase=finetune action=test ckpt_path=<path>
-fm4tag --config-name=saintV0 phase=finetune action=predict ckpt_path=<path>
+fm4tag --config-name=default                                            # uses default.yaml defaults
+fm4tag --config-name=default phase=pretrain action=fit                  # pretrain
+fm4tag --config-name=default phase=finetune encoder_ckpt=<path>         # finetune from pretrained encoder
+fm4tag --config-name=default phase=finetune ckpt_path=<path>            # resume finetune
+fm4tag --config-name=default phase=finetune action=test ckpt_path=<path>
+fm4tag --config-name=default phase=finetune action=predict ckpt_path=<path>
 
 # Equivalent using Python module syntax (no install required):
-python -m fm4tag.engine --config-name=saintV0 phase=pretrain
+python -m fm4tag.engine --config-name=default phase=pretrain
 ```
 
 ## Architecture
@@ -109,9 +109,3 @@ When `freeze_encoder: true` in the config, `FinetuneModule.configure_optimizers`
 Lightning's CSVLogger writes to `outputs/<experiment_name>/version_<N>/`.
 `ModelCheckpoint` saves to `…/checkpoints/`.
 `predict-classifier` saves `predictions.pt` (list of softmax tensors) in the same log dir.
-
-### Reference implementation
-
-The older pure-PyTorch implementation lives at
-`/storage3/DSIP/rriva/research/ftag_data_embedding/tagger_pt/`
-and is useful for cross-checking loss computations and model behaviour.

@@ -147,21 +147,21 @@ class PretrainModule(L.LightningModule):
     def training_step(self, batch: dict, batch_idx: int) -> torch.Tensor:
         loss, log_dict = self._compute_loss(batch)
         self.log(
-            'train/loss', log_dict['loss'], on_step=True, on_epoch=True, prog_bar=True
+            'train_loss', log_dict['loss'], on_step=True, on_epoch=True, prog_bar=True
         )
         for k, v in log_dict.items():
             if k != 'loss':
-                self.log(f'train/{k}', v, on_step=False, on_epoch=True)
+                self.log(f'train_{k}', v, on_step=False, on_epoch=True)
         return loss
 
     def validation_step(self, batch: dict, batch_idx: int) -> torch.Tensor:
         loss, log_dict = self._compute_loss(batch)
         self.log(
-            'val/loss', log_dict['loss'], on_step=False, on_epoch=True, prog_bar=True
+            'val_loss', log_dict['loss'], on_step=False, on_epoch=True, prog_bar=True
         )
         for k, v in log_dict.items():
             if k != 'loss':
-                self.log(f'val/{k}', v, on_step=False, on_epoch=True)
+                self.log(f'val_{k}', v, on_step=False, on_epoch=True)
         return loss
 
     def configure_optimizers(self):  # type: ignore[override]

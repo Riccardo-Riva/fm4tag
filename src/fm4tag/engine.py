@@ -37,6 +37,7 @@ from lightning.pytorch.callbacks import (
     EarlyStopping,
     ModelCheckpoint,
     ModelSummary,
+    TQDMProgressBar,
 )
 from lightning.pytorch.loggers import CSVLogger
 
@@ -110,11 +111,15 @@ def _build_callbacks(cfg: DictConfig, phase: str) -> list:
     # validation file is configured for the current phase.
     _val_key = 'pretrain_val_file' if phase == 'pretrain' else 'val_file'
     _has_val = bool(cfg.get(_val_key))
-    _default_monitor = 'val/loss' if _has_val else 'train/loss'
+    _default_monitor = 'val_loss' if _has_val else 'train_loss'
 
     # ── ModelSummary ────────────────────────────────────────────────────────
     ms = cb_cfg.get('model_summary', {})
     callbacks.append(ModelSummary(max_depth=ms.get('max_depth', 2)))
+
+    # ── ProgressBar ──────────────────────────────────────────────────────────
+    pb = cb_cfg.get('progress_bar', {})
+    callbacks.append(TQDMProgressBar(refresh_rate=pb.get('refresh_rate', 50)))
 
     # ── ModelCheckpoint ──────────────────────────────────────────────────────
     ckpt = cb_cfg.get('model_checkpoint', {})

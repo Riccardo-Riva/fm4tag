@@ -80,8 +80,8 @@ dataloader:
   pin_memory:      false
 
 pretrain_dataloader:
-  batch_size:      1024   # larger batches help contrastive learning
-  num_workers:     12
+  batch_size:      2048   # larger batches help contrastive learning
+  num_workers:     10
   prefetch_factor: 2
   pin_memory:      false
 
@@ -125,7 +125,7 @@ pretrain:
   nce_temp:        0.7
   lam0:            1.0    # contrastive loss weight
   lam1:            3.0    # categorical denoising loss weight
-  lam2:            5.0   # continuous denoising loss weight
+  lam2:            2.0   # continuous denoising loss weight
 
 # ── Optimiser ─────────────────────────────────────────────────────────────────
 optimizer:
@@ -137,7 +137,7 @@ optimizer:
 trainer:
   max_epochs:         100
   accelerator:        gpu
-  devices:            2
+  devices:            4
   strategy:          ddp_find_unused_parameters_true
   precision:          "16-mixed"   # use bf16-mixed on Ampere+ GPUs
   log_every_n_steps:  50
@@ -148,13 +148,16 @@ callbacks:
   model_summary:
     max_depth: 2
 
+  progress_bar:
+    refresh_rate: 1000   # update every N steps (reduce to shrink SLURM logs)
+
   model_checkpoint:
-    monitor:    val/loss
+    monitor:    val_loss
     save_top_k: 3
     mode:       min
 
   early_stopping:
-    monitor:  val/loss
+    monitor:  val_loss
     patience: 15
     mode:     min
 

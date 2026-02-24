@@ -127,21 +127,21 @@ class FinetuneModule(L.LightningModule):
     def training_step(self, batch: dict, batch_idx: int) -> torch.Tensor:
         loss, preds, labels = self._shared_step(batch)
         acc = (preds == labels).float().mean()
-        self.log('train/loss', loss, on_step=True, on_epoch=True, prog_bar=True)
-        self.log('train/acc', acc, on_step=False, on_epoch=True)
+        self.log('train_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
+        self.log('train_acc', acc, on_step=False, on_epoch=True)
         return loss
 
     def validation_step(self, batch: dict, batch_idx: int) -> None:
         loss, preds, labels = self._shared_step(batch)
         acc = (preds == labels).float().mean()
-        self.log('val/loss', loss, on_step=False, on_epoch=True, prog_bar=True)
-        self.log('val/acc', acc, on_step=False, on_epoch=True)
+        self.log('val_loss', loss, on_step=False, on_epoch=True, prog_bar=True)
+        self.log('val_acc', acc, on_step=False, on_epoch=True)
 
     def test_step(self, batch: dict, batch_idx: int) -> None:
         loss, preds, labels = self._shared_step(batch)
         acc = (preds == labels).float().mean()
-        self.log('test/loss', loss)
-        self.log('test/acc', acc)
+        self.log('test_loss', loss)
+        self.log('test_acc', acc)
 
     def predict_step(self, batch: dict, batch_idx: int) -> torch.Tensor:
         """Return class probabilities (softmax of logits)."""
