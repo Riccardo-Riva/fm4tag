@@ -8,6 +8,62 @@ from .mlp import sep_MLP, simple_MLP
 from .transformers import Concat, RowColTransformer, RowTransformer, Transformer
 
 
+class GlobalEncoder(nn.Module):
+    """Per-feature MLP encoder for global flat continuous features.
+
+    Each of the ``num_features`` continuous features is independently projected
+    to a ``dim``-dimensional embedding via a 2-layer grouped Conv1d MLP.  No
+    attention is applied across features — the output is a plain set of token
+    embeddings, one per global feature.
+
+    This encoder is used to pretrain global-object representations alongside the
+    constituent :class:`Encoder`.  Its output shape ``(N, F_g, dim)`` mirrors the
+    per-constituent-token output of :class:`Encoder`, so downstream heads can
+    treat both uniformly.
+
+    Args:
+        num_features: Number of global continuous features ``F_g``.
+        dim:          Embedding dimension (should match the constituent
+                      :class:`Encoder` ``dim``).
+    """
+
+    def __init__(self, num_features: int, dim: int) -> None:
+        super().__init__()
+        self.num_features = num_features
+        self.dim = dim
+
+        H = 2 * dim  # hidden size inside each per-feature MLP
+        self.fc1 = nn.Conv1d(
+            num_features, num_features * H, kernel_size=1, groups=num_features
+        )
+        self.fc2 = nn.Conv1d(
+            num_features * H, num_features * dim, kernel_size=1, groups=num_features
+        )
+
+        # Denoising reconstruction head: one scalar per feature → (N, 1) each.
+        self.mlp_recon = sep_MLP(dim, num_features, [1] * num_features)
+
+        # Contrastive projection heads.
+        proj_in = num_features * dim
+        proj_hidden = 6 * proj_in // 5
+        proj_out = proj_in // 2
+        self.pt_mlp1 = simple_MLP([proj_in, proj_hidden, proj_out])
+        self.pt_mlp2 = simple_MLP([proj_in, proj_hidden, proj_out])
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Embed global features.
+
+        Args:
+            x: ``(N, F_g)`` continuous feature values (already normalised).
+
+        Returns:
+            ``(N, F_g, dim)`` — one embedding token per feature.
+        """
+        h = F.relu(self.fc1(x.unsqueeze(-1)))  # (N, F_g*H, 1)
+        out = self.fc2(h).squeeze(-1)           # (N, F_g*dim)
+        return out.view(x.size(0), self.num_features, self.dim)  # (N, F_g, dim)
+
+
 class Encoder(nn.Module):
     """SAINT-style transformer encoder for mixed categorical/continuous tabular data.
 

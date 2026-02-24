@@ -43,7 +43,7 @@ from lightning.pytorch.loggers import CSVLogger
 
 from fm4tag.data import PT_FT_DataModule
 from fm4tag.models import FinetuneModule, PretrainModule
-from fm4tag.models.components.encoder import Encoder
+from fm4tag.models.components.encoder import Encoder, GlobalEncoder
 from fm4tag.models.components.heads import ClassifierHead
 
 
@@ -52,44 +52,111 @@ from fm4tag.models.components.heads import ClassifierHead
 # ---------------------------------------------------------------------------
 
 
-def _build_encoder(cfg: DictConfig) -> Encoder:
-    """Instantiate an :class:`Encoder` from the config."""
-    obj_name = list(cfg.constituent_objects)[0]
-    obj_vars = cfg.variables[obj_name].inputs
+def _build_encoders(cfg: DictConfig) -> torch.nn.ModuleDict:
+    """Build one encoder per object (global + all constituents).
 
+    Returns a :class:`~torch.nn.ModuleDict` keyed by object name:
+
+    * ``cfg.global_object``      → :class:`GlobalEncoder` (per-feature MLP)
+    * each ``cfg.constituent_objects`` → :class:`Encoder` (transformer)
+    """
+    enc_cfg = cfg.encoder
+    encoders: dict[str, torch.nn.Module] = {}
+
+    # ── Global encoder (continuous-only, MLP) ────────────────────────────────
+    global_name = cfg.global_object
+    n_global = len(cfg.variables[global_name].inputs)
+    encoders[global_name] = GlobalEncoder(num_features=n_global, dim=enc_cfg.dim)
+
+    # ── Constituent encoders (transformer) ───────────────────────────────────
+    for obj_name in cfg.constituent_objects:
+        obj_vars = cfg.variables[obj_name].inputs
+        categories = [len(classes) for classes in obj_vars.cat_classes.values()]
+        num_continuous = len(obj_vars.continuous)
+        encoders[obj_name] = Encoder(
+            categories=categories,
+            num_continuous=num_continuous,
+            dim=enc_cfg.dim,
+            depth=enc_cfg.depth,
+            heads=enc_cfg.heads,
+            dim_head=enc_cfg.get('dim_head', 16),
+            dim_row_head=enc_cfg.get('dim_row_head', 64),
+            attn_dropout=enc_cfg.get('attn_dropout', 0.0),
+            ff_dropout=enc_cfg.get('ff_dropout', 0.0),
+            ff_mult=enc_cfg.get('ff_mult', 1),
+            cont_embeddings=enc_cfg.get('cont_embeddings', 'MLP'),
+            attentiontype=enc_cfg.get('attentiontype', 'col'),
+            final_mlp_style=enc_cfg.get('final_mlp_style', 'sep'),
+        )
+
+    return torch.nn.ModuleDict(encoders)
+
+
+def _build_constituent_encoder(cfg: DictConfig, obj_name: str) -> Encoder:
+    """Build a single constituent :class:`Encoder` (used by the finetune path)."""
+    obj_vars = cfg.variables[obj_name].inputs
     categories = [len(classes) for classes in obj_vars.cat_classes.values()]
     num_continuous = len(obj_vars.continuous)
-
-    enc = cfg.encoder
+    enc_cfg = cfg.encoder
     return Encoder(
         categories=categories,
         num_continuous=num_continuous,
-        dim=enc.dim,
-        depth=enc.depth,
-        heads=enc.heads,
-        dim_head=enc.get('dim_head', 16),
-        dim_row_head=enc.get('dim_row_head', 64),
-        attn_dropout=enc.get('attn_dropout', 0.0),
-        ff_dropout=enc.get('ff_dropout', 0.0),
-        ff_mult=enc.get('ff_mult', 1),
-        cont_embeddings=enc.get('cont_embeddings', 'MLP'),
-        attentiontype=enc.get('attentiontype', 'col'),
-        final_mlp_style=enc.get('final_mlp_style', 'sep'),
+        dim=enc_cfg.dim,
+        depth=enc_cfg.depth,
+        heads=enc_cfg.heads,
+        dim_head=enc_cfg.get('dim_head', 16),
+        dim_row_head=enc_cfg.get('dim_row_head', 64),
+        attn_dropout=enc_cfg.get('attn_dropout', 0.0),
+        ff_dropout=enc_cfg.get('ff_dropout', 0.0),
+        ff_mult=enc_cfg.get('ff_mult', 1),
+        cont_embeddings=enc_cfg.get('cont_embeddings', 'MLP'),
+        attentiontype=enc_cfg.get('attentiontype', 'col'),
+        final_mlp_style=enc_cfg.get('final_mlp_style', 'sep'),
     )
 
 
-def _load_pretrained_encoder(encoder: Encoder, ckpt_path: str) -> Encoder:
-    """Load encoder weights from a :class:`PretrainModule` checkpoint."""
+def _load_pretrained_encoder(
+    encoder: Encoder,
+    ckpt_path: str,
+    obj_name: str,
+) -> Encoder:
+    """Load constituent encoder weights from a :class:`PretrainModule` checkpoint.
+
+    Supports both checkpoint formats:
+
+    * **New** (multi-encoder): keys prefixed with ``encoders.<obj_name>.``
+    * **Legacy** (single-encoder): keys prefixed with ``encoder.``
+
+    Args:
+        encoder:  The :class:`Encoder` instance to load weights into.
+        ckpt_path: Path to a :class:`PretrainModule` Lightning checkpoint.
+        obj_name:  Name of the constituent object whose encoder to extract.
+    """
     ckpt = torch.load(ckpt_path, map_location='cpu', weights_only=False)
     state = ckpt.get('state_dict', ckpt)
 
-    prefix = 'encoder.'
-    enc_state = {k[len(prefix) :]: v for k, v in state.items() if k.startswith(prefix)}
+    # Try new format first: encoders.<obj_name>.*
+    prefix_new = f'encoders.{obj_name}.'
+    enc_state = {
+        k[len(prefix_new):]: v
+        for k, v in state.items()
+        if k.startswith(prefix_new)
+    }
+
+    # Fall back to legacy format: encoder.*
+    if not enc_state:
+        prefix_old = 'encoder.'
+        enc_state = {
+            k[len(prefix_old):]: v
+            for k, v in state.items()
+            if k.startswith(prefix_old)
+        }
 
     if not enc_state:
         raise KeyError(
-            f"No keys starting with '{prefix}' found in checkpoint {ckpt_path}. "
-            'Make sure the checkpoint comes from a PretrainModule.'
+            f"Cannot find encoder weights for '{obj_name}' in checkpoint "
+            f"'{ckpt_path}'.  Expected keys starting with "
+            f"'encoders.{obj_name}.' (new format) or 'encoder.' (legacy)."
         )
 
     encoder.load_state_dict(enc_state)
@@ -230,14 +297,17 @@ def run(
 
     # ── Lightning module ──────────────────────────────────────────────────────
     if _phase == 'pretrain':
-        encoder = _build_encoder(cfg)
-        module: L.LightningModule = PretrainModule(encoder, cfg)
+        encoders = _build_encoders(cfg)
+        module: L.LightningModule = PretrainModule(encoders, cfg)
 
     elif _phase == 'finetune':
-        encoder = _build_encoder(cfg)
+        # Finetune currently uses the first constituent encoder only.
+        # (Multi-stream head support to be added later.)
+        obj_name = list(cfg.constituent_objects)[0]
+        encoder = _build_constituent_encoder(cfg, obj_name)
 
         if _enc_ckpt is not None:
-            encoder = _load_pretrained_encoder(encoder, _enc_ckpt)
+            encoder = _load_pretrained_encoder(encoder, _enc_ckpt, obj_name=obj_name)
 
         head_cfg = cfg.head
         n_classes = len(cfg.variables[cfg.global_object].unique_labels)

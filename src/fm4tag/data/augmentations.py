@@ -51,36 +51,39 @@ def embed_data(
 
 
 def add_noise(
-    x_categ: torch.Tensor,
+    x_categ: torch.Tensor | None,
     x_cont: torch.Tensor,
     lam: float = 0.1,
-) -> tuple[torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor | None, torch.Tensor]:
     """CutMix-style corruption on raw (pre-embedding) features.
 
     Each element is independently kept with probability ``1 - lam`` or
     replaced by the corresponding element of a randomly permuted sample.
 
     Args:
-        x_categ: ``(N, F_cat)`` long tensor.
+        x_categ: ``(N, F_cat)`` long tensor, or ``None`` for objects with no
+                 categorical features (e.g. the global object).
         x_cont:  ``(N, F_con)`` float tensor.
         lam:     Corruption fraction in ``[0, 1]``. ``0`` means no corruption,
                  ``1`` means fully random.
 
     Returns:
-        Corrupted ``(x_categ_corr, x_cont_corr)`` with the same shapes and
-        dtypes as the inputs.
+        ``(x_categ_corr, x_cont_corr)`` — corrupted tensors.  ``x_categ_corr``
+        is ``None`` when ``x_categ`` is ``None``.
     """
-    N = x_categ.size(0)
-    index = torch.randperm(N, device=x_categ.device)
+    N = x_cont.size(0)
+    index = torch.randperm(N, device=x_cont.device)
+
+    x_categ_corr: torch.Tensor | None = None
+    if x_categ is not None:
+        cat_keep = torch.bernoulli(
+            (1.0 - lam)
+            * torch.ones(x_categ.shape, dtype=torch.float, device=x_categ.device)
+        ).bool()
+        x_categ_corr = torch.where(cat_keep, x_categ, x_categ[index])
 
     # Bernoulli mask: True = keep original, False = replace with shuffled sample.
-    cat_keep = torch.bernoulli(
-        (1.0 - lam)
-        * torch.ones(x_categ.shape, dtype=torch.float, device=x_categ.device)
-    ).bool()
     con_keep = torch.bernoulli((1.0 - lam) * torch.ones_like(x_cont)).bool()
-
-    x_categ_corr = torch.where(cat_keep, x_categ, x_categ[index])
     x_cont_corr = torch.where(con_keep, x_cont, x_cont[index])
 
     return x_categ_corr, x_cont_corr
