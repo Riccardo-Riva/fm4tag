@@ -19,7 +19,7 @@ def embed_data(
         x_categ: ``(N, F_cat)`` long tensor of raw categorical feature indices.
         x_cont:  ``(N, F_con)`` float tensor of continuous feature values
                  (already normalised by the DataModule).
-        encoder: :class:`saint_encoder` instance whose embedding tables are used.
+        encoder: :class:`~fm4tag.models.components.encoder.Encoder` instance whose embedding tables are used.
 
     Returns:
         ``x_categ_enc`` – ``(N, F_cat, dim)`` float

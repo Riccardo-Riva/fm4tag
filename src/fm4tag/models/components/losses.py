@@ -78,12 +78,12 @@ class DenoisingLoss(nn.Module):
             ``(loss_cat, loss_con)`` – two scalar tensors.
         """
         # Categorical loss — skip index 0 (summary token, not reconstructed).
-        loss_cat = x_categ.new_zeros(1, dtype=torch.float).squeeze()
+        loss_cat = x_categ.new_zeros(())
         for j in range(1, x_categ.shape[-1]):
             loss_cat = loss_cat + F.cross_entropy(cat_outs[j], x_categ[:, j])
 
         # Continuous loss.
-        loss_con = x_cont.new_zeros(1, dtype=torch.float).squeeze()
+        loss_con = x_cont.new_zeros(())
         if con_outs:
             con_pred = torch.cat(con_outs, dim=1)  # (N, F_con)
             loss_con = F.mse_loss(con_pred, x_cont)

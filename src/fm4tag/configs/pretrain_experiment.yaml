@@ -94,7 +94,7 @@ encoder:
   dim_row_head:     64
   attn_dropout:     0.05
   ff_dropout:       0.1
-  ff_mult:          1
+  ff_mult:          4
   cont_embeddings:  MLP         # MLP | pos_singleMLP | Noemb
   attentiontype:    col         # col | colrow | row | concat
   final_mlp_style:  sep         # sep | common

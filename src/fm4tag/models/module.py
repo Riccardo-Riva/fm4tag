@@ -1,7 +1,8 @@
 import torch
 from torch import nn
 
-from .model import Classifier_Transformer, MLP_dropout
+from .components.mlp import MLP_dropout
+from .components.transformers import Classifier_Transformer
 
 
 class classifier(nn.Module):

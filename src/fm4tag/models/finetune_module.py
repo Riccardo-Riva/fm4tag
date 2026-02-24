@@ -1,6 +1,6 @@
 """Supervised fine-tuning Lightning module.
 
-Wraps a pretrained (or randomly initialised) :class:`saint_encoder` backbone
+Wraps a pretrained (or randomly initialised) :class:`Encoder` backbone
 and a :class:`ClassifierHead` into a full Lightning module that supports:
 
 * ``fit``     — supervised training (with optional encoder freezing /
@@ -22,7 +22,7 @@ from einops import rearrange
 from omegaconf import DictConfig
 from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
 
-from .components.encoder import saint_encoder
+from .components.encoder import Encoder
 from .components.heads import ClassifierHead
 from ..data.augmentations import embed_data
 
@@ -31,7 +31,7 @@ class FinetuneModule(L.LightningModule):
     """Lightning module for supervised fine-tuning of the encoder + classifier.
 
     Args:
-        backbone: :class:`saint_encoder` — the feature extractor.
+        backbone: :class:`Encoder` — the feature extractor.
                   Named ``backbone`` (not ``encoder``) so the
                   ``BackboneFinetuning`` callback finds it automatically.
         head:     :class:`ClassifierHead` — the classification head.
@@ -42,7 +42,7 @@ class FinetuneModule(L.LightningModule):
 
     def __init__(
         self,
-        backbone: saint_encoder,
+        backbone: Encoder,
         head: ClassifierHead,
         cfg: DictConfig,
     ) -> None:

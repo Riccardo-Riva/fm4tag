@@ -1,18 +1,48 @@
+import warnings
+
 import torch
 import torch.nn.functional as F
 from torch import nn
 
-from .model import (
-    Concat,
-    RowColTransformer,
-    RowTransformer,
-    Transformer,
-    sep_MLP,
-    simple_MLP,
-)
+from .mlp import sep_MLP, simple_MLP
+from .transformers import Concat, RowColTransformer, RowTransformer, Transformer
 
 
-class saint_encoder(nn.Module):
+class Encoder(nn.Module):
+    """SAINT-style transformer encoder for mixed categorical/continuous tabular data.
+
+    Each constituent (e.g. track) is treated as a row of tabular features.
+    Categorical features are embedded via a learned lookup table; continuous
+    features are projected per-feature through a grouped Conv1d MLP.  All
+    embedded tokens are then processed by a standard (column-wise), row-wise,
+    or alternating transformer.
+
+    The **first categorical feature** (index 0) plays the role of a CLS token:
+    the :class:`~fm4tag.models.components.heads.ClassifierHead` extracts it as
+    the per-constituent summary, and the denoising loss skips reconstructing it.
+
+    Args:
+        categories:       Cardinality of each categorical feature (positive ints).
+        num_continuous:   Number of continuous features.
+        dim:              Embedding dimension shared by all tokens.
+        depth:            Number of transformer layers.
+        heads:            Number of attention heads.
+        dim_head:         Dimension per head (column attention).
+        dim_row_head:     Dimension per head (row attention).
+        num_special_tokens: Extra tokens prepended to the embedding table.
+        attn_dropout:     Dropout inside attention.
+        ff_dropout:       Dropout inside feed-forward sub-layers.
+        ff_mult:          Feed-forward expansion factor.
+        cont_embeddings:  Continuous embedding strategy:
+                          ``'MLP'``            – per-feature grouped Conv1d MLP;
+                          ``'pos_singleMLP'``  – single shared MLP;
+                          ``None``             – continuous features ignored.
+        attentiontype:    Transformer variant: ``'col'``, ``'colrow'``,
+                          ``'row'``, or ``'concat'``.
+        final_mlp_style:  Reconstruction head style: ``'sep'`` (per-feature) or
+                          ``'common'`` (shared).
+    """
+
     def __init__(
         self,
         *,
@@ -36,22 +66,17 @@ class saint_encoder(nn.Module):
             'number of each category must be positive'
         )
 
-        # categories related calculations
-
         self.num_categories = len(categories)
         self.num_unique_categories = sum(categories)
-
-        # create category embeddings table
 
         self.num_special_tokens = num_special_tokens
         self.total_tokens = self.num_unique_categories + num_special_tokens
 
-        # for automatically offsetting unique category ids to the correct position in the categories embedding table
+        # Offset buffer: maps raw category indices to positions in embeds.
         categories_offset = F.pad(
             torch.tensor(list(categories)), (1, 0), value=num_special_tokens
         )
         categories_offset = categories_offset.cumsum(dim=-1)[:-1]
-
         self.register_buffer('categories_offset', categories_offset)
 
         self.norm = nn.LayerNorm(num_continuous)
@@ -61,97 +86,67 @@ class saint_encoder(nn.Module):
         self.attentiontype = attentiontype
         self.final_mlp_style = final_mlp_style
 
-        # TODO(check for a better continuous feature embedding strategy)
-        if num_continuous > 0 and self.cont_embeddings == 'MLP':
+        if num_continuous > 0 and cont_embeddings == 'MLP':
             nfeats = self.num_categories + num_continuous
-            H = 2 * dim  # hidden size in each MLP
+            H = 2 * dim
             self.cont_fc1 = nn.Conv1d(
                 num_continuous, num_continuous * H, kernel_size=1, groups=num_continuous
             )
             self.cont_fc2 = nn.Conv1d(
-                num_continuous * H,
-                num_continuous * dim,
-                kernel_size=1,
-                groups=num_continuous,
+                num_continuous * H, num_continuous * dim, kernel_size=1, groups=num_continuous
             )
-        elif self.cont_embeddings == 'pos_singleMLP':
+        elif cont_embeddings == 'pos_singleMLP':
             self.cont_MLP = nn.ModuleList(
-                [simple_MLP([1, 2 * self.dim, self.dim]) for _ in range(1)]
+                [simple_MLP([1, 2 * dim, dim]) for _ in range(1)]
             )
             nfeats = self.num_categories + num_continuous
         else:
-            print('Continous features are not passed through attention')
+            warnings.warn(
+                'cont_embeddings not set to MLP or pos_singleMLP — '
+                'continuous features will not be passed through attention.',
+                stacklevel=2,
+            )
             nfeats = self.num_categories
 
-        # embedding layer for categorical features
-        self.embeds = nn.Embedding(self.total_tokens, self.dim)
+        self.embeds = nn.Embedding(self.total_tokens, dim)
 
-        # transformer
+        # Transformer backbone.
         if attentiontype == 'col':
             self.transformer = Transformer(
-                dim=dim,
-                depth=depth,
-                heads=heads,
-                dim_head=dim_head,
-                attn_dropout=attn_dropout,
-                ff_dropout=ff_dropout,
-                ff_mult=ff_mult,
+                dim=dim, depth=depth, heads=heads, dim_head=dim_head,
+                attn_dropout=attn_dropout, ff_dropout=ff_dropout, ff_mult=ff_mult,
             )
         elif attentiontype == 'colrow':
             self.transformer = RowColTransformer(
-                dim=dim,
-                nfeats=nfeats,
-                depth=depth,
-                heads=heads,
-                dim_head=dim_head,
-                dim_row_head=dim_row_head,
-                attn_dropout=attn_dropout,
-                ff_dropout=ff_dropout,
-                ff_mult=ff_mult,
+                dim=dim, nfeats=nfeats, depth=depth, heads=heads,
+                dim_head=dim_head, dim_row_head=dim_row_head,
+                attn_dropout=attn_dropout, ff_dropout=ff_dropout, ff_mult=ff_mult,
             )
         elif attentiontype == 'row':
             self.transformer = RowTransformer(
-                dim=dim,
-                nfeats=nfeats,
-                depth=depth,
-                heads=heads,
+                dim=dim, nfeats=nfeats, depth=depth, heads=heads,
                 dim_row_head=dim_row_head,
-                attn_dropout=attn_dropout,
-                ff_dropout=ff_dropout,
-                ff_mult=ff_mult,
+                attn_dropout=attn_dropout, ff_dropout=ff_dropout, ff_mult=ff_mult,
             )
         elif attentiontype == 'concat':
-            # the self.transofrmer simply concatenates the categorical and continuous features
             self.transformer = Concat()
         else:
-            raise NotImplementedError(f'Attention type {attentiontype} not implemented')
+            raise NotImplementedError(f'Attention type {attentiontype!r} not implemented')
 
-        # self.pos_encodings = nn.Embedding(self.num_categories+ self.num_continuous, self.dim)
-
-        if self.final_mlp_style == 'common':
-            self.mlp1 = simple_MLP([dim, (self.total_tokens) * 2, self.total_tokens])
-            self.mlp2 = simple_MLP([dim, (self.num_continuous), 1])
-
+        # Reconstruction heads (used by DenoisingLoss during pretraining).
+        if final_mlp_style == 'common':
+            self.mlp1 = simple_MLP([dim, self.total_tokens * 2, self.total_tokens])
+            self.mlp2 = simple_MLP([dim, num_continuous, 1])
         else:
             self.mlp1 = sep_MLP(dim, self.num_categories, categories)
-            self.mlp2 = sep_MLP(
-                dim, self.num_continuous, torch.ones(self.num_continuous).int()
-            )
+            self.mlp2 = sep_MLP(dim, num_continuous, torch.ones(num_continuous).int())
 
-        self.pt_mlp1 = simple_MLP(
-            [
-                dim * (self.num_continuous + self.num_categories),
-                6 * dim * (self.num_continuous + self.num_categories) // 5,
-                dim * (self.num_continuous + self.num_categories) // 2,
-            ]
-        )
-        self.pt_mlp2 = simple_MLP(
-            [
-                dim * (self.num_continuous + self.num_categories),
-                6 * dim * (self.num_continuous + self.num_categories) // 5,
-                dim * (self.num_continuous + self.num_categories) // 2,
-            ]
-        )
+        # Projection heads for the contrastive (InfoNCE) loss.
+        proj_in = dim * (num_continuous + self.num_categories)
+        proj_hidden = 6 * proj_in // 5
+        proj_out = proj_in // 2
+        self.pt_mlp1 = simple_MLP([proj_in, proj_hidden, proj_out])
+        self.pt_mlp2 = simple_MLP([proj_in, proj_hidden, proj_out])
 
     def forward(self, x_categ, x_cont, mask=None):
         return self.transformer(x_categ, x_cont, mask)

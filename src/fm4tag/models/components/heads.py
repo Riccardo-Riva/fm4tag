@@ -1,14 +1,15 @@
 import torch
 from torch import nn
 
-from .model import MLP_dropout, Classifier_Transformer
+from .mlp import MLP_dropout
+from .transformers import Classifier_Transformer
 
 
 class ClassifierHead(nn.Module):
     """Attention-based classification head for jet flavour tagging.
 
     Operates on the per-constituent encoder outputs produced by
-    :class:`saint_encoder`.  It extracts a per-constituent summary vector
+    :class:`Encoder`.  It extracts a per-constituent summary vector
     (the first feature token, index 0, which plays the role of a CLS token),
     runs cross-constituent attention, mean-pools over valid constituents, and
     produces final class logits.

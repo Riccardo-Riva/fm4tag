@@ -43,7 +43,7 @@ from lightning.pytorch.loggers import CSVLogger
 
 from fm4tag.data import PT_FT_DataModule
 from fm4tag.models import FinetuneModule, PretrainModule
-from fm4tag.models.components.encoder import saint_encoder
+from fm4tag.models.components.encoder import Encoder
 from fm4tag.models.components.heads import ClassifierHead
 
 
@@ -52,8 +52,8 @@ from fm4tag.models.components.heads import ClassifierHead
 # ---------------------------------------------------------------------------
 
 
-def _build_encoder(cfg: DictConfig) -> saint_encoder:
-    """Instantiate a :class:`saint_encoder` from the config."""
+def _build_encoder(cfg: DictConfig) -> Encoder:
+    """Instantiate an :class:`Encoder` from the config."""
     obj_name = list(cfg.constituent_objects)[0]
     obj_vars = cfg.variables[obj_name].inputs
 
@@ -61,7 +61,7 @@ def _build_encoder(cfg: DictConfig) -> saint_encoder:
     num_continuous = len(obj_vars.continuous)
 
     enc = cfg.encoder
-    return saint_encoder(
+    return Encoder(
         categories=categories,
         num_continuous=num_continuous,
         dim=enc.dim,
@@ -78,7 +78,7 @@ def _build_encoder(cfg: DictConfig) -> saint_encoder:
     )
 
 
-def _load_pretrained_encoder(encoder: saint_encoder, ckpt_path: str) -> saint_encoder:
+def _load_pretrained_encoder(encoder: Encoder, ckpt_path: str) -> Encoder:
     """Load encoder weights from a :class:`PretrainModule` checkpoint."""
     ckpt = torch.load(ckpt_path, map_location='cpu', weights_only=False)
     state = ckpt.get('state_dict', ckpt)

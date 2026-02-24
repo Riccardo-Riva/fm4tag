@@ -21,24 +21,24 @@ from einops import rearrange
 from omegaconf import DictConfig
 from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
 
-from .components.encoder import saint_encoder
+from .components.encoder import Encoder
 from .components.losses import DenoisingLoss, InfoNCELoss
 from ..data.augmentations import add_noise, embed_data, mixup_data
 
 
 class PretrainModule(L.LightningModule):
-    """Lightning module that self-supervisedly pretrains a :class:`saint_encoder`.
+    """Lightning module that self-supervisedly pretrains a :class:`Encoder`.
 
     The module is deliberately thin: it delegates all model logic to the
     encoder and loss classes, and only orchestrates the data flow.
 
     Args:
-        encoder: An uninitialised or randomly initialised :class:`saint_encoder`.
+        encoder: An uninitialised or randomly initialised :class:`Encoder`.
         cfg:     Full Hydra config.  Relevant sub-keys:
                  ``cfg.pretrain``, ``cfg.optimizer``, ``cfg.constituent_objects``.
     """
 
-    def __init__(self, encoder: saint_encoder, cfg: DictConfig) -> None:
+    def __init__(self, encoder: Encoder, cfg: DictConfig) -> None:
         super().__init__()
         # Do not save encoder as hyperparameter (non-serialisable nn.Module).
         self.save_hyperparameters(ignore=['encoder'])
