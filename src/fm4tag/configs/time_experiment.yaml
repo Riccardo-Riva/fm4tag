@@ -1,15 +1,15 @@
 # ════════════════════════════════════════════════════════════════════════════
-# fm4tag — default configuration
+# fm4tag — pretrain experiment config
 #
 # All keys can be overridden from the command line via Hydra dot-notation, e.g.
-#   fm4tag phase=pretrain trainer.max_epochs=50
+#   python -m fm4tag.train phase=pretrain trainer.max_epochs=50
 # ════════════════════════════════════════════════════════════════════════════
 
 # ── Run control ─────────────────────────────────────────────────────────────
-phase:  finetune      # pretrain | finetune
+phase:  pretrain      # pretrain | finetune
 action: fit           # fit | test | predict
 seed:   42
-experiment_name: fm4tag
+experiment_name: model_0
 output_dir: outputs
 
 # ── Data — objects ──────────────────────────────────────────────────────────
@@ -62,7 +62,7 @@ variables:
 
 # ── Data — file paths ────────────────────────────────────────────────────────
 pretrain_file:     /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_112137/pretrain/output/pp_output_pretrain.h5
-pretrain_val_file: null   # set to a path to enable validation during pretraining
+pretrain_val_file: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_112137/val/output/pp_output_val.h5
 
 train_file: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_112137/train/output/pp_output_train.h5
 val_file:   /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_112137/val/output/pp_output_val.h5
@@ -73,37 +73,40 @@ class_dict: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_
 
 # ── Data — loader settings ───────────────────────────────────────────────────
 dataloader:
-  batch_size:      1024
-  num_workers:     4
+  batch_size:      400
+  num_workers:     12
   prefetch_factor: 2
   pin_memory:      true
 
 pretrain_dataloader:
-  batch_size: 2048   # larger batches help contrastive learning
+  batch_size:      400   # larger batches help contrastive learning
+  num_workers:     12
+  prefetch_factor: 2
+  pin_memory:      true
 
 # ── Encoder architecture ─────────────────────────────────────────────────────
 encoder:
-  dim:              32
+  dim:              128
   depth:            6
   heads:            8
   dim_head:         16
-  dim_row_head:     64
-  attn_dropout:     0.0
-  ff_dropout:       0.0
+  dim_row_head:     128
+  attn_dropout:     0.05
+  ff_dropout:       0.1
   ff_mult:          1
   cont_embeddings:  MLP         # MLP | pos_singleMLP | Noemb
-  attentiontype:    col         # col | colrow | row | concat
+  attentiontype:    colrow      # col | colrow | row | concat
   final_mlp_style:  sep         # sep | common
 
 # ── Classifier head (finetune only) ──────────────────────────────────────────
 head:
   mlp_dropout:  0.1
-  ff_dropout:   0.0
-  attn_dropout: 0.0
+  ff_dropout:   0.1
+  attn_dropout: 0.05
   ff_mult:      4
   heads:        8
   dim_head:     16
-  depth:        3
+  depth:        6
 
 # ── Fine-tuning settings ──────────────────────────────────────────────────────
 freeze_encoder: false   # true → encoder frozen initially; BackboneFinetuning
@@ -116,17 +119,17 @@ class_weights:  null    # [w0, w1, w2, w3] — leave null for uniform weights
 pretrain:
   tasks:           [contrastive, denoising]
   aug:             [mixup, cutmix]
-  aug_lambda:      0.1
+  aug_lambda:      0.05
   projhead_style:  diff   # diff (two separate projection heads) | same
   nce_temp:        0.7
-  lam0:            1.0    # contrastive loss weight
-  lam1:            1.0    # categorical denoising loss weight
-  lam2:            10.0   # continuous denoising loss weight
+  lam0:            0.4    # contrastive loss weight
+  lam1:            0.3    # categorical denoising loss weight
+  lam2:            0.3   # continuous denoising loss weight
 
 # ── Optimiser ─────────────────────────────────────────────────────────────────
 optimizer:
-  lr:           1.0e-3
-  backbone_lr:  1.0e-4   # backbone LR when freeze_encoder=false (lower than head)
+  lr:           1.0e-2
+  backbone_lr:  1.0e-3   # backbone LR when freeze_encoder=false (lower than head)
   weight_decay: 1.0e-5
 
 # ── PyTorch Lightning Trainer ─────────────────────────────────────────────────
@@ -134,32 +137,18 @@ trainer:
   max_epochs:         100
   accelerator:        gpu
   devices:            1
-  strategy:           ddp_find_unused_parameters_true
+  strategy:          ddp_find_unused_parameters_true
   precision:          "bf16-mixed"
-  log_every_n_steps:  50
+  log_every_n_steps:  100
   gradient_clip_val:  1.0
-
-# ── Profiler (disabled by default) ───────────────────────────────────────────
-# Enable with:  fm4tag profiler.enabled=true profiler.type=simple
-#   simple   — per-hook wall-clock table (very low overhead, good first look)
-#   advanced — Python cProfile per hook (function-level, more overhead)
-#   pytorch  — torch.profiler traces (op-level GPU+CPU, Chrome trace output)
-profiler:
-  enabled:          false
-  type:             simple   # simple | advanced | pytorch
-  row_limit:        25       # top-N rows in the summary table
-  # pytorch-only extras:
-  export_to_chrome: true     # save a chrome://tracing JSON file
-  with_stack:       false    # record Python call stacks (slow)
-  profile_memory:   false    # track tensor memory allocations
 
 # ── Callbacks ─────────────────────────────────────────────────────────────────
 callbacks:
   model_summary:
-    max_depth: 2
+    max_depth: 7
 
   progress_bar:
-    refresh_rate: 500   # update every N steps (reduce to shrink SLURM logs)
+    refresh_rate: 250   # update every N steps (reduce to shrink SLURM logs)
 
   model_checkpoint:
     monitor:    val_loss
@@ -173,6 +162,6 @@ callbacks:
 
   backbone_finetuning:
     enabled:                    true
-    unfreeze_backbone_at_epoch: 10
+    unfreeze_backbone_at_epoch: 15
     backbone_initial_ratio_lr:  0.1   # backbone LR = current head LR * ratio
     train_bn:                   false

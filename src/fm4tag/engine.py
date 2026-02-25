@@ -42,6 +42,7 @@ from lightning.pytorch.callbacks import (
     TQDMProgressBar,
 )
 from lightning.pytorch.loggers import CSVLogger
+from lightning.pytorch.profilers import AdvancedProfiler, PyTorchProfiler, SimpleProfiler
 
 from fm4tag.data import PT_FT_DataModule
 from fm4tag.models import FinetuneModule, PretrainModule
@@ -235,6 +236,64 @@ def _build_callbacks(cfg: DictConfig, phase: str) -> list:
 
 
 # ---------------------------------------------------------------------------
+# Profiler builder
+# ---------------------------------------------------------------------------
+
+
+def _build_profiler(cfg: DictConfig):
+    """Build a Lightning profiler from config, or return ``None`` (disabled).
+
+    Three profiler types are supported (``profiler.type``):
+
+    * ``simple``   — wall-clock table per Lightning hook; near-zero overhead.
+                     Good first-pass to spot which hooks dominate training time.
+    * ``advanced`` — Python ``cProfile`` per hook; function-level call graph.
+                     Use when ``simple`` points to a specific hook you want to
+                     drill into.
+    * ``pytorch``  — ``torch.profiler`` traces with GPU + CPU op-level timing
+                     and optional memory stats.  Writes a Chrome trace JSON to
+                     the log directory for visualisation in chrome://tracing or
+                     https://ui.perfetto.dev/.
+
+    Enable from the CLI without editing any YAML::
+
+        fm4tag profiler.enabled=true profiler.type=simple
+        fm4tag profiler.enabled=true profiler.type=pytorch profiler.profile_memory=true
+    """
+    p_cfg = cfg.get('profiler', {})
+    if not p_cfg.get('enabled', False):
+        return None
+
+    ptype = p_cfg.get('type', 'simple')
+    row_limit = p_cfg.get('row_limit', 25)
+
+    if ptype == 'simple':
+        # Saves a human-readable table to <log_dir>/profiler-simple.txt
+        return SimpleProfiler(filename='profiler-simple', extended=True)
+
+    if ptype == 'advanced':
+        # Saves cProfile output to <log_dir>/profiler-advanced.txt
+        return AdvancedProfiler(
+            filename='profiler-advanced',
+            line_count_restriction=row_limit,
+        )
+
+    if ptype == 'pytorch':
+        # Saves a Chrome trace to <log_dir>/profiler-pytorch.json (or .txt table)
+        return PyTorchProfiler(
+            filename='profiler-pytorch',
+            export_to_chrome=p_cfg.get('export_to_chrome', True),
+            with_stack=p_cfg.get('with_stack', False),
+            profile_memory=p_cfg.get('profile_memory', False),
+            row_limit=row_limit,
+        )
+
+    raise ValueError(
+        f"profiler.type must be 'simple', 'advanced', or 'pytorch', got {ptype!r}"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -281,11 +340,15 @@ def run(
     # ── Callbacks ─────────────────────────────────────────────────────────────
     callbacks = _build_callbacks(cfg, _phase)
 
+    # ── Profiler ──────────────────────────────────────────────────────────────
+    profiler = _build_profiler(cfg)
+
     # ── Trainer ───────────────────────────────────────────────────────────────
     trainer_kwargs = OmegaConf.to_container(cfg.trainer, resolve=True)
     trainer = L.Trainer(
         callbacks=callbacks,
         logger=logger,
+        profiler=profiler,
         **trainer_kwargs,
     )
 
