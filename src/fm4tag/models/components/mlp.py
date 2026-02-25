@@ -1,4 +1,3 @@
-import torch
 from torch import nn
 
 
@@ -82,10 +81,9 @@ class sep_MLP(nn.Module):
     def __init__(self, dim, len_feats, categories):
         super().__init__()
         self.len_feats = len_feats
-        self.layers = nn.ModuleList([
-            simple_MLP([dim, 2 * dim, categories[i]])
-            for i in range(len_feats)
-        ])
+        self.layers = nn.ModuleList(
+            [simple_MLP([dim, 2 * dim, categories[i]]) for i in range(len_feats)]
+        )
 
     def forward(self, x):
         return [self.layers[i](x[:, i, :]) for i in range(self.len_feats)]

@@ -60,7 +60,7 @@ class GlobalEncoder(nn.Module):
             ``(N, F_g, dim)`` — one embedding token per feature.
         """
         h = F.relu(self.fc1(x.unsqueeze(-1)))  # (N, F_g*H, 1)
-        out = self.fc2(h).squeeze(-1)           # (N, F_g*dim)
+        out = self.fc2(h).squeeze(-1)  # (N, F_g*dim)
         return out.view(x.size(0), self.num_features, self.dim)  # (N, F_g, dim)
 
 
@@ -149,7 +149,10 @@ class Encoder(nn.Module):
                 num_continuous, num_continuous * H, kernel_size=1, groups=num_continuous
             )
             self.cont_fc2 = nn.Conv1d(
-                num_continuous * H, num_continuous * dim, kernel_size=1, groups=num_continuous
+                num_continuous * H,
+                num_continuous * dim,
+                kernel_size=1,
+                groups=num_continuous,
             )
         elif cont_embeddings == 'pos_singleMLP':
             self.cont_MLP = nn.ModuleList(
@@ -169,25 +172,43 @@ class Encoder(nn.Module):
         # Transformer backbone.
         if attentiontype == 'col':
             self.transformer = Transformer(
-                dim=dim, depth=depth, heads=heads, dim_head=dim_head,
-                attn_dropout=attn_dropout, ff_dropout=ff_dropout, ff_mult=ff_mult,
+                dim=dim,
+                depth=depth,
+                heads=heads,
+                dim_head=dim_head,
+                attn_dropout=attn_dropout,
+                ff_dropout=ff_dropout,
+                ff_mult=ff_mult,
             )
         elif attentiontype == 'colrow':
             self.transformer = RowColTransformer(
-                dim=dim, nfeats=nfeats, depth=depth, heads=heads,
-                dim_head=dim_head, dim_row_head=dim_row_head,
-                attn_dropout=attn_dropout, ff_dropout=ff_dropout, ff_mult=ff_mult,
+                dim=dim,
+                nfeats=nfeats,
+                depth=depth,
+                heads=heads,
+                dim_head=dim_head,
+                dim_row_head=dim_row_head,
+                attn_dropout=attn_dropout,
+                ff_dropout=ff_dropout,
+                ff_mult=ff_mult,
             )
         elif attentiontype == 'row':
             self.transformer = RowTransformer(
-                dim=dim, nfeats=nfeats, depth=depth, heads=heads,
+                dim=dim,
+                nfeats=nfeats,
+                depth=depth,
+                heads=heads,
                 dim_row_head=dim_row_head,
-                attn_dropout=attn_dropout, ff_dropout=ff_dropout, ff_mult=ff_mult,
+                attn_dropout=attn_dropout,
+                ff_dropout=ff_dropout,
+                ff_mult=ff_mult,
             )
         elif attentiontype == 'concat':
             self.transformer = Concat()
         else:
-            raise NotImplementedError(f'Attention type {attentiontype!r} not implemented')
+            raise NotImplementedError(
+                f'Attention type {attentiontype!r} not implemented'
+            )
 
         # Reconstruction heads (used by DenoisingLoss during pretraining).
         if final_mlp_style == 'common':

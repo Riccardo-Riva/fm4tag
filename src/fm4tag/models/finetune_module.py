@@ -85,8 +85,8 @@ class FinetuneModule(L.LightningModule):
         """
         # ── Global stream ─────────────────────────────────────────────────────
         global_name = self.cfg.global_object
-        x_global = batch['global']                                # (B, F_g)
-        global_enc = self.backbone[global_name](x_global)        # (B, F_g, dim)
+        x_global = batch['global']  # (B, F_g)
+        global_enc = self.backbone[global_name](x_global)  # (B, F_g, dim)
 
         # ── Constituent streams ───────────────────────────────────────────────
         constituent_encs: list[torch.Tensor] = []
@@ -96,27 +96,27 @@ class FinetuneModule(L.LightningModule):
             encoder = self.backbone[obj_name]
             const = batch['constituents'][obj_name]
 
-            x_categ = const['categorical']   # (B, C, F_cat)
-            x_cont = const['continuous']     # (B, C, F_con)
-            valids = const['valid']          # (B, C)
+            x_categ = const['categorical']  # (B, C, F_cat)
+            x_cont = const['continuous']  # (B, C, F_con)
+            valids = const['valid']  # (B, C)
 
             B, C, _ = x_categ.shape
-            valids_flat = rearrange(valids, 'b c -> (b c)')          # (B*C,)
-            x_categ_flat = rearrange(x_categ, 'b c f -> (b c) f')   # (B*C, F_cat)
-            x_cont_flat = rearrange(x_cont, 'b c f -> (b c) f')     # (B*C, F_con)
+            valids_flat = rearrange(valids, 'b c -> (b c)')  # (B*C,)
+            x_categ_flat = rearrange(x_categ, 'b c f -> (b c) f')  # (B*C, F_cat)
+            x_cont_flat = rearrange(x_cont, 'b c f -> (b c) f')  # (B*C, F_con)
 
             # Embed and encode only valid constituents for efficiency.
             x_cat_enc, x_con_enc = embed_data(
                 x_categ_flat[valids_flat], x_cont_flat[valids_flat], encoder
             )
-            x_valid_encoded = encoder(x_cat_enc, x_con_enc)         # (N_valid, F, dim)
+            x_valid_encoded = encoder(x_cat_enc, x_con_enc)  # (N_valid, F, dim)
 
             # Scatter back into a full (B, C, F, dim) tensor.
             F_feat = x_valid_encoded.shape[1]
             dim = x_valid_encoded.shape[2]
             x_encoded = x_valid_encoded.new_zeros(B * C, F_feat, dim)
             x_encoded[valids_flat] = x_valid_encoded
-            x_encoded = x_encoded.reshape(B, C, F_feat, dim)        # (B, C, F, dim)
+            x_encoded = x_encoded.reshape(B, C, F_feat, dim)  # (B, C, F, dim)
 
             constituent_encs.append(x_encoded)
             constituent_valids.append(valids)
@@ -149,14 +149,28 @@ class FinetuneModule(L.LightningModule):
     def training_step(self, batch: dict, batch_idx: int) -> torch.Tensor:
         loss, preds, _, labels = self._shared_step(batch)
         acc = (preds == labels).float().mean()
-        self.log('train_loss', loss, on_step=True, on_epoch=True, prog_bar=True, sync_dist=True)
+        self.log(
+            'train_loss',
+            loss,
+            on_step=True,
+            on_epoch=True,
+            prog_bar=True,
+            sync_dist=True,
+        )
         self.log('train_acc', acc, on_step=False, on_epoch=True, sync_dist=True)
         return loss
 
     def validation_step(self, batch: dict, batch_idx: int) -> None:
         loss, preds, probs, labels = self._shared_step(batch)
         acc = (preds == labels).float().mean()
-        self.log('val_loss', loss, on_step=False, on_epoch=True, prog_bar=True, sync_dist=True)
+        self.log(
+            'val_loss',
+            loss,
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
+            sync_dist=True,
+        )
         self.log('val_acc', acc, on_step=False, on_epoch=True, sync_dist=True)
         self.val_auroc.update(probs, labels)
 

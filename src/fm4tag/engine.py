@@ -42,7 +42,11 @@ from lightning.pytorch.callbacks import (
     TQDMProgressBar,
 )
 from lightning.pytorch.loggers import CSVLogger
-from lightning.pytorch.profilers import AdvancedProfiler, PyTorchProfiler, SimpleProfiler
+from lightning.pytorch.profilers import (
+    AdvancedProfiler,
+    PyTorchProfiler,
+    SimpleProfiler,
+)
 
 from fm4tag.data import PT_FT_DataModule
 from fm4tag.models import FinetuneModule, PretrainModule
@@ -117,7 +121,7 @@ def _load_pretrained_encoders(
         # Try new format: encoders.<obj_name>.*
         prefix_new = f'encoders.{obj_name}.'
         enc_state = {
-            k[len(prefix_new):]: v
+            k[len(prefix_new) :]: v
             for k, v in state.items()
             if k.startswith(prefix_new)
         }
@@ -126,7 +130,7 @@ def _load_pretrained_encoders(
         if not enc_state:
             prefix_old = 'encoder.'
             enc_state = {
-                k[len(prefix_old):]: v
+                k[len(prefix_old) :]: v
                 for k, v in state.items()
                 if k.startswith(prefix_old)
             }
@@ -154,7 +158,9 @@ class _PrecisionProgressBar(TQDMProgressBar):
 
     def get_metrics(self, trainer, pl_module):  # type: ignore[override]
         metrics = super().get_metrics(trainer, pl_module)
-        return {k: f'{v:.4f}' if isinstance(v, float) else v for k, v in metrics.items()}
+        return {
+            k: f'{v:.4f}' if isinstance(v, float) else v for k, v in metrics.items()
+        }
 
 
 def _build_callbacks(cfg: DictConfig, phase: str) -> list:

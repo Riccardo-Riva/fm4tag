@@ -85,7 +85,7 @@ class PretrainModule(L.LightningModule):
             x_global_2 = x_global
 
         # ── Embed both views ─────────────────────────────────────────────────
-        X_1 = encoder(x_global)    # (B, F_g, dim)
+        X_1 = encoder(x_global)  # (B, F_g, dim)
         X_2 = encoder(x_global_2)  # (B, F_g, dim)
 
         # ── Mixup in embedding space (applied to view 2) ─────────────────────
@@ -100,9 +100,7 @@ class PretrainModule(L.LightningModule):
         if 'contrastive' in cfg_pt.tasks:
             proj1 = encoder.pt_mlp1
             proj2 = (
-                encoder.pt_mlp2
-                if cfg_pt.projhead_style == 'diff'
-                else encoder.pt_mlp1
+                encoder.pt_mlp2 if cfg_pt.projhead_style == 'diff' else encoder.pt_mlp1
             )
             z1 = proj1(X_1.flatten(1))  # (B, proj_dim)
             z2 = proj2(X_2.flatten(1))
@@ -161,9 +159,7 @@ class PretrainModule(L.LightningModule):
         if 'contrastive' in cfg_pt.tasks:
             proj1 = encoder.pt_mlp1
             proj2 = (
-                encoder.pt_mlp2
-                if cfg_pt.projhead_style == 'diff'
-                else encoder.pt_mlp1
+                encoder.pt_mlp2 if cfg_pt.projhead_style == 'diff' else encoder.pt_mlp1
             )
             z1 = proj1(X_1.flatten(1, 2))
             z2 = proj2(X_2.flatten(1, 2))
@@ -248,13 +244,12 @@ class PretrainModule(L.LightningModule):
         # Determine which sub-metric columns have data for at least one object.
         all_subkeys = ['loss_contrastive', 'loss_denoising_cat', 'loss_denoising_con']
         col_labels = {
-            'loss_contrastive':   'Contrastive',
+            'loss_contrastive': 'Contrastive',
             'loss_denoising_cat': 'Denois.Cat',
             'loss_denoising_con': 'Denois.Con',
         }
         active_cols = [
-            c for c in all_subkeys
-            if any(f'{o}/{c}' in avgs for o in objects)
+            c for c in all_subkeys if any(f'{o}/{c}' in avgs for o in objects)
         ]
 
         obj_w = max(len('TOTAL'), *(len(o) for o in objects)) + 2
@@ -264,10 +259,8 @@ class PretrainModule(L.LightningModule):
             return f'{val:{num_w}.4f}' if val is not None else f'{"—":>{num_w}}'
 
         # Header row
-        header = (
-            f"{'Object':<{obj_w}}"
-            f"{'Loss':>{num_w}}"
-            + ''.join(f"{col_labels[c]:>{num_w}}" for c in active_cols)
+        header = f'{"Object":<{obj_w}}{"Loss":>{num_w}}' + ''.join(
+            f'{col_labels[c]:>{num_w}}' for c in active_cols
         )
         sep = '─' * len(header)
         title = f'Epoch {self.current_epoch} | {split}'
@@ -285,7 +278,7 @@ class PretrainModule(L.LightningModule):
         total = avgs.get('loss')
         lines += [
             sep,
-            f"{'TOTAL':<{obj_w}}" + fmt(total),
+            f'{"TOTAL":<{obj_w}}' + fmt(total),
             sep,
             '',
         ]

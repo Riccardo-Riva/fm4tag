@@ -9,15 +9,36 @@ from .blocks import FeedForward, PreNorm, Residual
 class Transformer(nn.Module):
     """Column-wise (within-sample) transformer encoder."""
 
-    def __init__(self, dim, depth, heads, dim_head, attn_dropout, ff_dropout, ff_mult=1):
+    def __init__(
+        self, dim, depth, heads, dim_head, attn_dropout, ff_dropout, ff_mult=1
+    ):
         super().__init__()
-        self.layers = nn.ModuleList([
-            nn.ModuleList([
-                PreNorm(dim, Residual(Attention(dim, heads=heads, dim_head=dim_head, dropout=attn_dropout))),
-                PreNorm(dim, Residual(FeedForward(dim, mult=ff_mult, dropout=ff_dropout))),
-            ])
-            for _ in range(depth)
-        ])
+        self.layers = nn.ModuleList(
+            [
+                nn.ModuleList(
+                    [
+                        PreNorm(
+                            dim,
+                            Residual(
+                                Attention(
+                                    dim,
+                                    heads=heads,
+                                    dim_head=dim_head,
+                                    dropout=attn_dropout,
+                                )
+                            ),
+                        ),
+                        PreNorm(
+                            dim,
+                            Residual(
+                                FeedForward(dim, mult=ff_mult, dropout=ff_dropout)
+                            ),
+                        ),
+                    ]
+                )
+                for _ in range(depth)
+            ]
+        )
 
     def forward(self, x, x_cont=None, mask=None):
         if x_cont is not None:
@@ -31,16 +52,45 @@ class Transformer(nn.Module):
 class RowTransformer(nn.Module):
     """Row (intersample) transformer encoder."""
 
-    def __init__(self, dim, nfeats, depth, heads, dim_row_head, attn_dropout, ff_dropout, ff_mult=1):
+    def __init__(
+        self,
+        dim,
+        nfeats,
+        depth,
+        heads,
+        dim_row_head,
+        attn_dropout,
+        ff_dropout,
+        ff_mult=1,
+    ):
         super().__init__()
         row_dim = dim * nfeats
-        self.layers = nn.ModuleList([
-            nn.ModuleList([
-                PreNorm(row_dim, Residual(RowAttention(row_dim, heads=heads, dim_row_head=dim_row_head, dropout=attn_dropout))),
-                PreNorm(row_dim, Residual(FeedForward(row_dim, mult=ff_mult, dropout=ff_dropout))),
-            ])
-            for _ in range(depth)
-        ])
+        self.layers = nn.ModuleList(
+            [
+                nn.ModuleList(
+                    [
+                        PreNorm(
+                            row_dim,
+                            Residual(
+                                RowAttention(
+                                    row_dim,
+                                    heads=heads,
+                                    dim_row_head=dim_row_head,
+                                    dropout=attn_dropout,
+                                )
+                            ),
+                        ),
+                        PreNorm(
+                            row_dim,
+                            Residual(
+                                FeedForward(row_dim, mult=ff_mult, dropout=ff_dropout)
+                            ),
+                        ),
+                    ]
+                )
+                for _ in range(depth)
+            ]
+        )
 
     def forward(self, x, x_cont=None, mask=None):
         if x_cont is not None:
@@ -57,18 +107,63 @@ class RowTransformer(nn.Module):
 class RowColTransformer(nn.Module):
     """Alternating column-then-row transformer encoder."""
 
-    def __init__(self, dim, nfeats, depth, heads, dim_head, dim_row_head, attn_dropout, ff_dropout, ff_mult=1):
+    def __init__(
+        self,
+        dim,
+        nfeats,
+        depth,
+        heads,
+        dim_head,
+        dim_row_head,
+        attn_dropout,
+        ff_dropout,
+        ff_mult=1,
+    ):
         super().__init__()
         row_dim = dim * nfeats
-        self.layers = nn.ModuleList([
-            nn.ModuleList([
-                PreNorm(dim, Residual(Attention(dim, heads=heads, dim_head=dim_head, dropout=attn_dropout))),
-                PreNorm(dim, Residual(FeedForward(dim, mult=ff_mult, dropout=ff_dropout))),
-                PreNorm(row_dim, Residual(RowAttention(row_dim, heads=heads, dim_row_head=dim_row_head, dropout=attn_dropout))),
-                PreNorm(row_dim, Residual(FeedForward(row_dim, mult=ff_mult, dropout=ff_dropout))),
-            ])
-            for _ in range(depth)
-        ])
+        self.layers = nn.ModuleList(
+            [
+                nn.ModuleList(
+                    [
+                        PreNorm(
+                            dim,
+                            Residual(
+                                Attention(
+                                    dim,
+                                    heads=heads,
+                                    dim_head=dim_head,
+                                    dropout=attn_dropout,
+                                )
+                            ),
+                        ),
+                        PreNorm(
+                            dim,
+                            Residual(
+                                FeedForward(dim, mult=ff_mult, dropout=ff_dropout)
+                            ),
+                        ),
+                        PreNorm(
+                            row_dim,
+                            Residual(
+                                RowAttention(
+                                    row_dim,
+                                    heads=heads,
+                                    dim_row_head=dim_row_head,
+                                    dropout=attn_dropout,
+                                )
+                            ),
+                        ),
+                        PreNorm(
+                            row_dim,
+                            Residual(
+                                FeedForward(row_dim, mult=ff_mult, dropout=ff_dropout)
+                            ),
+                        ),
+                    ]
+                )
+                for _ in range(depth)
+            ]
+        )
 
     def forward(self, x, x_cont=None, mask=None):
         if x_cont is not None:
@@ -99,15 +194,36 @@ class Concat(nn.Module):
 class Classifier_Transformer(nn.Module):
     """Cross-constituent transformer used in the classification head."""
 
-    def __init__(self, dim, depth, heads, dim_head, attn_dropout, ff_dropout, ff_mult=1):
+    def __init__(
+        self, dim, depth, heads, dim_head, attn_dropout, ff_dropout, ff_mult=1
+    ):
         super().__init__()
-        self.layers = nn.ModuleList([
-            nn.ModuleList([
-                PreNorm(dim, Residual(Classifier_Attention(dim, heads=heads, dim_head=dim_head, dropout=attn_dropout))),
-                PreNorm(dim, Residual(FeedForward(dim, mult=ff_mult, dropout=ff_dropout))),
-            ])
-            for _ in range(depth)
-        ])
+        self.layers = nn.ModuleList(
+            [
+                nn.ModuleList(
+                    [
+                        PreNorm(
+                            dim,
+                            Residual(
+                                Classifier_Attention(
+                                    dim,
+                                    heads=heads,
+                                    dim_head=dim_head,
+                                    dropout=attn_dropout,
+                                )
+                            ),
+                        ),
+                        PreNorm(
+                            dim,
+                            Residual(
+                                FeedForward(dim, mult=ff_mult, dropout=ff_dropout)
+                            ),
+                        ),
+                    ]
+                )
+                for _ in range(depth)
+            ]
+        )
 
     def forward(self, x, mask=None):
         for attn, ff in self.layers:

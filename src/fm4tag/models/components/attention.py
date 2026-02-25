@@ -37,7 +37,9 @@ class Attention(nn.Module):
             attn_mask = torch.where(attn_mask, 0.0, float('-inf'))
 
         out = F.scaled_dot_product_attention(
-            q, k, v,
+            q,
+            k,
+            v,
             attn_mask=attn_mask,
             dropout_p=self.dropout if self.training else 0.0,
             is_causal=False,
@@ -76,7 +78,9 @@ class RowAttention(nn.Module):
             attn_mask = torch.where(attn_mask, 0.0, float('-inf'))
 
         out = F.scaled_dot_product_attention(
-            q, k, v,
+            q,
+            k,
+            v,
             attn_mask=attn_mask,
             dropout_p=self.dropout if self.training else 0.0,
             is_causal=False,
@@ -116,7 +120,9 @@ class Classifier_Attention(nn.Module):
             attn_mask = torch.where(attn_mask, 0.0, float('-inf'))
 
         out = F.scaled_dot_product_attention(
-            q, k, v,
+            q,
+            k,
+            v,
             attn_mask=attn_mask,
             dropout_p=self.dropout if self.training else 0.0,
             is_causal=False,

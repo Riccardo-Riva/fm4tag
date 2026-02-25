@@ -86,8 +86,12 @@ class InfoNCELoss(nn.Module):
 
         # Loss computed only over the local shard so gradients flow to local z1/z2.
         loss = 0.5 * (
-            F.cross_entropy(logits[local_start:local_end], targets[local_start:local_end])
-            + F.cross_entropy(logits.t()[local_start:local_end], targets[local_start:local_end])
+            F.cross_entropy(
+                logits[local_start:local_end], targets[local_start:local_end]
+            )
+            + F.cross_entropy(
+                logits.t()[local_start:local_end], targets[local_start:local_end]
+            )
         )
         return loss
 
