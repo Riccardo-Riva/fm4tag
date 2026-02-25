@@ -71,7 +71,7 @@ class sep_MLP(nn.Module):
     """Per-feature separate MLPs, used for reconstruction of categorical tokens.
 
     Each of the ``len_feats`` features gets its own ``simple_MLP`` that maps
-    ``dim → 5*dim → categories[i]``.
+    ``dim → 2*dim → categories[i]``.
 
     Args:
         dim:       Input embedding dimension.
@@ -83,7 +83,7 @@ class sep_MLP(nn.Module):
         super().__init__()
         self.len_feats = len_feats
         self.layers = nn.ModuleList([
-            simple_MLP([dim, 5 * dim, categories[i]])
+            simple_MLP([dim, 2 * dim, categories[i]])
             for i in range(len_feats)
         ])
 

@@ -9,8 +9,8 @@
 phase:  pretrain      # pretrain | finetune
 action: fit           # fit | test | predict
 seed:   42
-experiment_name: pt_emb_0
-output_dir: pretrained_embeddings
+experiment_name: model_0_pretraining
+output_dir: outputs
 
 # ── Data — objects ──────────────────────────────────────────────────────────
 global_object: jets
@@ -62,7 +62,6 @@ variables:
 
 # ── Data — file paths ────────────────────────────────────────────────────────
 pretrain_file:     /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_152051/pretrain/output/pp_output_pretrain.h5
-# TODO: I want it mandatory, in the sense that if it is not defined it uses the same file as pretrain_file but it is better to be explicit about it
 pretrain_val_file: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_152051/val/output/pp_output_val.h5   # set to a path to enable validation during pretraining
 
 train_file: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_152051/train/output/pp_output_train.h5
@@ -74,29 +73,29 @@ class_dict: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_
 
 # ── Data — loader settings ───────────────────────────────────────────────────
 dataloader:
-  batch_size:      1024
+  batch_size:      600
   num_workers:     12
   prefetch_factor: 2
-  pin_memory:      false
+  pin_memory:      true
 
 pretrain_dataloader:
-  batch_size:      2048   # larger batches help contrastive learning
-  num_workers:     10
+  batch_size:      600   # larger batches help contrastive learning
+  num_workers:     12
   prefetch_factor: 2
-  pin_memory:      false
+  pin_memory:      true
 
 # ── Encoder architecture ─────────────────────────────────────────────────────
 encoder:
-  dim:              128
+  dim:              64
   depth:            6
   heads:            8
   dim_head:         16
   dim_row_head:     64
   attn_dropout:     0.05
   ff_dropout:       0.1
-  ff_mult:          4
+  ff_mult:          1
   cont_embeddings:  MLP         # MLP | pos_singleMLP | Noemb
-  attentiontype:    col         # col | colrow | row | concat
+  attentiontype:    colrow      # col | colrow | row | concat
   final_mlp_style:  sep         # sep | common
 
 # ── Classifier head (finetune only) ──────────────────────────────────────────
@@ -123,30 +122,30 @@ pretrain:
   aug_lambda:      0.05
   projhead_style:  diff   # diff (two separate projection heads) | same
   nce_temp:        0.7
-  lam0:            1.0    # contrastive loss weight
-  lam1:            3.0    # categorical denoising loss weight
-  lam2:            2.0   # continuous denoising loss weight
+  lam0:            0.4    # contrastive loss weight
+  lam1:            0.3    # categorical denoising loss weight
+  lam2:            0.3   # continuous denoising loss weight
 
 # ── Optimiser ─────────────────────────────────────────────────────────────────
 optimizer:
-  lr:           1.0e-3
-  backbone_lr:  1.0e-4   # backbone LR when freeze_encoder=false (lower than head)
+  lr:           1.0e-2
+  backbone_lr:  1.0e-3   # backbone LR when freeze_encoder=false (lower than head)
   weight_decay: 1.0e-5
 
 # ── PyTorch Lightning Trainer ─────────────────────────────────────────────────
 trainer:
   max_epochs:         100
   accelerator:        gpu
-  devices:            4
+  devices:            1
   strategy:          ddp_find_unused_parameters_true
-  precision:          "16-mixed"   # use bf16-mixed on Ampere+ GPUs
-  log_every_n_steps:  50
+  precision:          "bf16-mixed"
+  log_every_n_steps:  100
   gradient_clip_val:  1.0
 
 # ── Callbacks ─────────────────────────────────────────────────────────────────
 callbacks:
   model_summary:
-    max_depth: 2
+    max_depth: 3
 
   progress_bar:
     refresh_rate: 1000   # update every N steps (reduce to shrink SLURM logs)
@@ -163,6 +162,6 @@ callbacks:
 
   backbone_finetuning:
     enabled:                    true
-    unfreeze_backbone_at_epoch: 10
+    unfreeze_backbone_at_epoch: 15
     backbone_initial_ratio_lr:  0.1   # backbone LR = current head LR * ratio
     train_bn:                   false

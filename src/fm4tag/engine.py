@@ -26,6 +26,7 @@ For notebooks / scripts (Hydra not involved)::
 from __future__ import annotations
 
 import os
+import warnings
 
 import hydra
 import torch
@@ -35,6 +36,7 @@ import lightning as L
 from lightning.pytorch.callbacks import (
     BackboneFinetuning,
     EarlyStopping,
+    LearningRateMonitor,
     ModelCheckpoint,
     ModelSummary,
     TQDMProgressBar,
@@ -44,7 +46,7 @@ from lightning.pytorch.loggers import CSVLogger
 from fm4tag.data import PT_FT_DataModule
 from fm4tag.models import FinetuneModule, PretrainModule
 from fm4tag.models.components.encoder import Encoder, GlobalEncoder
-from fm4tag.models.components.heads import ClassifierHead
+from fm4tag.models.components.heads import MultiStreamClassifierHead
 
 
 # ---------------------------------------------------------------------------
@@ -92,75 +94,66 @@ def _build_encoders(cfg: DictConfig) -> torch.nn.ModuleDict:
     return torch.nn.ModuleDict(encoders)
 
 
-def _build_constituent_encoder(cfg: DictConfig, obj_name: str) -> Encoder:
-    """Build a single constituent :class:`Encoder` (used by the finetune path)."""
-    obj_vars = cfg.variables[obj_name].inputs
-    categories = [len(classes) for classes in obj_vars.cat_classes.values()]
-    num_continuous = len(obj_vars.continuous)
-    enc_cfg = cfg.encoder
-    return Encoder(
-        categories=categories,
-        num_continuous=num_continuous,
-        dim=enc_cfg.dim,
-        depth=enc_cfg.depth,
-        heads=enc_cfg.heads,
-        dim_head=enc_cfg.get('dim_head', 16),
-        dim_row_head=enc_cfg.get('dim_row_head', 64),
-        attn_dropout=enc_cfg.get('attn_dropout', 0.0),
-        ff_dropout=enc_cfg.get('ff_dropout', 0.0),
-        ff_mult=enc_cfg.get('ff_mult', 1),
-        cont_embeddings=enc_cfg.get('cont_embeddings', 'MLP'),
-        attentiontype=enc_cfg.get('attentiontype', 'col'),
-        final_mlp_style=enc_cfg.get('final_mlp_style', 'sep'),
-    )
-
-
-def _load_pretrained_encoder(
-    encoder: Encoder,
+def _load_pretrained_encoders(
+    encoders: torch.nn.ModuleDict,
     ckpt_path: str,
-    obj_name: str,
-) -> Encoder:
-    """Load constituent encoder weights from a :class:`PretrainModule` checkpoint.
+) -> torch.nn.ModuleDict:
+    """Load all encoder weights from a :class:`PretrainModule` checkpoint.
 
-    Supports both checkpoint formats:
-
-    * **New** (multi-encoder): keys prefixed with ``encoders.<obj_name>.``
-    * **Legacy** (single-encoder): keys prefixed with ``encoder.``
+    For each encoder in the dict, tries the new checkpoint format
+    (``encoders.<obj_name>.*``) first, then falls back to the legacy
+    single-encoder format (``encoder.*``).  Emits a warning for any
+    encoder whose weights cannot be found, leaving it randomly initialised.
 
     Args:
-        encoder:  The :class:`Encoder` instance to load weights into.
+        encoders:  :class:`~torch.nn.ModuleDict` built by :func:`_build_encoders`.
         ckpt_path: Path to a :class:`PretrainModule` Lightning checkpoint.
-        obj_name:  Name of the constituent object whose encoder to extract.
     """
     ckpt = torch.load(ckpt_path, map_location='cpu', weights_only=False)
     state = ckpt.get('state_dict', ckpt)
 
-    # Try new format first: encoders.<obj_name>.*
-    prefix_new = f'encoders.{obj_name}.'
-    enc_state = {
-        k[len(prefix_new):]: v
-        for k, v in state.items()
-        if k.startswith(prefix_new)
-    }
-
-    # Fall back to legacy format: encoder.*
-    if not enc_state:
-        prefix_old = 'encoder.'
+    for obj_name, encoder in encoders.items():
+        # Try new format: encoders.<obj_name>.*
+        prefix_new = f'encoders.{obj_name}.'
         enc_state = {
-            k[len(prefix_old):]: v
+            k[len(prefix_new):]: v
             for k, v in state.items()
-            if k.startswith(prefix_old)
+            if k.startswith(prefix_new)
         }
 
-    if not enc_state:
-        raise KeyError(
-            f"Cannot find encoder weights for '{obj_name}' in checkpoint "
-            f"'{ckpt_path}'.  Expected keys starting with "
-            f"'encoders.{obj_name}.' (new format) or 'encoder.' (legacy)."
-        )
+        # Fall back to legacy single-encoder format: encoder.*
+        if not enc_state:
+            prefix_old = 'encoder.'
+            enc_state = {
+                k[len(prefix_old):]: v
+                for k, v in state.items()
+                if k.startswith(prefix_old)
+            }
 
-    encoder.load_state_dict(enc_state)
-    return encoder
+        if enc_state:
+            encoder.load_state_dict(enc_state)
+        else:
+            warnings.warn(
+                f"No pretrained weights found for encoder '{obj_name}' in "
+                f"'{ckpt_path}'. Using random initialisation.",
+                stacklevel=2,
+            )
+
+    return encoders
+
+
+class _PrecisionProgressBar(TQDMProgressBar):
+    """TQDMProgressBar that formats floats with 4 decimal places.
+
+    Lightning's default ``Tqdm.format_num`` uses ``.3g`` (3 significant
+    figures), which for loss values in the range 1-9 only preserves 2
+    decimal digits, then pads with a trailing zero to a fixed width.
+    Pre-converting floats to strings here bypasses that pipeline.
+    """
+
+    def get_metrics(self, trainer, pl_module):  # type: ignore[override]
+        metrics = super().get_metrics(trainer, pl_module)
+        return {k: f'{v:.4f}' if isinstance(v, float) else v for k, v in metrics.items()}
 
 
 def _build_callbacks(cfg: DictConfig, phase: str) -> list:
@@ -186,7 +179,7 @@ def _build_callbacks(cfg: DictConfig, phase: str) -> list:
 
     # ── ProgressBar ──────────────────────────────────────────────────────────
     pb = cb_cfg.get('progress_bar', {})
-    callbacks.append(TQDMProgressBar(refresh_rate=pb.get('refresh_rate', 50)))
+    callbacks.append(_PrecisionProgressBar(refresh_rate=pb.get('refresh_rate', 50)))
 
     # ── ModelCheckpoint ──────────────────────────────────────────────────────
     ckpt = cb_cfg.get('model_checkpoint', {})
@@ -222,6 +215,9 @@ def _build_callbacks(cfg: DictConfig, phase: str) -> list:
             check_on_train_epoch_end=not _has_val,
         )
     )
+
+    # ── LearningRateMonitor ───────────────────────────────────────────────────
+    callbacks.append(LearningRateMonitor(logging_interval='step'))
 
     # ── BackboneFinetuning (finetune phase + freeze_encoder only) ────────────
     if phase == 'finetune' and cfg.get('freeze_encoder', False):
@@ -273,6 +269,7 @@ def run(
     _enc_ckpt = encoder_ckpt or cfg.get('encoder_ckpt')
     _ckpt = ckpt_path or cfg.get('ckpt_path')
 
+    torch.set_float32_matmul_precision('high')
     L.seed_everything(cfg.get('seed', 42), workers=True)
 
     # ── Logger ────────────────────────────────────────────────────────────────
@@ -301,18 +298,16 @@ def run(
         module: L.LightningModule = PretrainModule(encoders, cfg)
 
     elif _phase == 'finetune':
-        # Finetune currently uses the first constituent encoder only.
-        # (Multi-stream head support to be added later.)
-        obj_name = list(cfg.constituent_objects)[0]
-        encoder = _build_constituent_encoder(cfg, obj_name)
+        encoders = _build_encoders(cfg)
 
         if _enc_ckpt is not None:
-            encoder = _load_pretrained_encoder(encoder, _enc_ckpt, obj_name=obj_name)
+            _load_pretrained_encoders(encoders, _enc_ckpt)
 
         head_cfg = cfg.head
         n_classes = len(cfg.variables[cfg.global_object].unique_labels)
-        head = ClassifierHead(
-            dim=encoder.dim,
+        head = MultiStreamClassifierHead(
+            dim=cfg.encoder.dim,
+            n_constituent_types=len(cfg.constituent_objects),
             y_dim=n_classes,
             mlp_dropout=head_cfg.get('mlp_dropout', 0.0),
             ff_dropout=head_cfg.get('ff_dropout', 0.0),
@@ -322,7 +317,7 @@ def run(
             dim_head=head_cfg.get('dim_head', 16),
             depth=head_cfg.get('depth', 3),
         )
-        module = FinetuneModule(encoder, head, cfg)
+        module = FinetuneModule(encoders, head, cfg)
 
     else:
         raise ValueError(f"phase must be 'pretrain' or 'finetune', got {_phase!r}")

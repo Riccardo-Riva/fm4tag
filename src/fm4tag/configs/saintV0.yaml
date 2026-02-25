@@ -6,14 +6,14 @@
 # default.yaml.  Only the encoder architecture differs.
 #
 # Select this config with:
-#   fm4tag --config-name=saintV0 phase=pretrain action=fit
+#   fm4tag --config-name=saintV0 phase=finetune action=fit
 # ════════════════════════════════════════════════════════════════════════════
 
 # ── Run control ─────────────────────────────────────────────────────────────
-phase:  pretrain      # pretrain | finetune
-action: fit
+phase:  finetune      # pretrain | finetune
+action: fit           # fit | test | predict  
 seed:   42
-experiment_name: fm4tag-saintV0-pretrain
+experiment_name: fm4tag-saintV0-finetune
 output_dir: outputs
 
 # ── Data — objects ──────────────────────────────────────────────────────────
@@ -77,7 +77,7 @@ class_dict: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_
 
 # ── Data — loader settings ───────────────────────────────────────────────────
 dataloader:
-  batch_size:      1024
+  batch_size:      512
   num_workers:     16
   prefetch_factor: 2
   pin_memory:      true
@@ -140,7 +140,7 @@ trainer:
   accelerator:       gpu
   devices:           1
   strategy:          ddp_find_unused_parameters_true
-  precision:         "16-mixed"
+  precision:         "bf16-mixed"
   log_every_n_steps: 50
   gradient_clip_val: 1.0
 
