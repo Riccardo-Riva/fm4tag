@@ -73,24 +73,24 @@ class_dict: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_
 
 # ── Data — loader settings ───────────────────────────────────────────────────
 dataloader:
-  batch_size:      400
+  batch_size:      256
   num_workers:     12
   prefetch_factor: 2
   pin_memory:      true
 
 pretrain_dataloader:
-  batch_size:      400   # larger batches help contrastive learning
+  batch_size:      256   # larger batches help contrastive learning
   num_workers:     12
   prefetch_factor: 2
   pin_memory:      true
 
 # ── Encoder architecture ─────────────────────────────────────────────────────
 encoder:
-  dim:              128
+  dim:              64
   depth:            6
   heads:            8
   dim_head:         16
-  dim_row_head:     128
+  dim_row_head:     64
   attn_dropout:     0.05
   ff_dropout:       0.1
   ff_mult:          1
@@ -134,7 +134,7 @@ optimizer:
 
 # ── PyTorch Lightning Trainer ─────────────────────────────────────────────────
 trainer:
-  max_epochs:         15
+  max_epochs:         1
   accelerator:        gpu
   devices:            1
   strategy:          ddp_find_unused_parameters_true
