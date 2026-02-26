@@ -220,8 +220,8 @@ class Encoder(nn.Module):
 
         # Projection heads for the contrastive (InfoNCE) loss.
         proj_in = dim * (num_continuous + self.num_categories)
-        proj_hidden = proj_in // 2
-        proj_out = proj_in // 4
+        proj_hidden = 3 * proj_in // 4
+        proj_out = proj_in // 2
         self.pt_mlp1 = simple_MLP([proj_in, proj_hidden, proj_out])
         self.pt_mlp2 = simple_MLP([proj_in, proj_hidden, proj_out])
 

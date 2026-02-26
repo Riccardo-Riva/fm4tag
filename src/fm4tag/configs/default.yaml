@@ -145,7 +145,7 @@ trainer:
 #   advanced — Python cProfile per hook (function-level, more overhead)
 #   pytorch  — torch.profiler traces (op-level GPU+CPU, Chrome trace output)
 profiler:
-  enabled:          false
+  enabled:          true
   type:             simple   # simple | advanced | pytorch
   row_limit:        25       # top-N rows in the summary table
   # pytorch-only extras:

@@ -122,19 +122,19 @@ pretrain:
   aug_lambda:      0.05
   projhead_style:  diff   # diff (two separate projection heads) | same
   nce_temp:        0.7
-  lam0:            0.4    # contrastive loss weight
-  lam1:            0.3    # categorical denoising loss weight
-  lam2:            0.3   # continuous denoising loss weight
+  lam0:            0.6    # contrastive loss weight
+  lam1:            0.2    # categorical denoising loss weight
+  lam2:            0.2    # continuous denoising loss weight
 
 # ── Optimiser ─────────────────────────────────────────────────────────────────
 optimizer:
-  lr:           1.0e-2
-  backbone_lr:  1.0e-3   # backbone LR when freeze_encoder=false (lower than head)
+  lr:           1.0e-4
+  backbone_lr:  1.0e-5   # backbone LR when freeze_encoder=false (lower than head)
   weight_decay: 1.0e-5
 
 # ── PyTorch Lightning Trainer ─────────────────────────────────────────────────
 trainer:
-  max_epochs:         100
+  max_epochs:         15
   accelerator:        gpu
   devices:            1
   strategy:          ddp_find_unused_parameters_true
@@ -142,10 +142,15 @@ trainer:
   log_every_n_steps:  100
   gradient_clip_val:  1.0
 
+# ── Profiler ─────────────────────────────────────────────────────────────────
+profiler:
+  enabled: true
+  type:    advanced  # simple | advanced | pytorch
+
 # ── Callbacks ─────────────────────────────────────────────────────────────────
 callbacks:
   model_summary:
-    max_depth: 7
+    max_depth: 9
 
   progress_bar:
     refresh_rate: 250   # update every N steps (reduce to shrink SLURM logs)

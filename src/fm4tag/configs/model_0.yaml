@@ -9,7 +9,7 @@
 phase:  pretrain      # pretrain | finetune
 action: fit           # fit | test | predict
 seed:   42
-experiment_name: model_0_pretraining
+experiment_name: model_0
 output_dir: outputs
 
 # ── Data — objects ──────────────────────────────────────────────────────────
@@ -79,7 +79,7 @@ dataloader:
   pin_memory:      true
 
 pretrain_dataloader:
-  batch_size:      600   # larger batches help contrastive learning
+  batch_size:      2048   # larger batches help contrastive learning
   num_workers:     12
   prefetch_factor: 2
   pin_memory:      true
@@ -136,23 +136,28 @@ optimizer:
 trainer:
   max_epochs:         100
   accelerator:        gpu
-  devices:            1
+  devices:            4
   strategy:          ddp_find_unused_parameters_true
   precision:          "bf16-mixed"
   log_every_n_steps:  100
   gradient_clip_val:  1.0
 
+# ── Profiler ─────────────────────────────────────────────────────────────────
+profiler:
+  enabled: true
+  type:    simple
+
 # ── Callbacks ─────────────────────────────────────────────────────────────────
 callbacks:
   model_summary:
-    max_depth: 3
+    max_depth: 9
 
   progress_bar:
     refresh_rate: 1000   # update every N steps (reduce to shrink SLURM logs)
 
   model_checkpoint:
     monitor:    val_loss
-    save_top_k: 3
+    save_top_k: -1
     mode:       min
 
   early_stopping:

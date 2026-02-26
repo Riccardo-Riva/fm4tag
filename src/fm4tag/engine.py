@@ -159,7 +159,9 @@ class _PrecisionProgressBar(TQDMProgressBar):
     def get_metrics(self, trainer, pl_module):  # type: ignore[override]
         metrics = super().get_metrics(trainer, pl_module)
         return {
-            k: f'{v:.4f}' if isinstance(v, float) else v for k, v in metrics.items()
+            k: f'{v:.4f}' if isinstance(v, float) else v
+            for k, v in metrics.items()
+            if not k.endswith('_step')
         }
 
 
