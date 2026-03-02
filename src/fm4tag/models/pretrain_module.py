@@ -150,7 +150,7 @@ class PretrainModule(L.LightningModule):
 
         # ── Encode both views ─────────────────────────────────────────────────
         X_1 = encoder(x_cat_enc_1, x_con_enc_1)  # (N_valid, F, dim)
-        X_2 = encoder(x_cat_enc_2, x_con_enc_2)
+        X_2 = encoder(x_cat_enc_2, x_con_enc_2)  # (N_valid, F, dim)
 
         # ── Losses ────────────────────────────────────────────────────────────
         total_loss = X_1.new_zeros(())

@@ -14,6 +14,15 @@ Run with Hydra (from the project root)::
     # Or via the installed entry-point (equivalent):
     fm4tag --config-name=saintV0 phase=pretrain
 
+    # Load a config file from OUTSIDE the repo's configs directory:
+    #   --config-path (-cp) sets the search directory (absolute, or relative to CWD)
+    #   --config-name (-cn) is the filename without .yaml
+    fm4tag --config-path=/path/to/my/configs --config-name=my_experiment phase=finetune
+    fm4tag -cp /path/to/my/configs -cn my_experiment phase=finetune action=predict
+
+    # On every run the fully-resolved config is written to:
+    #   outputs/<experiment_name>/version_N/config.yaml
+
 For notebooks / scripts (Hydra not involved)::
 
     from omegaconf import OmegaConf
@@ -29,19 +38,21 @@ import os
 import warnings
 
 import hydra
+import psutil
 import torch
 from omegaconf import DictConfig, OmegaConf
 
 import lightning as L
 from lightning.pytorch.callbacks import (
     BackboneFinetuning,
+    Callback,
     EarlyStopping,
     LearningRateMonitor,
     ModelCheckpoint,
     ModelSummary,
     TQDMProgressBar,
 )
-from lightning.pytorch.loggers import CSVLogger
+from lightning.pytorch.loggers import TensorBoardLogger
 from lightning.pytorch.profilers import (
     AdvancedProfiler,
     PyTorchProfiler,
@@ -52,6 +63,50 @@ from fm4tag.data import PT_FT_DataModule
 from fm4tag.models import FinetuneModule, PretrainModule
 from fm4tag.models.components.encoder import Encoder, GlobalEncoder
 from fm4tag.models.components.heads import MultiStreamClassifierHead
+
+
+# ---------------------------------------------------------------------------
+# Memory monitor callback
+# ---------------------------------------------------------------------------
+
+
+class MemoryMonitorCallback(Callback):
+    """Log CPU RSS and GPU VRAM usage each training step and validation epoch.
+
+    Metrics logged (all in MiB):
+
+    * ``mem/cpu_rss_MiB``  — resident set size of the main process (CPU RAM)
+    * ``mem/gpu_alloc_MiB`` — GPU memory currently allocated by PyTorch tensors
+    * ``mem/gpu_reserved_MiB`` — GPU memory reserved (cached) by the allocator
+
+    Enable from config::
+
+        callbacks:
+          memory_monitor:
+            enabled: true
+            log_every_n_steps: 100   # optional, defaults to trainer.log_every_n_steps
+    """
+
+    def __init__(self, log_every_n_steps: int = 100) -> None:
+        super().__init__()
+        self._log_every_n_steps = log_every_n_steps
+        self._proc = psutil.Process(os.getpid())
+
+    def _mem_stats(self) -> dict[str, float]:
+        rss_mib = self._proc.memory_info().rss / 1024**2
+        stats = {'mem/cpu_rss_MiB': rss_mib}
+        if torch.cuda.is_available():
+            dev = torch.cuda.current_device()
+            stats['mem/gpu_alloc_MiB'] = torch.cuda.memory_allocated(dev) / 1024**2
+            stats['mem/gpu_reserved_MiB'] = torch.cuda.memory_reserved(dev) / 1024**2
+        return stats
+
+    def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx) -> None:
+        if batch_idx % self._log_every_n_steps == 0:
+            pl_module.log_dict(self._mem_stats(), on_step=True, on_epoch=False)
+
+    def on_validation_epoch_end(self, trainer, pl_module) -> None:
+        pl_module.log_dict(self._mem_stats(), on_step=False, on_epoch=True)
 
 
 # ---------------------------------------------------------------------------
@@ -73,7 +128,12 @@ def _build_encoders(cfg: DictConfig) -> torch.nn.ModuleDict:
     # ── Global encoder (continuous-only, MLP) ────────────────────────────────
     global_name = cfg.global_object
     n_global = len(cfg.variables[global_name].inputs)
-    encoders[global_name] = GlobalEncoder(num_features=n_global, dim=enc_cfg.dim)
+    encoders[global_name] = GlobalEncoder(
+        num_features=n_global,
+        dim=enc_cfg.dim,
+        proj_hidden=enc_cfg.get('proj_hidden', None),
+        proj_out=enc_cfg.get('proj_out', None),
+    )
 
     # ── Constituent encoders (transformer) ───────────────────────────────────
     for obj_name in cfg.constituent_objects:
@@ -94,6 +154,8 @@ def _build_encoders(cfg: DictConfig) -> torch.nn.ModuleDict:
             cont_embeddings=enc_cfg.get('cont_embeddings', 'MLP'),
             attentiontype=enc_cfg.get('attentiontype', 'col'),
             final_mlp_style=enc_cfg.get('final_mlp_style', 'sep'),
+            proj_hidden=enc_cfg.get('proj_hidden', None),
+            proj_out=enc_cfg.get('proj_out', None),
         )
 
     return torch.nn.ModuleDict(encoders)
@@ -228,6 +290,14 @@ def _build_callbacks(cfg: DictConfig, phase: str) -> list:
     # ── LearningRateMonitor ───────────────────────────────────────────────────
     callbacks.append(LearningRateMonitor(logging_interval='step'))
 
+    # ── MemoryMonitor ────────────────────────────────────────────────────────
+    mm = cb_cfg.get('memory_monitor', {})
+    if mm.get('enabled', False):
+        log_every = mm.get(
+            'log_every_n_steps', cfg.get('trainer', {}).get('log_every_n_steps', 100)
+        )
+        callbacks.append(MemoryMonitorCallback(log_every_n_steps=log_every))
+
     # ── BackboneFinetuning (finetune phase + freeze_encoder only) ────────────
     if phase == 'finetune' and cfg.get('freeze_encoder', False):
         bf = cb_cfg.get('backbone_finetuning', {})
@@ -340,10 +410,15 @@ def run(
     L.seed_everything(cfg.get('seed', 42), workers=True)
 
     # ── Logger ────────────────────────────────────────────────────────────────
-    logger = CSVLogger(
+    logger = TensorBoardLogger(
         save_dir=cfg.get('output_dir', 'outputs'),
         name=cfg.get('experiment_name', 'fm4tag'),
     )
+
+    # ── Save resolved config ──────────────────────────────────────────────────
+    os.makedirs(logger.log_dir, exist_ok=True)
+    with open(os.path.join(logger.log_dir, 'config.yaml'), 'w') as _f:
+        _f.write(OmegaConf.to_yaml(cfg, resolve=True))
 
     # ── Callbacks ─────────────────────────────────────────────────────────────
     callbacks = _build_callbacks(cfg, _phase)
@@ -376,10 +451,20 @@ def run(
 
         head_cfg = cfg.head
         n_classes = len(cfg.variables[cfg.global_object].unique_labels)
+
+        n_global_features = len(cfg.variables[cfg.global_object].inputs)
+        n_constituent_features = [
+            len(cfg.variables[obj].inputs.continuous)
+            + len(cfg.variables[obj].inputs.categorical)
+            for obj in cfg.constituent_objects
+        ]
+
         head = MultiStreamClassifierHead(
             dim=cfg.encoder.dim,
-            n_constituent_types=len(cfg.constituent_objects),
+            n_global_features=n_global_features,
+            n_constituent_features=n_constituent_features,
             y_dim=n_classes,
+            cls_dim=head_cfg.get('cls_dim', None),
             mlp_dropout=head_cfg.get('mlp_dropout', 0.0),
             ff_dropout=head_cfg.get('ff_dropout', 0.0),
             attn_dropout=head_cfg.get('attn_dropout', 0.0),
@@ -394,14 +479,18 @@ def run(
         raise ValueError(f"phase must be 'pretrain' or 'finetune', got {_phase!r}")
 
     # ── Dispatch ──────────────────────────────────────────────────────────────
+    # weights_only=False: checkpoints saved by older Lightning embed omegaconf
+    # objects (DictConfig, ContainerMetadata, …) which PyTorch 2.6+ rejects
+    # under the new weights_only=True default.  The checkpoints are our own
+    # files so this is safe.
     if _action == 'fit':
-        trainer.fit(module, dm, ckpt_path=_ckpt)
+        trainer.fit(module, dm, ckpt_path=_ckpt, weights_only=False)
 
     elif _action == 'test':
-        trainer.test(module, dm, ckpt_path=_ckpt or 'best')
+        trainer.test(module, dm, ckpt_path=_ckpt or 'best', weights_only=False)
 
     elif _action == 'predict':
-        predictions = trainer.predict(module, dm, ckpt_path=_ckpt or 'best')
+        predictions = trainer.predict(module, dm, ckpt_path=_ckpt or 'best', weights_only=False)
         out_dir = logger.log_dir
         os.makedirs(out_dir, exist_ok=True)
         torch.save(predictions, os.path.join(out_dir, 'predictions.pt'))

@@ -25,9 +25,20 @@ class GlobalEncoder(nn.Module):
         num_features: Number of global continuous features ``F_g``.
         dim:          Embedding dimension (should match the constituent
                       :class:`Encoder` ``dim``).
+        proj_hidden:  Hidden dim of the contrastive projection heads.
+                      ``None`` → ``6 * num_features * dim // 5`` (auto).
+        proj_out:     Output dim of the contrastive projection heads
+                      (the space where InfoNCE loss is computed).
+                      ``None`` → ``num_features * dim // 2`` (auto).
     """
 
-    def __init__(self, num_features: int, dim: int) -> None:
+    def __init__(
+        self,
+        num_features: int,
+        dim: int,
+        proj_hidden: int | None = None,
+        proj_out: int | None = None,
+    ) -> None:
         super().__init__()
         self.num_features = num_features
         self.dim = dim
@@ -45,10 +56,10 @@ class GlobalEncoder(nn.Module):
 
         # Contrastive projection heads.
         proj_in = num_features * dim
-        proj_hidden = 6 * proj_in // 5
-        proj_out = proj_in // 2
-        self.pt_mlp1 = simple_MLP([proj_in, proj_hidden, proj_out])
-        self.pt_mlp2 = simple_MLP([proj_in, proj_hidden, proj_out])
+        _proj_hidden = proj_hidden if proj_hidden is not None else 6 * proj_in // 5
+        _proj_out = proj_out if proj_out is not None else proj_in // 2
+        self.pt_mlp1 = simple_MLP([proj_in, _proj_hidden, _proj_out])
+        self.pt_mlp2 = simple_MLP([proj_in, _proj_hidden, _proj_out])
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Embed global features.
@@ -97,6 +108,11 @@ class Encoder(nn.Module):
                           ``'row'``, or ``'concat'``.
         final_mlp_style:  Reconstruction head style: ``'sep'`` (per-feature) or
                           ``'common'`` (shared).
+        proj_hidden:      Hidden dim of the contrastive projection heads.
+                          ``None`` → ``3 * dim * (n_cat + n_con) // 4`` (auto).
+        proj_out:         Output dim of the contrastive projection heads
+                          (the space where InfoNCE loss is computed).
+                          ``None`` → ``dim * (n_cat + n_con) // 2`` (auto).
     """
 
     def __init__(
@@ -116,6 +132,8 @@ class Encoder(nn.Module):
         cont_embeddings='MLP',
         attentiontype='col',
         final_mlp_style='sep',
+        proj_hidden=None,
+        proj_out=None,
     ):
         super().__init__()
         assert all(map(lambda n: n > 0, categories)), (
@@ -220,10 +238,10 @@ class Encoder(nn.Module):
 
         # Projection heads for the contrastive (InfoNCE) loss.
         proj_in = dim * (num_continuous + self.num_categories)
-        proj_hidden = 3 * proj_in // 4
-        proj_out = proj_in // 2
-        self.pt_mlp1 = simple_MLP([proj_in, proj_hidden, proj_out])
-        self.pt_mlp2 = simple_MLP([proj_in, proj_hidden, proj_out])
+        _proj_hidden = proj_hidden if proj_hidden is not None else 3 * proj_in // 4
+        _proj_out = proj_out if proj_out is not None else proj_in // 2
+        self.pt_mlp1 = simple_MLP([proj_in, _proj_hidden, _proj_out])
+        self.pt_mlp2 = simple_MLP([proj_in, _proj_hidden, _proj_out])
 
     def forward(self, x_categ, x_cont, mask=None):
         return self.transformer(x_categ, x_cont, mask)

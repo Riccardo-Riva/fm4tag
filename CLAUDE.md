@@ -43,8 +43,15 @@ fm4tag --config-name=default phase=finetune ckpt_path=<path>            # resume
 fm4tag --config-name=default phase=finetune action=test ckpt_path=<path>
 fm4tag --config-name=default phase=finetune action=predict ckpt_path=<path>
 
+# Load a config file from OUTSIDE the repo (--config-path is absolute or relative to CWD):
+fm4tag --config-path=/my/external/configs --config-name=my_experiment phase=finetune
+
 # Equivalent using Python module syntax (no install required):
 python -m fm4tag.engine --config-name=default phase=pretrain
+
+# The fully-resolved config is always saved alongside the run outputs:
+#   outputs/<experiment_name>/version_N/config.yaml   ← use this to reproduce a run
+#   outputs/<experiment_name>/version_N/hparams.yaml  ← Lightning hyperparameter log (nested under cfg:)
 ```
 
 ## Architecture
@@ -106,6 +113,15 @@ When `freeze_encoder: true` in the config, `FinetuneModule.configure_optimizers`
 
 ### Checkpoints and outputs
 
-Lightning's CSVLogger writes to `outputs/<experiment_name>/version_<N>/`.
+Lightning's TensorBoardLogger writes to `outputs/<experiment_name>/version_<N>/`.
 `ModelCheckpoint` saves to `…/checkpoints/`.
 `predict-classifier` saves `predictions.pt` (list of softmax tensors) in the same log dir.
+`engine.run()` always writes `config.yaml` (fully resolved) to the log dir — use this to reproduce a run or to pass back to `--config-path` / `--config-name`.
+
+To visualise training metrics, launch TensorBoard pointing at the outputs directory:
+```bash
+tensorboard --logdir outputs/
+# then open http://localhost:6006 in a browser
+# on a remote machine, forward the port first:
+#   ssh -L 6006:localhost:6006 yourserver
+```

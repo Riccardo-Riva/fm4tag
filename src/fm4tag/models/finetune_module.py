@@ -194,6 +194,48 @@ class FinetuneModule(L.LightningModule):
         return self(batch).softmax(dim=-1)
 
     # ------------------------------------------------------------------
+    # Checkpoint compatibility
+    # ------------------------------------------------------------------
+
+    def on_load_checkpoint(self, checkpoint: dict) -> None:
+        """Remap state-dict keys from older checkpoint formats.
+
+        Handles two backwards-compatibility issues:
+
+        * **Head layer renames** — ``global_agg`` → ``global_proj``,
+          ``const_phi`` → ``const_proj`` (renamed during a refactor).
+        * **Projection-head size mismatch** — ``backbone.*.pt_mlp*`` hidden
+          dimensions changed formula (``6n/5`` → ``3n/4``).  These layers are
+          only used by the contrastive loss during *pretraining* and are never
+          called during fine-tuning or inference, so we keep the current
+          model's freshly-initialised weights rather than failing.
+        """
+        sd = checkpoint['state_dict']
+        model_sd = self.state_dict()
+
+        # 1. Remap renamed head layers.
+        _renames = [
+            ('head.global_agg.', 'head.global_proj.'),
+            ('head.const_phi.', 'head.const_proj.'),
+        ]
+        new_sd: dict = {}
+        for k, v in sd.items():
+            new_k = k
+            for old, new in _renames:
+                if k.startswith(old):
+                    new_k = new + k[len(old):]
+                    break
+            new_sd[new_k] = v
+
+        # 2. For any key whose shape no longer matches (e.g. pt_mlp), fall back
+        #    to the current model's initialisation so strict loading still passes.
+        for k in list(new_sd):
+            if k in model_sd and new_sd[k].shape != model_sd[k].shape:
+                new_sd[k] = model_sd[k]
+
+        checkpoint['state_dict'] = new_sd
+
+    # ------------------------------------------------------------------
     # Optimiser
     # ------------------------------------------------------------------
 
