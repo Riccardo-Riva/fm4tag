@@ -21,23 +21,20 @@ class GlobalEncoder(nn.Module):
     per-constituent-token output of :class:`Encoder`, so downstream heads can
     treat both uniformly.
 
+    The contrastive projection heads always use ``proj_in = num_features * dim``
+    as input, ``2 * proj_in`` as the hidden dimension, and ``proj_in`` as the
+    output dimension.
+
     Args:
         num_features: Number of global continuous features ``F_g``.
         dim:          Embedding dimension (should match the constituent
                       :class:`Encoder` ``dim``).
-        proj_hidden:  Hidden dim of the contrastive projection heads.
-                      ``None`` → ``6 * num_features * dim // 5`` (auto).
-        proj_out:     Output dim of the contrastive projection heads
-                      (the space where InfoNCE loss is computed).
-                      ``None`` → ``num_features * dim // 2`` (auto).
     """
 
     def __init__(
         self,
         num_features: int,
         dim: int,
-        proj_hidden: int | None = None,
-        proj_out: int | None = None,
     ) -> None:
         super().__init__()
         self.num_features = num_features
@@ -54,12 +51,10 @@ class GlobalEncoder(nn.Module):
         # Denoising reconstruction head: one scalar per feature → (N, 1) each.
         self.mlp_recon = sep_MLP(dim, num_features, [1] * num_features)
 
-        # Contrastive projection heads.
+        # Contrastive projection heads: hidden=2*proj_in, out=proj_in.
         proj_in = num_features * dim
-        _proj_hidden = proj_hidden if proj_hidden is not None else 3 * proj_in // 4
-        _proj_out = proj_out if proj_out is not None else proj_in // 2
-        self.pt_mlp1 = simple_MLP([proj_in, _proj_hidden, _proj_out])
-        self.pt_mlp2 = simple_MLP([proj_in, _proj_hidden, _proj_out])
+        self.pt_mlp1 = simple_MLP([proj_in, 2 * proj_in, proj_in])
+        self.pt_mlp2 = simple_MLP([proj_in, 2 * proj_in, proj_in])
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Embed global features.

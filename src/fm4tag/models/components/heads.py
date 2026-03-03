@@ -72,7 +72,11 @@ class MultiStreamClassifierHead(nn.Module):
         self.const_proj = nn.ModuleList(
             [
                 MLP_dropout(
-                    [n_feat * dim, n_feat * dim // 2, _cls_dim], # TODO: tune hidden dim?
+                    [
+                        n_feat * dim,
+                        n_feat * dim // 2,
+                        _cls_dim,
+                    ],  # TODO: tune hidden dim?
                     act=nn.ReLU(),
                     dropout=mlp_dropout,
                 )

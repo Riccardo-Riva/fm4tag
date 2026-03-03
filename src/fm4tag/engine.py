@@ -131,8 +131,6 @@ def _build_encoders(cfg: DictConfig) -> torch.nn.ModuleDict:
     encoders[global_name] = GlobalEncoder(
         num_features=n_global,
         dim=enc_cfg.dim,
-        proj_hidden=enc_cfg.get('proj_hidden', None),
-        proj_out=enc_cfg.get('proj_out', None),
     )
 
     # ── Constituent encoders (transformer) ───────────────────────────────────
