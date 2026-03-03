@@ -22,6 +22,7 @@ fm4tag = "fm4tag.engine:main"
 dev = [
     "pytest>=9.0.2",
     "ruff>=0.14.11",
+    "setuptools<71",
 ]
 
 [build-system]

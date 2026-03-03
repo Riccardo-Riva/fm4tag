@@ -61,33 +61,35 @@ variables:
         numberOfSCTSharedHits:                    [0,1,2,3]
 
 # ── Data — file paths ────────────────────────────────────────────────────────
-pretrain_file:     /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_152051/pretrain/output/pp_output_pretrain.h5
-pretrain_val_file: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_152051/val/output/pp_output_val.h5   # set to a path to enable validation during pretraining
+base_path: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_152051
 
-train_file: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_152051/train/output/pp_output_train.h5
-val_file:   /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_152051/val/output/pp_output_val.h5
-test_file:  /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_152051/test/output/pp_output_test.h5
+pretrain_file:     ${base_path}/pretrain/output/pp_output_pretrain.h5
+pretrain_val_file: ${base_path}/val/output/pp_output_val.h5   # set to a path to enable validation during pretraining
 
-norm_dict:  /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_152051/pretrain/output/norm_dict.yaml
-class_dict: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_152051/pretrain/output/class_dict.yaml
+train_file: ${base_path}/train/output/pp_output_train.h5
+val_file:   ${base_path}/val/output/pp_output_val.h5
+test_file:  ${base_path}/test/output/pp_output_test.h5
+
+norm_dict:  ${base_path}/pretrain/output/norm_dict.yaml
+class_dict: ${base_path}/pretrain/output/class_dict.yaml
 
 # ── Data — loader settings ───────────────────────────────────────────────────
 dataloader:
   batch_size:      4096
-  num_workers:     16
+  num_workers:     8
   prefetch_factor: 2
   pin_memory:      false
 
 pretrain_dataloader:
   batch_size:      4096   # larger batches help contrastive learning
-  num_workers:     16
+  num_workers:     8
   prefetch_factor: 2
   pin_memory:      false
 
 # ── Encoder architecture ─────────────────────────────────────────────────────
 encoder:
   dim:              64
-  depth:            4
+  depth:            6
   heads:            8
   dim_head:         8
   dim_row_head:     64
@@ -131,8 +133,8 @@ pretrain:
 
 # ── Optimiser ─────────────────────────────────────────────────────────────────
 optimizer:
-  lr:           1.0e-2
-  backbone_lr:  1.0e-3   # backbone LR when freeze_encoder=false (lower than head)
+  lr:           1.0e-4
+  backbone_lr:  1.0e-5   # backbone LR when freeze_encoder=false (lower than head)
   weight_decay: 1.0e-5
 
 # ── PyTorch Lightning Trainer ─────────────────────────────────────────────────
@@ -153,7 +155,7 @@ profiler:
 # ── Callbacks ─────────────────────────────────────────────────────────────────
 callbacks:
   model_summary:
-    max_depth: 4
+    max_depth: 3
 
   progress_bar:
     refresh_rate: 1000   # update every N steps (reduce to shrink SLURM logs)

@@ -61,15 +61,17 @@ variables:
         numberOfSCTSharedHits:                    [0,1,2,3]
 
 # ── Data — file paths ────────────────────────────────────────────────────────
-pretrain_file:     /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_112137/pretrain/output/pp_output_pretrain.h5
-pretrain_val_file: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_112137/val/output/pp_output_val.h5
+base_path: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_112137
 
-train_file: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_112137/train/output/pp_output_train.h5
-val_file:   /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_112137/val/output/pp_output_val.h5
-test_file:  /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_112137/test/output/pp_output_test.h5
+pretrain_file:     ${base_path}/pretrain/output/pp_output_pretrain.h5
+pretrain_val_file: ${base_path}/val/output/pp_output_val.h5
 
-norm_dict:  /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_112137/pretrain/output/norm_dict.yaml
-class_dict: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_112137/pretrain/output/class_dict.yaml
+train_file: ${base_path}/train/output/pp_output_train.h5
+val_file:   ${base_path}/val/output/pp_output_val.h5
+test_file:  ${base_path}/test/output/pp_output_test.h5
+
+norm_dict:  ${base_path}/pretrain/output/norm_dict.yaml
+class_dict: ${base_path}/pretrain/output/class_dict.yaml
 
 # ── Data — loader settings ───────────────────────────────────────────────────
 dataloader:

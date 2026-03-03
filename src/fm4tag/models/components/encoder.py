@@ -56,7 +56,7 @@ class GlobalEncoder(nn.Module):
 
         # Contrastive projection heads.
         proj_in = num_features * dim
-        _proj_hidden = proj_hidden if proj_hidden is not None else 6 * proj_in // 5
+        _proj_hidden = proj_hidden if proj_hidden is not None else 3 * proj_in // 4
         _proj_out = proj_out if proj_out is not None else proj_in // 2
         self.pt_mlp1 = simple_MLP([proj_in, _proj_hidden, _proj_out])
         self.pt_mlp2 = simple_MLP([proj_in, _proj_hidden, _proj_out])

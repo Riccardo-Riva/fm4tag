@@ -52,7 +52,7 @@ from lightning.pytorch.callbacks import (
     ModelSummary,
     TQDMProgressBar,
 )
-from lightning.pytorch.loggers import TensorBoardLogger
+from lightning.pytorch.loggers import CSVLogger, TensorBoardLogger
 from lightning.pytorch.profilers import (
     AdvancedProfiler,
     PyTorchProfiler,
@@ -410,16 +410,24 @@ def run(
     L.seed_everything(cfg.get('seed', 42), workers=True)
 
     # ── Logger ────────────────────────────────────────────────────────────────
-    logger = TensorBoardLogger(
+    tb_logger = TensorBoardLogger(
         save_dir=cfg.get('output_dir', 'outputs'),
         name=cfg.get('experiment_name', 'fm4tag'),
     )
-
+    csv_logger = CSVLogger(
+        save_dir=cfg.get('output_dir', 'outputs'),
+        name=cfg.get('experiment_name', 'fm4tag'),
+        version=tb_logger.version,
+    )
+    logger = [tb_logger, csv_logger]
+    
+    """
     # ── Save resolved config ──────────────────────────────────────────────────
-    os.makedirs(logger.log_dir, exist_ok=True)
-    with open(os.path.join(logger.log_dir, 'config.yaml'), 'w') as _f:
+    os.makedirs(tb_logger.log_dir, exist_ok=True)
+    with open(os.path.join(tb_logger.log_dir, 'config.yaml'), 'w') as _f:
         _f.write(OmegaConf.to_yaml(cfg, resolve=True))
-
+    """
+    
     # ── Callbacks ─────────────────────────────────────────────────────────────
     callbacks = _build_callbacks(cfg, _phase)
 
@@ -491,7 +499,7 @@ def run(
 
     elif _action == 'predict':
         predictions = trainer.predict(module, dm, ckpt_path=_ckpt or 'best', weights_only=False)
-        out_dir = logger.log_dir
+        out_dir = tb_logger.log_dir
         os.makedirs(out_dir, exist_ok=True)
         torch.save(predictions, os.path.join(out_dir, 'predictions.pt'))
 
