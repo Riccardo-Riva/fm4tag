@@ -223,7 +223,7 @@ class FinetuneModule(L.LightningModule):
             new_k = k
             for old, new in _renames:
                 if k.startswith(old):
-                    new_k = new + k[len(old):]
+                    new_k = new + k[len(old) :]
                     break
             new_sd[new_k] = v
 

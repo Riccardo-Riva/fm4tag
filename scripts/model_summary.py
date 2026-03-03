@@ -58,7 +58,9 @@ def build_module(cfg, phase: str):
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Print model summary from a config file.')
+    parser = argparse.ArgumentParser(
+        description='Print model summary from a config file.'
+    )
     parser.add_argument('--config', required=True, help='Path to a YAML config file.')
     parser.add_argument(
         '--phase',
@@ -77,7 +79,9 @@ def main():
     cfg = OmegaConf.load(args.config)
 
     phase = args.phase or cfg.get('phase', 'finetune')
-    max_depth = args.max_depth or cfg.get('callbacks', {}).get('model_summary', {}).get('max_depth', 2)
+    max_depth = args.max_depth or cfg.get('callbacks', {}).get('model_summary', {}).get(
+        'max_depth', 2
+    )
 
     module = build_module(cfg, phase)
     print(ModelSummary(module, max_depth=max_depth))

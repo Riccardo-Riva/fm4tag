@@ -420,14 +420,14 @@ def run(
         version=tb_logger.version,
     )
     logger = [tb_logger, csv_logger]
-    
+
     """
     # ── Save resolved config ──────────────────────────────────────────────────
     os.makedirs(tb_logger.log_dir, exist_ok=True)
     with open(os.path.join(tb_logger.log_dir, 'config.yaml'), 'w') as _f:
         _f.write(OmegaConf.to_yaml(cfg, resolve=True))
     """
-    
+
     # ── Callbacks ─────────────────────────────────────────────────────────────
     callbacks = _build_callbacks(cfg, _phase)
 
@@ -498,7 +498,9 @@ def run(
         trainer.test(module, dm, ckpt_path=_ckpt or 'best', weights_only=False)
 
     elif _action == 'predict':
-        predictions = trainer.predict(module, dm, ckpt_path=_ckpt or 'best', weights_only=False)
+        predictions = trainer.predict(
+            module, dm, ckpt_path=_ckpt or 'best', weights_only=False
+        )
         out_dir = tb_logger.log_dir
         os.makedirs(out_dir, exist_ok=True)
         torch.save(predictions, os.path.join(out_dir, 'predictions.pt'))
