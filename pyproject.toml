@@ -12,11 +12,13 @@ dependencies = [
     "lightning>=2.6.0",
     "matplotlib>=3.10.8",
     "omegaconf>=2.3.0",
+    "optuna>=4.7.0",
     "tensorboard>=2.20.0",
 ]
 
 [project.scripts]
-fm4tag = "fm4tag.engine:main"
+fm4tag     = "fm4tag.engine:main"
+fm4tag-hpo = "fm4tag.hpo:main"
 
 [dependency-groups]
 dev = [

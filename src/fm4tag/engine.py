@@ -143,7 +143,8 @@ def _build_encoders(cfg: DictConfig) -> torch.nn.ModuleDict:
             num_continuous=num_continuous,
             dim=enc_cfg.dim,
             depth=enc_cfg.depth,
-            heads=enc_cfg.heads,
+            col_heads=enc_cfg.get('col_heads', 8),
+            row_heads=enc_cfg.get('row_heads', 8),
             dim_head=enc_cfg.get('dim_head', 16),
             dim_row_head=enc_cfg.get('dim_row_head', 64),
             attn_dropout=enc_cfg.get('attn_dropout', 0.0),
@@ -381,6 +382,7 @@ def run(
     action: str | None = None,
     encoder_ckpt: str | None = None,
     ckpt_path: str | None = None,
+    extra_callbacks: list | None = None,
 ) -> None:
     """Run the training / evaluation / prediction workflow.
 
@@ -398,6 +400,9 @@ def run(
                       ``cfg.encoder_ckpt`` when provided.
         ckpt_path:    Lightning checkpoint path for resuming ``fit``, or for
                       ``test`` / ``predict``.  Overrides ``cfg.ckpt_path``.
+        extra_callbacks: Additional Lightning callbacks appended after the
+                      standard set built from config.  Used by the HPO module
+                      to inject :class:`~fm4tag.hpo._OptunaMetricCallback`.
     """
     _phase = phase or cfg.get('phase', 'finetune')
     _action = action or cfg.get('action', 'fit')
@@ -428,6 +433,8 @@ def run(
 
     # ── Callbacks ─────────────────────────────────────────────────────────────
     callbacks = _build_callbacks(cfg, _phase)
+    if extra_callbacks:
+        callbacks.extend(extra_callbacks)
 
     # ── Profiler ──────────────────────────────────────────────────────────────
     profiler = _build_profiler(cfg)

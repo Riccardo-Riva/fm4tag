@@ -88,7 +88,8 @@ class Encoder(nn.Module):
         num_continuous:   Number of continuous features.
         dim:              Embedding dimension shared by all tokens.
         depth:            Number of transformer layers.
-        heads:            Number of attention heads.
+        col_heads:        Number of attention heads for column (within-sample) attention.
+        row_heads:        Number of attention heads for row (inter-sample) attention.
         dim_head:         Dimension per head (column attention).
         dim_row_head:     Dimension per head (row attention).
         num_special_tokens: Extra tokens prepended to the embedding table.
@@ -117,7 +118,8 @@ class Encoder(nn.Module):
         num_continuous,
         dim,
         depth,
-        heads,
+        col_heads,
+        row_heads,
         dim_head=16,
         dim_row_head=64,
         num_special_tokens=0,
@@ -187,7 +189,7 @@ class Encoder(nn.Module):
             self.transformer = Transformer(
                 dim=dim,
                 depth=depth,
-                heads=heads,
+                heads=col_heads,
                 dim_head=dim_head,
                 attn_dropout=attn_dropout,
                 ff_dropout=ff_dropout,
@@ -198,7 +200,8 @@ class Encoder(nn.Module):
                 dim=dim,
                 nfeats=nfeats,
                 depth=depth,
-                heads=heads,
+                col_heads=col_heads,
+                row_heads=row_heads,
                 dim_head=dim_head,
                 dim_row_head=dim_row_head,
                 attn_dropout=attn_dropout,
@@ -210,7 +213,7 @@ class Encoder(nn.Module):
                 dim=dim,
                 nfeats=nfeats,
                 depth=depth,
-                heads=heads,
+                row_heads=row_heads,
                 dim_row_head=dim_row_head,
                 attn_dropout=attn_dropout,
                 ff_dropout=ff_dropout,

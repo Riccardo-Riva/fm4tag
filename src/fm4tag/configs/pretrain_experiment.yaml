@@ -90,7 +90,8 @@ pretrain_dataloader:
 encoder:
   dim:              128
   depth:            6
-  heads:            8
+  col_heads:        8
+  row_heads:        8   # unused for col-only attention
   dim_head:         16
   dim_row_head:     64
   attn_dropout:     0.05
@@ -179,3 +180,55 @@ callbacks:
   memory_monitor:
     enabled:           false
     log_every_n_steps: 100   # log CPU RSS + GPU VRAM every N train steps
+
+# ── Hyperparameter optimisation (fm4tag-hpo) ──────────────────────────────────
+hpo:
+  study_name:   fm4tag_hpo
+  storage:      null          # e.g. "sqlite:///optuna.db" for a persistent study
+  n_trials:     50
+  timeout:      null          # wall-clock seconds per phase (null = no limit)
+  phases:       [pretrain, finetune]   # run both phases sequentially
+  pretrain_encoder_ckpt: null # set to skip the pretrain study and use this ckpt
+
+  sampler:  TPE               # TPE | CmaES | Random
+  pruner:   median            # median | hyperband | nop
+  pruner_n_startup_trials: 5
+  pruner_n_warmup_steps:   10  # epochs before pruning kicks in
+  pruner_interval_steps:   1
+
+  max_epochs_pretrain:  20    # trainer.max_epochs override per pretrain trial
+  max_epochs_finetune:  30    # trainer.max_epochs override per finetune trial
+
+  # ── Search spaces ────────────────────────────────────────────────────────
+  # Each entry: {param: <dot.path>, type: categorical|int|float, ...}
+  # encoder group is shared: always used in pretrain, used in finetune only
+  # when no pretrained encoder is supplied (hpo.pretrain_encoder_ckpt=null).
+  search_space:
+    encoder:
+      - {param: encoder.dim,          type: categorical, choices: [16, 32, 64, 128]}
+      - {param: encoder.depth,        type: int,         low: 2,    high: 8}
+      - {param: encoder.col_heads,    type: categorical, choices: [2, 4, 8]}
+#     - {param: encoder.row_heads,    type: categorical, choices: [4, 8, 16]}  # unused for col-only attention
+      - {param: encoder.attn_dropout, type: float,       low: 0.0,  high: 0.3}
+      - {param: encoder.ff_dropout,   type: float,       low: 0.0,  high: 0.3}
+      - {param: encoder.ff_mult,      type: categorical, choices: [1, 2, 4]}
+
+    pretrain:
+      - {param: pretrain.nce_temp,              type: float, low: 0.3,   high: 1.0}
+      - {param: pretrain.aug_lambda,            type: float, low: 0.05,  high: 0.3}
+      - {param: pretrain.lam0,                  type: float, low: 0.1,   high: 5.0,  log: true}
+      - {param: pretrain.lam1,                  type: float, low: 0.1,   high: 5.0,  log: true}
+      - {param: pretrain.lam2,                  type: float, low: 1.0,   high: 50.0, log: true}
+      - {param: optimizer.lr,                   type: float, low: 1e-5,  high: 1e-2, log: true}
+      - {param: optimizer.weight_decay,         type: float, low: 1e-7,  high: 1e-3, log: true}
+      - {param: pretrain_dataloader.batch_size, type: categorical, choices: [512, 1024, 2048]}
+
+    finetune:
+      - {param: head.depth,                        type: int,         low: 1,   high: 5}
+      - {param: head.mlp_dropout,                  type: float,       low: 0.0, high: 0.4}
+      - {param: head.ff_dropout,                   type: float,       low: 0.0, high: 0.3}
+      - {param: head.ff_mult,                      type: categorical, choices: [2, 4, 8]}
+      - {param: optimizer.lr,                      type: float,       low: 1e-5, high: 1e-2, log: true}
+      - {param: optimizer.weight_decay,            type: float,       low: 1e-7, high: 1e-3, log: true}
+      - {param: dataloader.batch_size,             type: categorical, choices: [256, 512, 1024]}
+      - {param: callbacks.early_stopping.patience, type: int,         low: 5,   high: 30}

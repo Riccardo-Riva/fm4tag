@@ -80,12 +80,10 @@ raw (B, C, F_cat/F_con)
   → saint_encoder.forward()    → (N_valid, F_cat+F_con, dim)
          (transformer operates on already-embedded tokens)
   → scatter back to (B, C, F, dim) with zeros at invalid positions
-  → ClassifierHead              → (B, y_dim) logits
+  → MultiStreamClassifierHead   → (B, y_dim) logits
 ```
 
-Token at `F`-index 0 (first categorical feature) plays the role of a CLS token:
-- **ClassifierHead** extracts it as the per-constituent summary
-- **DenoisingLoss** skips reconstructing it (only reconstructs indices 1…F_cat−1)
+`MultiStreamClassifierHead` does **not** use a CLS token. It aggregates all F feature tokens per constituent by flattening them, projecting with an MLP, running a cross-constituent transformer, then **masked mean pooling** over valid constituents to get the jet-level representation.
 
 ### Key classes
 
@@ -94,7 +92,7 @@ Token at `F`-index 0 (first categorical feature) plays the role of a CLS token:
 | `DatasetCatCon` | `data/datasets.py` | HDF5 lazy loading, normalisation, padding |
 | `PT_FT_DataModule` | `data/datamodule.py` | Lightning DataModule; `phase="pretrain"\|"finetune"` |
 | `saint_encoder` | `models/components/encoder.py` | Transformer encoder for tabular constituent data |
-| `ClassifierHead` | `models/components/heads.py` | Cross-constituent attention + pooling → logits |
+| `MultiStreamClassifierHead` | `models/components/heads.py` | Flatten+project per constituent, cross-constituent transformer, masked mean pool → logits |
 | `InfoNCELoss` | `models/components/losses.py` | Symmetric NT-Xent contrastive loss |
 | `DenoisingLoss` | `models/components/losses.py` | CE (categorical) + MSE (continuous) reconstruction |
 | `PretrainModule` | `models/pretrain_module.py` | LightningModule: self-supervised pretraining |

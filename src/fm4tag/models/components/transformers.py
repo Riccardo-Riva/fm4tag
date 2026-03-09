@@ -57,7 +57,7 @@ class RowTransformer(nn.Module):
         dim,
         nfeats,
         depth,
-        heads,
+        row_heads,
         dim_row_head,
         attn_dropout,
         ff_dropout,
@@ -74,7 +74,7 @@ class RowTransformer(nn.Module):
                             Residual(
                                 RowAttention(
                                     row_dim,
-                                    heads=heads,
+                                    heads=row_heads,
                                     dim_row_head=dim_row_head,
                                     dropout=attn_dropout,
                                 )
@@ -112,7 +112,8 @@ class RowColTransformer(nn.Module):
         dim,
         nfeats,
         depth,
-        heads,
+        col_heads,
+        row_heads,
         dim_head,
         dim_row_head,
         attn_dropout,
@@ -130,7 +131,7 @@ class RowColTransformer(nn.Module):
                             Residual(
                                 Attention(
                                     dim,
-                                    heads=heads,
+                                    heads=col_heads,
                                     dim_head=dim_head,
                                     dropout=attn_dropout,
                                 )
@@ -147,7 +148,7 @@ class RowColTransformer(nn.Module):
                             Residual(
                                 RowAttention(
                                     row_dim,
-                                    heads=heads,
+                                    heads=row_heads,
                                     dim_row_head=dim_row_head,
                                     dropout=attn_dropout,
                                 )
