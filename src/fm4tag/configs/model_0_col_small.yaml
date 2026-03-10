@@ -88,14 +88,14 @@ pretrain_dataloader:
 
 # ── Encoder architecture ─────────────────────────────────────────────────────
 encoder:
-  dim:              128
-  depth:            6
-  col_heads:        4
+  dim:              64
+  depth:            3
+  col_heads:        2
   row_heads:        2   # unused for col-only attention
   dim_head:         32
   dim_row_head:     64
   attn_dropout:     0.0
-  ff_dropout:       0.04
+  ff_dropout:       0.05
   ff_mult:          1
   cont_embeddings:  MLP    # MLP | pos_singleMLP | Noemb
   attentiontype:    col    # col | colrow | row | concat
@@ -105,13 +105,13 @@ encoder:
 
 # ── Classifier head (finetune only) ──────────────────────────────────────────
 head:
-  mlp_dropout:  0.04
-  ff_dropout:   0.04
+  mlp_dropout:  0.05
+  ff_dropout:   0.05
   attn_dropout: 0.0
   ff_mult:      4
-  heads:        4
-  dim_head:     32
-  depth:        6
+  heads:        8
+  dim_head:     8
+  depth:        3
   cls_dim:      128   # null → equals encoder dim; set int to override
 
 # ── Fine-tuning settings ──────────────────────────────────────────────────────
@@ -142,7 +142,7 @@ optimizer:
 trainer:
   max_epochs:         100
   accelerator:        gpu
-  devices:            2
+  devices:            4
   strategy:          ddp_find_unused_parameters_true
   precision:          "bf16-mixed"
   log_every_n_steps:  100
@@ -168,12 +168,12 @@ callbacks:
 
   early_stopping:
     monitor:  val_loss
-    patience: 15
+    patience: 10
     mode:     min
 
   backbone_finetuning:
     enabled:                    true
-    unfreeze_backbone_at_epoch: 5
+    unfreeze_backbone_at_epoch: 15
     backbone_initial_ratio_lr:  0.1   # backbone LR = current head LR * ratio
     train_bn:                   false
 

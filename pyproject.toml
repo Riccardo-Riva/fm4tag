@@ -17,8 +17,9 @@ dependencies = [
 ]
 
 [project.scripts]
-fm4tag     = "fm4tag.engine:main"
-fm4tag-hpo = "fm4tag.hpo:main"
+fm4tag      = "fm4tag.engine:main"
+fm4tag-hpo  = "fm4tag.hpo:main"
+fm4tag-eval = "fm4tag.eval_encoder:main"
 
 [dependency-groups]
 dev = [
