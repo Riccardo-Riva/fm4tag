@@ -13,6 +13,7 @@ dependencies = [
     "matplotlib>=3.10.8",
     "omegaconf>=2.3.0",
     "optuna>=4.7.0",
+    "puma-hep>=0.5.1",
     "tensorboard>=2.20.0",
 ]
 

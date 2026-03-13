@@ -61,7 +61,8 @@ variables:
         numberOfSCTSharedHits:                    [0,1,2,3]
 
 # ── Data — file paths ────────────────────────────────────────────────────────
-base_path: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_152051
+base_path: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_152051 # 60M
+#base_path: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251114_155623 # 6M
 
 pretrain_file:     ${base_path}/pretrain/output/pp_output_pretrain.h5
 pretrain_val_file: ${base_path}/val/output/pp_output_val.h5   # set to a path to enable validation during pretraining

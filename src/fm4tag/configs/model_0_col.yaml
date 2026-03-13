@@ -61,7 +61,8 @@ variables:
         numberOfSCTSharedHits:                    [0,1,2,3]
 
 # ── Data — file paths ────────────────────────────────────────────────────────
-base_path: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251114_155623
+base_path: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_152051 # 60M
+#base_path: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251114_155623 # 6M
 
 pretrain_file:     ${base_path}/pretrain/output/pp_output_pretrain.h5
 pretrain_val_file: ${base_path}/val/output/pp_output_val.h5   # set to a path to enable validation during pretraining
@@ -75,16 +76,16 @@ class_dict: ${base_path}/pretrain/output/class_dict.yaml
 
 # ── Data — loader settings ───────────────────────────────────────────────────
 dataloader:
-  batch_size:      2048
+  batch_size:      1024
   num_workers:     8
   prefetch_factor: 2
-  pin_memory:      false
+  pin_memory:      true
 
 pretrain_dataloader:
-  batch_size:      2048   # larger batches help contrastive learning
+  batch_size:      1024   # larger batches help contrastive learning
   num_workers:     8
   prefetch_factor: 2
-  pin_memory:      false
+  pin_memory:      true
 
 # ── Encoder architecture ─────────────────────────────────────────────────────
 encoder:
@@ -95,8 +96,8 @@ encoder:
   dim_head:         32
   dim_row_head:     64
   attn_dropout:     0.0
-  ff_dropout:       0.04
-  ff_mult:          1
+  ff_dropout:       0.0
+  ff_mult:          4
   cont_embeddings:  MLP    # MLP | pos_singleMLP | Noemb
   attentiontype:    col    # col | colrow | row | concat
   final_mlp_style:  sep    # sep | common
@@ -105,8 +106,8 @@ encoder:
 
 # ── Classifier head (finetune only) ──────────────────────────────────────────
 head:
-  mlp_dropout:  0.04
-  ff_dropout:   0.04
+  mlp_dropout:  0.0
+  ff_dropout:   0.0
   attn_dropout: 0.0
   ff_mult:      4
   heads:        4
@@ -130,7 +131,7 @@ pretrain:
   nce_temp:        0.7
   lam0:            0.6    # contrastive loss weight
   lam1:            0.2    # categorical denoising loss weight
-  lam2:            0.2   # continuous denoising loss weight
+  lam2:            0.2    # continuous denoising loss weight
 
 # ── Optimiser ─────────────────────────────────────────────────────────────────
 optimizer:

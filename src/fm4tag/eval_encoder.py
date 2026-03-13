@@ -41,7 +41,6 @@ directory as the checkpoint.
 
 from __future__ import annotations
 
-import json
 import os
 from collections import defaultdict
 
@@ -190,8 +189,8 @@ def evaluate(
 
     _eval_file = (
         eval_file
-        or cfg.get('pretrain_val_file')
         or cfg.get('test_file')
+        or cfg.get('pretrain_val_file')
     )
     if _eval_file is None:
         raise ValueError(
@@ -336,11 +335,10 @@ def main(cfg: DictConfig) -> None:
     results = evaluate(cfg, ckpt_path=_ckpt)
     _print_results(results)
 
-    # Save JSON alongside the checkpoint.
+    # Save YAML alongside the checkpoint.
     if _ckpt:
-        out_path = os.path.join(os.path.dirname(_ckpt), 'encoder_eval.json')
-        with open(out_path, 'w') as f:
-            json.dump(results, f, indent=2)
+        out_path = os.path.join(os.path.dirname(_ckpt), 'encoder_eval.yaml')
+        OmegaConf.save(OmegaConf.create(results), out_path)
         print(f'Results saved to {out_path}')
 
 

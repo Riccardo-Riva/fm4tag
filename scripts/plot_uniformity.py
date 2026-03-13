@@ -31,7 +31,6 @@ Usage::
 from __future__ import annotations
 
 import argparse
-import json
 import re
 import sys
 from pathlib import Path
@@ -270,11 +269,10 @@ def main() -> None:
     metrics_per_epoch: list[dict] = []
     val_losses: list[float | None] = []
 
-    cache_path = version_dir / 'uniformity_cache.json'
+    cache_path = version_dir / 'uniformity_cache.yaml'
     cache: dict[str, dict] = {}
     if args.cache and cache_path.exists():
-        with open(cache_path) as f:
-            cache = json.load(f)
+        cache = OmegaConf.to_container(OmegaConf.load(cache_path), resolve=True)
         print(f'Loaded cache from {cache_path}')
 
     for epoch, ckpt_path in selected:
@@ -295,8 +293,7 @@ def main() -> None:
             print('done')
             if args.cache:
                 cache[cache_key] = results
-                with open(cache_path, 'w') as f:
-                    json.dump(cache, f, indent=2)
+                OmegaConf.save(OmegaConf.create(cache), cache_path)
 
         epochs.append(epoch)
         metrics_per_epoch.append(results)
@@ -305,13 +302,10 @@ def main() -> None:
     # ── Plot ──────────────────────────────────────────────────────────────────
     _plot(epochs, metrics_per_epoch, val_losses, out_path)
 
-    # Save final JSON summary.
-    summary_path = out_path.with_suffix('.json')
-    summary = {
-        str(e): m for e, m in zip(epochs, metrics_per_epoch)
-    }
-    with open(summary_path, 'w') as f:
-        json.dump(summary, f, indent=2)
+    # Save final YAML summary.
+    summary_path = out_path.with_suffix('.yaml')
+    summary = {str(e): m for e, m in zip(epochs, metrics_per_epoch)}
+    OmegaConf.save(OmegaConf.create(summary), summary_path)
     print(f'Summary saved to {summary_path}')
 
 
