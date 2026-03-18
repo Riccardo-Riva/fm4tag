@@ -3,6 +3,7 @@ slurm/
 
 # outputs
 outputs/
+plots/
 
 # claude stuff
 .claude/

@@ -61,8 +61,8 @@ variables:
         numberOfSCTSharedHits:                    [0,1,2,3]
 
 # ── Data — file paths ────────────────────────────────────────────────────────
-base_path: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_152051 # 60M
-#base_path: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251114_155623 # 6M
+#base_path: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_152051 # 60M
+base_path: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251114_155623 # 6M
 
 pretrain_file:     ${base_path}/pretrain/output/pp_output_pretrain.h5
 pretrain_val_file: ${base_path}/val/output/pp_output_val.h5   # set to a path to enable validation during pretraining
@@ -128,16 +128,16 @@ pretrain:
   aug:             [mixup, cutmix]
   aug_lambda:      0.05
   projhead_style:  diff   # diff (two separate projection heads) | same
-  nce_temp:        0.7
+  nce_temp:        0.31488067606450354 # found with optuna hpo; default 0.7
   lam0:            0.6    # contrastive loss weight
   lam1:            0.2    # categorical denoising loss weight
   lam2:            0.2   # continuous denoising loss weight
 
 # ── Optimiser ─────────────────────────────────────────────────────────────────
 optimizer:
-  lr:           1.0e-4
+  lr:           0.00011284338470369939 # found with optuna hpo; default 1e-4
   backbone_lr:  1.0e-5   # backbone LR when freeze_encoder=false (lower than head)
-  weight_decay: 1.0e-5
+  weight_decay: 5.962613854843877e-05 # found with optuna hpo; default 1e-5
 
 # ── PyTorch Lightning Trainer ─────────────────────────────────────────────────
 trainer:
@@ -188,7 +188,7 @@ hpo:
   storage:      null          # e.g. "sqlite:///optuna.db" for a persistent study
   n_trials:     100
   timeout:      null          # wall-clock seconds per phase (null = no limit)
-  phases:       [pretrain]   # pretrain | finetune | both
+  phases:       [finetune]   # pretrain | finetune | both
   pretrain_encoder_ckpt: null # set to skip the pretrain study and use this ckpt
 
   sampler:  TPE               # TPE | CmaES | Random
@@ -234,5 +234,4 @@ hpo:
       - {param: head.ff_mult,                      type: categorical, choices: [2, 4]}
       - {param: optimizer.lr,                      type: float,       low: 1e-5, high: 1e-2, log: true}
       - {param: optimizer.weight_decay,            type: float,       low: 1e-7, high: 1e-3, log: true}
-      - {param: dataloader.batch_size,             type: categorical, choices: [512, 1024, 2048, 4096]}
-#      - {param: callbacks.early_stopping.patience, type: int,         low: 5,   high: 30}
+#      - {param: dataloader.batch_size,             type: categorical, choices: [512, 1024, 2048, 4096]}
