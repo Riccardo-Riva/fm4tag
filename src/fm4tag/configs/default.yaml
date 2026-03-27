@@ -101,6 +101,8 @@ encoder:
   proj_out:    null   # null → auto (1/2 × dim × n_tokens); set int to override
 
 # ── Classifier head (finetune only) ──────────────────────────────────────────
+# The projection output dimension (cls_dim) is inferred from encoder.proj_out
+# so that the head projections have exactly the same architecture as pt_mlp1.
 head:
   mlp_dropout:  0.1
   ff_dropout:   0.0
@@ -109,7 +111,6 @@ head:
   heads:        8
   dim_head:     16
   depth:        3
-  cls_dim: null   # null → equals encoder dim; set int to override
 
 # ── Fine-tuning settings ──────────────────────────────────────────────────────
 freeze_encoder: false   # true → encoder frozen initially; BackboneFinetuning
@@ -117,6 +118,17 @@ freeze_encoder: false   # true → encoder frozen initially; BackboneFinetuning
 encoder_ckpt:   null    # path to a PretrainModule checkpoint to load the encoder
 ckpt_path:      null    # Lightning checkpoint to resume fit / run test / predict
 class_weights:  null    # [w0, w1, w2, w3] — leave null for uniform weights
+
+# ── Online representation-quality monitoring ──────────────────────────────────
+# Logs uniformity and effective rank at the end of each epoch into TensorBoard
+# and the CSV log.  Disabled by default so existing runs are unaffected.
+eval:
+  enabled: true          # master switch for online metric computation
+  splits: [val]          # val | train | both
+  n_samples: 8192        # max embeddings per object per epoch (subsampled)
+  objects: null          # null = all objects; or list of object names to restrict
+  log_uniformity: true
+  log_effective_rank: true
 
 # ── Pretraining settings ──────────────────────────────────────────────────────
 pretrain:

@@ -17,6 +17,8 @@ in the config.
 
 from __future__ import annotations
 
+from collections import defaultdict
+
 import lightning as L
 import torch
 import torch.nn.functional as F
@@ -25,6 +27,7 @@ from omegaconf import DictConfig
 from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
 from torchmetrics.classification import MulticlassAUROC
 
+from .components.eval_metrics import effective_rank, uniformity
 from .components.heads import MultiStreamClassifierHead
 from ..data.augmentations import embed_data
 
@@ -70,6 +73,77 @@ class FinetuneModule(L.LightningModule):
         self.val_auroc = MulticlassAUROC(num_classes=n_classes, average='macro')
         self.test_auroc = MulticlassAUROC(num_classes=n_classes, average='macro')
 
+        # Per-epoch embedding buffers for online uniformity / effective-rank.
+        # Keys: object name → list of (N, D) CPU tensors.
+        self._val_emb_acc: dict[str, list[torch.Tensor]] = defaultdict(list)
+
+    # ------------------------------------------------------------------
+    # Encoding pipeline
+    # ------------------------------------------------------------------
+
+    def _encode_all(
+        self,
+        batch: dict,
+    ) -> tuple[
+        torch.Tensor,
+        list[torch.Tensor],
+        list[torch.Tensor],
+        list[torch.Tensor],
+    ]:
+        """Run all encoders and apply pt_mlp1 projections.
+
+        Returns:
+            z_global:      ``(B, g_dim)`` — global projected embedding.
+            z_consts:      List of ``(B, C, c_dim_i)`` — constituent projected
+                           embeddings scattered back over the padded grid.
+            valids_list:   List of ``(B, C)`` bool masks.
+            z_valid_flat:  List of ``(N_valid_i, c_dim_i)`` — flat valid
+                           constituent embeddings (before scattering), used for
+                           uniformity / effective-rank monitoring.
+        """
+        # ── Global ───────────────────────────────────────────────────────────
+        global_name = self.cfg.global_object
+        enc_global = self.backbone[global_name]
+        X_global = enc_global(batch['global'])                  # (B, F_g, dim)
+        z_global = enc_global.pt_mlp1(X_global.flatten(1))     # (B, g_dim)
+
+        # ── Constituents ─────────────────────────────────────────────────────
+        z_consts: list[torch.Tensor] = []
+        valids_list: list[torch.Tensor] = []
+        z_valid_flat: list[torch.Tensor] = []
+
+        for obj_name in self.cfg.constituent_objects:
+            encoder = self.backbone[obj_name]
+            const = batch['constituents'][obj_name]
+
+            x_categ = const['categorical']   # (B, C, F_cat)
+            x_cont = const['continuous']     # (B, C, F_con)
+            valids = const['valid']          # (B, C)
+
+            B, C, _ = x_categ.shape
+            valids_flat = rearrange(valids, 'b c -> (b c)')
+            x_categ_flat = rearrange(x_categ, 'b c f -> (b c) f')
+            x_cont_flat = rearrange(x_cont, 'b c f -> (b c) f')
+
+            # Encode only valid constituents for efficiency.
+            x_cat_enc, x_con_enc = embed_data(
+                x_categ_flat[valids_flat], x_cont_flat[valids_flat], encoder
+            )
+            X_valid = encoder(x_cat_enc, x_con_enc)             # (N_valid, F, dim)
+            z_valid = encoder.pt_mlp1(X_valid.flatten(1, 2))   # (N_valid, c_dim)
+
+            # Scatter projected embeddings back into (B, C, c_dim).
+            c_dim = z_valid.shape[1]
+            z_all = z_valid.new_zeros(B * C, c_dim)
+            z_all[valids_flat] = z_valid
+            z_all = z_all.reshape(B, C, c_dim)
+
+            z_consts.append(z_all)
+            valids_list.append(valids)
+            z_valid_flat.append(z_valid)
+
+        return z_global, z_consts, valids_list, z_valid_flat
+
     # ------------------------------------------------------------------
     # Forward pass
     # ------------------------------------------------------------------
@@ -83,45 +157,74 @@ class FinetuneModule(L.LightningModule):
         Returns:
             ``(B, y_dim)`` class logits.
         """
-        # ── Global stream ─────────────────────────────────────────────────────
+        z_global, z_consts, valids_list, _ = self._encode_all(batch)
+        return self.head(z_global, z_consts, valids_list)
+
+    # ------------------------------------------------------------------
+    # Online embedding metric helpers
+    # ------------------------------------------------------------------
+
+    def _accumulate_embeddings(
+        self,
+        z_global: torch.Tensor,
+        z_valid_flat: list[torch.Tensor],
+    ) -> None:
+        """Append pre-computed pt_mlp1 projections to the embedding store.
+
+        Uses the embeddings already computed during the forward pass —
+        no extra encoder run needed.
+        """
+        eval_cfg = self.cfg.get('eval', {})
+        n_max: int = eval_cfg.get('n_samples', 8192)
+        objects_filter = eval_cfg.get('objects', None)
+
         global_name = self.cfg.global_object
-        x_global = batch['global']  # (B, F_g)
-        global_enc = self.backbone[global_name](x_global)  # (B, F_g, dim)
+        if objects_filter is None or global_name in objects_filter:
+            already = sum(t.size(0) for t in self._val_emb_acc[global_name])
+            remaining = n_max - already
+            if remaining > 0:
+                self._val_emb_acc[global_name].append(
+                    z_global[:remaining].detach().cpu()
+                )
 
-        # ── Constituent streams ───────────────────────────────────────────────
-        constituent_encs: list[torch.Tensor] = []
-        constituent_valids: list[torch.Tensor] = []
+        for obj_name, z_valid in zip(self.cfg.constituent_objects, z_valid_flat):
+            if objects_filter is not None and obj_name not in objects_filter:
+                continue
+            already = sum(t.size(0) for t in self._val_emb_acc[obj_name])
+            remaining = n_max - already
+            if remaining > 0:
+                self._val_emb_acc[obj_name].append(
+                    z_valid[:remaining].detach().cpu()
+                )
 
-        for obj_name in self.cfg.constituent_objects:
-            encoder = self.backbone[obj_name]
-            const = batch['constituents'][obj_name]
+    def _compute_and_log_embedding_metrics(self) -> None:
+        """Concatenate accumulated embeddings, gather (DDP), compute and log metrics."""
+        eval_cfg = self.cfg.get('eval', {})
+        for obj_name, chunks in self._val_emb_acc.items():
+            if not chunks:
+                continue
+            z = torch.cat(chunks, dim=0)    # (N_local, D) on CPU
 
-            x_categ = const['categorical']  # (B, C, F_cat)
-            x_cont = const['continuous']  # (B, C, F_con)
-            valids = const['valid']  # (B, C)
+            if self.trainer.world_size > 1:
+                z = self.all_gather(z.to(self.device)).flatten(0, 1).cpu()
 
-            B, C, _ = x_categ.shape
-            valids_flat = rearrange(valids, 'b c -> (b c)')  # (B*C,)
-            x_categ_flat = rearrange(x_categ, 'b c f -> (b c) f')  # (B*C, F_cat)
-            x_cont_flat = rearrange(x_cont, 'b c f -> (b c) f')  # (B*C, F_con)
-
-            # Embed and encode only valid constituents for efficiency.
-            x_cat_enc, x_con_enc = embed_data(
-                x_categ_flat[valids_flat], x_cont_flat[valids_flat], encoder
-            )
-            x_valid_encoded = encoder(x_cat_enc, x_con_enc)  # (N_valid, F, dim)
-
-            # Scatter back into a full (B, C, F, dim) tensor.
-            F_feat = x_valid_encoded.shape[1]
-            dim = x_valid_encoded.shape[2]
-            x_encoded = x_valid_encoded.new_zeros(B * C, F_feat, dim)
-            x_encoded[valids_flat] = x_valid_encoded
-            x_encoded = x_encoded.reshape(B, C, F_feat, dim)  # (B, C, F, dim)
-
-            constituent_encs.append(x_encoded)
-            constituent_valids.append(valids)
-
-        return self.head(global_enc, constituent_encs, constituent_valids)
+            if eval_cfg.get('log_uniformity', True):
+                self.log(
+                    f'val_{obj_name}/uniformity',
+                    uniformity(z),
+                    on_step=False,
+                    on_epoch=True,
+                    sync_dist=False,
+                )
+            if eval_cfg.get('log_effective_rank', True):
+                self.log(
+                    f'val_{obj_name}/effective_rank',
+                    torch.tensor(effective_rank(z)),
+                    on_step=False,
+                    on_epoch=True,
+                    sync_dist=False,
+                )
+        self._val_emb_acc.clear()
 
     # ------------------------------------------------------------------
     # Shared step
@@ -161,15 +264,25 @@ class FinetuneModule(L.LightningModule):
         return loss
 
     def validation_step(self, batch: dict, batch_idx: int) -> None:
-        loss, preds, probs, labels = self._shared_step(batch)
+        eval_cfg = self.cfg.get('eval', {})
+        do_eval = eval_cfg.get('enabled', False) and 'val' in eval_cfg.get('splits', ['val'])
+
+        if do_eval:
+            # Run encode_all to get both logits and pt_mlp1 projections.
+            z_global, z_consts, valids_list, z_valid_flat = self._encode_all(batch)
+            logits = self.head(z_global, z_consts, valids_list)
+            self._accumulate_embeddings(z_global, z_valid_flat)
+        else:
+            logits = self(batch)
+
+        labels = batch['label']
+        loss = F.cross_entropy(logits, labels, weight=self.class_weights)
+        preds = logits.argmax(dim=-1)
+        probs = logits.softmax(dim=-1)
         acc = (preds == labels).float().mean()
+
         self.log(
-            'val_loss',
-            loss,
-            on_step=False,
-            on_epoch=True,
-            prog_bar=True,
-            sync_dist=True,
+            'val_loss', loss, on_step=False, on_epoch=True, prog_bar=True, sync_dist=True
         )
         self.log('val_acc', acc, on_step=False, on_epoch=True, sync_dist=True)
         self.val_auroc.update(probs, labels)
@@ -177,6 +290,9 @@ class FinetuneModule(L.LightningModule):
     def on_validation_epoch_end(self) -> None:
         self.log('val_auroc', self.val_auroc.compute(), prog_bar=True)
         self.val_auroc.reset()
+        eval_cfg = self.cfg.get('eval', {})
+        if eval_cfg.get('enabled', False) and 'val' in eval_cfg.get('splits', ['val']):
+            self._compute_and_log_embedding_metrics()
 
     def test_step(self, batch: dict, batch_idx: int) -> None:
         loss, preds, probs, labels = self._shared_step(batch)
@@ -200,35 +316,27 @@ class FinetuneModule(L.LightningModule):
     def on_load_checkpoint(self, checkpoint: dict) -> None:
         """Remap state-dict keys from older checkpoint formats.
 
-        Handles two backwards-compatibility issues:
-
-        * **Head layer renames** — ``global_agg`` → ``global_proj``,
-          ``const_phi`` → ``const_proj`` (renamed during a refactor).
-        * **Projection-head size mismatch** — ``backbone.*.pt_mlp*`` hidden
-          dimensions changed formula (``6n/5`` → ``3n/4``).  These layers are
-          only used by the contrastive loss during *pretraining* and are never
-          called during fine-tuning or inference, so we keep the current
-          model's freshly-initialised weights rather than failing.
+        Drops stale head projection keys (``head.global_proj.*``,
+        ``head.const_proj.*``, ``head.global_agg.*``, ``head.const_phi.*``)
+        from checkpoints saved before the projection was moved into the
+        encoder's ``pt_mlp1`` pipeline.  Also handles size mismatches in
+        ``backbone.*.pt_mlp*`` layers.
         """
         sd = checkpoint['state_dict']
         model_sd = self.state_dict()
 
-        # 1. Remap renamed head layers.
-        _renames = [
-            ('head.global_agg.', 'head.global_proj.'),
-            ('head.const_phi.', 'head.const_proj.'),
-        ]
-        new_sd: dict = {}
-        for k, v in sd.items():
-            new_k = k
-            for old, new in _renames:
-                if k.startswith(old):
-                    new_k = new + k[len(old) :]
-                    break
-            new_sd[new_k] = v
+        # Drop stale head projection keys — the head no longer has its own
+        # projections; the encoder's pt_mlp1 is used directly in forward.
+        _stale_prefixes = (
+            'head.global_proj.',
+            'head.const_proj.',
+            'head.global_agg.',
+            'head.const_phi.',
+        )
+        new_sd = {k: v for k, v in sd.items() if not k.startswith(_stale_prefixes)}
 
-        # 2. For any key whose shape no longer matches (e.g. pt_mlp), fall back
-        #    to the current model's initialisation so strict loading still passes.
+        # For any key whose shape no longer matches (e.g. pt_mlp hidden-dim
+        # formula changed), fall back to the current model's initialisation.
         for k in list(new_sd):
             if k in model_sd and new_sd[k].shape != model_sd[k].shape:
                 new_sd[k] = model_sd[k]
@@ -246,9 +354,8 @@ class FinetuneModule(L.LightningModule):
         if freeze:
             # Backbone starts frozen; the BackboneFinetuning callback will
             # add backbone parameters to the optimiser when unfreezing.
-            params = list(self.head.parameters())
             optimizer = torch.optim.AdamW(
-                params,
+                list(self.head.parameters()),
                 lr=opt_cfg.lr,
                 weight_decay=opt_cfg.get('weight_decay', 1e-5),
             )

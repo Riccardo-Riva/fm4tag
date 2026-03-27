@@ -1,57 +1,54 @@
 import torch
 from torch import nn
 
-from .mlp import MLP_dropout, simple_MLP
+from .mlp import MLP_dropout
 from .transformers import Classifier_Transformer
 
 
 class MultiStreamClassifierHead(nn.Module):
     """Multi-stream classification head for jet flavour tagging.
 
-    Accepts encoder outputs for every object (global + all constituent types)
-    and produces class logits via the following pipeline:
+    Receives **pre-projected** embeddings from the caller (already passed
+    through ``encoder.pt_mlp1``) and produces class logits:
 
-    1. **Global stream**:
-       ``(B, F_g, dim)`` → flatten → ``(B, F_g·dim)`` → 2-layer FF → ``(B, cls_dim)``
+    1. **Global stream**: ``(B, g_dim)`` — passed straight through.
 
     2. **Constituent stream** (per type):
 
-       a. ``(B, C, F, dim)`` → flatten tokens → ``(B, C, F·dim)``
-       b. 2-layer FF (per-constituent) → ``(B, C, cls_dim)``
-       c. Cross-constituent transformer → ``(B, C, cls_dim)``
-       d. Masked mean pool over valid constituents → ``(B, cls_dim)``
+       a. ``(B, C, c_dim_i)`` — pre-projected constituent embeddings
+       b. Cross-constituent transformer → ``(B, C, c_dim_i)``
+       c. Masked mean pool over valid constituents → ``(B, c_dim_i)``
 
-    3. **Concatenate** all streams → ``(B, (1 + n_constituent_types) × cls_dim)``
+    3. **Concatenate** all streams → ``(B, g_dim + sum(c_dim_i))``
     4. **Classification MLP** (2-layer FF) → ``(B, y_dim)``
 
+    The expected calling convention (in :class:`~fm4tag.models.FinetuneModule`)
+    is::
+
+        X        = encoder(x)                   # (B, F, dim)
+        z        = encoder.pt_mlp1(X.flatten(1))# (B, proj_out)  ← projection here
+        logits   = head(z_global, [z_const], valid_masks)
+
     Args:
-        dim:                   Embedding dimension from the encoders.
-        n_global_features:     Number of global feature tokens ``F_g``
-                               (i.e. ``global_enc.shape[1]``).
-        n_constituent_features: List with the number of feature tokens ``F``
-                               for each constituent type
-                               (i.e. ``[F_cat + F_con, ...]``).
-        y_dim:                 Number of output classes.
-        cls_dim:               Dimension of the projected representation fed into
-                               the cross-constituent transformer and the final MLP.
-                               ``None`` → equals ``dim``.
-        mlp_dropout:           Dropout applied inside MLP layers.
-        ff_dropout:            Dropout inside transformer feed-forward sub-layers.
-        attn_dropout:          Dropout inside transformer attention.
-        ff_mult:               Feed-forward expansion factor in the transformer.
-        heads:                 Number of attention heads per constituent transformer.
-        dim_head:              Dimension per head.
-        depth:                 Transformer depth per constituent stream.
+        global_proj_out:  Output dimension of ``global_encoder.pt_mlp1``.
+        const_proj_outs:  Output dimension of each constituent encoder's
+                          ``pt_mlp1``, one per constituent type.
+        y_dim:            Number of output classes.
+        mlp_dropout:      Dropout inside the final classification MLP.
+        ff_dropout:       Dropout inside transformer feed-forward sub-layers.
+        attn_dropout:     Dropout inside transformer attention.
+        ff_mult:          Feed-forward expansion factor in the transformer.
+        heads:            Number of attention heads per constituent transformer.
+        dim_head:         Dimension per head.
+        depth:            Transformer depth per constituent stream.
     """
 
     def __init__(
         self,
         *,
-        dim: int,
-        n_global_features: int,
-        n_constituent_features: list[int],
+        global_proj_out: int,
+        const_proj_outs: list[int],
         y_dim: int = 2,
-        cls_dim: int | None = None,
         mlp_dropout: float = 0.0,
         ff_dropout: float = 0.0,
         attn_dropout: float = 0.0,
@@ -62,31 +59,11 @@ class MultiStreamClassifierHead(nn.Module):
     ) -> None:
         super().__init__()
 
-        _cls_dim = cls_dim if cls_dim is not None else dim
-
-        # Global stream: flatten F_g*dim → 2-layer FF → (B, cls_dim)
-        global_flat = n_global_features * dim
-        self.global_proj = simple_MLP([global_flat, global_flat // 2, _cls_dim])
-
-        # Per constituent type: flatten F*dim → 2-layer FF → cls_dim, then transformer
-        self.const_proj = nn.ModuleList(
-            [
-                MLP_dropout(
-                    [
-                        n_feat * dim,
-                        n_feat * dim // 2,
-                        _cls_dim,
-                    ],  # TODO: tune hidden dim?
-                    act=nn.ReLU(),
-                    dropout=mlp_dropout,
-                )
-                for n_feat in n_constituent_features
-            ]
-        )
+        # Cross-constituent transformer per stream, sized to that stream's dim.
         self.const_transformer = nn.ModuleList(
             [
                 Classifier_Transformer(
-                    _cls_dim,
+                    out_dim,
                     depth=depth,
                     heads=heads,
                     dim_head=dim_head,
@@ -94,60 +71,49 @@ class MultiStreamClassifierHead(nn.Module):
                     ff_dropout=ff_dropout,
                     attn_dropout=attn_dropout,
                 )
-                for _ in n_constituent_features
+                for out_dim in const_proj_outs
             ]
         )
 
-        # Final classification: concat of all streams → 2-layer FF → y_dim
-        in_dim = (1 + len(n_constituent_features)) * _cls_dim
+        # Final classification: concat of all streams → 2-layer FF → y_dim.
+        in_dim = global_proj_out + sum(const_proj_outs)
+        _hidden = max(global_proj_out, max(const_proj_outs, default=global_proj_out))
         self.cls_mlp = MLP_dropout(
-            [in_dim, _cls_dim, y_dim], act=nn.ReLU(), dropout=mlp_dropout
+            [in_dim, _hidden, y_dim], act=nn.ReLU(), dropout=mlp_dropout
         )
 
     def forward(
         self,
-        global_enc: torch.Tensor,
-        constituent_encs: list[torch.Tensor],
+        global_z: torch.Tensor,
+        constituent_zs: list[torch.Tensor],
         constituent_valids: list[torch.Tensor],
     ) -> torch.Tensor:
-        """Classify a batch of jets using all object streams.
+        """Classify a batch of jets using pre-projected stream embeddings.
 
         Args:
-            global_enc:          ``(B, F_g, dim)`` output of :class:`GlobalEncoder`.
-            constituent_encs:    List of ``(B, C, F, dim)`` tensors — one per
-                                 constituent type, zeros at padding positions.
-            constituent_valids:  List of ``(B, C)`` bool masks — ``True`` for
-                                 valid constituents, one per constituent type.
+            global_z:           ``(B, g_dim)`` — output of
+                                ``global_encoder.pt_mlp1``.
+            constituent_zs:     List of ``(B, C, c_dim_i)`` tensors — output of
+                                ``encoder.pt_mlp1`` scattered back over the
+                                padded constituent grid, zeros at invalid slots.
+            constituent_valids: List of ``(B, C)`` bool masks.
 
         Returns:
             ``(B, y_dim)`` class logits (unnormalised).
         """
-        # ── Global stream ────────────────────────────────────────────────────
-        # Flatten F_g feature tokens: (B, F_g, dim) → (B, F_g*dim) → (B, cls_dim)
-        g = self.global_proj(global_enc.flatten(1))  # (B, cls_dim)
+        reprs = [global_z]
 
-        reprs = [g]
-
-        # ── Constituent streams ───────────────────────────────────────────────
-        for i, (enc, valids) in enumerate(zip(constituent_encs, constituent_valids)):
-            # Flatten F feature tokens per constituent: (B, C, F, dim) → (B, C, F*dim)
-            x = enc.flatten(2)  # (B, C, F*dim)
-
-            # Per-constituent FF projection → (B, C, cls_dim)
-            x = self.const_proj[i](x)
-
-            # Zero out padding constituents before cross-constituent attention.
-            x = torch.where(valids.unsqueeze(-1), x, 0.0)  # (B, C, cls_dim)
+        for i, (z, valids) in enumerate(zip(constituent_zs, constituent_valids)):
+            # Zero out padding slots before attention.
+            z = torch.where(valids.unsqueeze(-1), z, 0.0)
 
             # Cross-constituent transformer.
-            x = self.const_transformer[i](x, valids)  # (B, C, cls_dim)
+            z = self.const_transformer[i](z, valids)
 
-            # Masked mean pool over valid constituents.
-            n_valids = valids.sum(dim=1, keepdim=True).float().clamp(min=1.0)  # (B, 1)
-            x = x.sum(dim=1) / n_valids  # (B, cls_dim)
+            # Masked mean pool over valid constituents → (B, c_dim_i)
+            n_valids = valids.sum(dim=1, keepdim=True).float().clamp(min=1.0)
+            z = z.sum(dim=1) / n_valids
 
-            reprs.append(x)
+            reprs.append(z)
 
-        # ── Concatenate streams and classify ─────────────────────────────────
-        x = torch.cat(reprs, dim=-1)  # (B, (1 + n_const) * cls_dim)
-        return self.cls_mlp(x)  # (B, y_dim)
+        return self.cls_mlp(torch.cat(reprs, dim=-1))

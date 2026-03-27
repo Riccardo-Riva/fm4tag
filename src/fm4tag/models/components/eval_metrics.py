@@ -8,10 +8,30 @@ Currently implemented
 uniformity
     Measures how uniformly embeddings are spread on the unit hypersphere
     (Wang & Isola, NeurIPS 2020).  More negative = more uniform = better.
+effective_rank
+    exp(H) where H is the entropy of the normalised singular value spectrum
+    (Roy & Vetterli 2007).  Higher = less collapsed.
 """
 
 import torch
 import torch.nn.functional as F
+
+
+@torch.no_grad()
+def effective_rank(z: torch.Tensor) -> float:
+    """Effective rank of the embedding matrix (Roy & Vetterli 2007).
+
+    Args:
+        z: ``(N, D)`` embedding matrix.
+
+    Returns:
+        Effective rank scalar (in [1, D]).
+    """
+    z_f = z.float()
+    s = torch.linalg.svdvals(z_f - z_f.mean(0, keepdim=True))
+    s = s[s > 0]
+    p = s / s.sum()
+    return float(torch.exp(-(p * p.log()).sum()).item())
 
 
 @torch.no_grad()
@@ -37,5 +57,5 @@ def uniformity(z: torch.Tensor, t: float = 2.0, max_samples: int = 4096) -> torc
     if z.size(0) > max_samples:
         idx = torch.randperm(z.size(0), device=z.device)[:max_samples]
         z = z[idx]
-    sq_dists = torch.pdist(z, p=2).pow(2)
+    sq_dists = torch.pdist(z.float(), p=2).pow(2)
     return sq_dists.mul(-t).exp().mean().log()

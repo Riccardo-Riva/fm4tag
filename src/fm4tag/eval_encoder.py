@@ -46,7 +46,6 @@ from collections import defaultdict
 
 import hydra
 import torch
-import torch.nn.functional as F
 from einops import rearrange
 from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import DataLoader
@@ -54,29 +53,12 @@ from torch.utils.data import DataLoader
 from fm4tag.data.augmentations import embed_data
 from fm4tag.data.datasets import DatasetCatCon, cat_con_collate_fn
 from fm4tag.engine import _build_encoders, _load_pretrained_encoders
-from fm4tag.models.components.eval_metrics import uniformity
+from fm4tag.models.components.eval_metrics import effective_rank, uniformity
 
 
 # ---------------------------------------------------------------------------
 # Metric helpers
 # ---------------------------------------------------------------------------
-
-
-def _effective_rank(z: torch.Tensor) -> float:
-    """Effective rank of the embedding matrix (Roy & Vetterli 2007).
-
-    Args:
-        z: ``(N, D)`` embedding matrix.
-
-    Returns:
-        Effective rank scalar (in [1, D]).
-    """
-    with torch.no_grad():
-        z_f = z.float()
-        s = torch.linalg.svdvals(z_f - z_f.mean(0, keepdim=True))
-        s = s[s > 0]
-        p = s / s.sum()
-        return float(torch.exp(-(p * p.log()).sum()).item())
 
 
 def _collect_embeddings(
@@ -273,7 +255,7 @@ def evaluate(
         z = torch.cat(track_store[global_name], dim=0)
         results[global_name] = {
             'uniformity': float(uniformity(z).item()),
-            'effective_rank': _effective_rank(z),
+            'effective_rank': effective_rank(z),
             'n_samples': z.size(0),
         }
 
@@ -284,13 +266,13 @@ def evaluate(
         if track_store[obj_name]:
             z_t = torch.cat(track_store[obj_name], dim=0)
             entry['track_uniformity'] = float(uniformity(z_t).item())
-            entry['track_effective_rank'] = _effective_rank(z_t)
+            entry['track_effective_rank'] = effective_rank(z_t)
             entry['n_tracks'] = z_t.size(0)
 
         if jet_store[obj_name]:
             z_j = torch.cat(jet_store[obj_name], dim=0)
             entry['jet_uniformity'] = float(uniformity(z_j).item())
-            entry['jet_effective_rank'] = _effective_rank(z_j)
+            entry['jet_effective_rank'] = effective_rank(z_j)
             entry['n_jets'] = z_j.size(0)
 
         if entry:

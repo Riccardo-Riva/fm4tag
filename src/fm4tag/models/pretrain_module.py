@@ -32,6 +32,7 @@ from omegaconf import DictConfig
 from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
 
 from .components.encoder import Encoder, GlobalEncoder
+from .components.eval_metrics import effective_rank, uniformity
 from .components.losses import DenoisingLoss, InfoNCELoss
 from ..data.augmentations import add_noise, embed_data, mixup_data
 
@@ -64,6 +65,11 @@ class PretrainModule(L.LightningModule):
         # Each entry is a list of scalar tensors accumulated during the epoch.
         self._train_acc: dict[str, list[torch.Tensor]] = defaultdict(list)
         self._val_acc: dict[str, list[torch.Tensor]] = defaultdict(list)
+
+        # Per-epoch embedding buffers for online uniformity / effective-rank.
+        # Keys: object name → list of (N, D) CPU tensors.
+        self._train_emb_acc: dict[str, list[torch.Tensor]] = defaultdict(list)
+        self._val_emb_acc: dict[str, list[torch.Tensor]] = defaultdict(list)
 
     # ------------------------------------------------------------------
     # Per-object loss helpers
@@ -200,6 +206,100 @@ class PretrainModule(L.LightningModule):
         return total_loss, log_dict
 
     # ------------------------------------------------------------------
+    # Online embedding metric helpers
+    # ------------------------------------------------------------------
+
+    @torch.no_grad()
+    def _accumulate_embeddings(
+        self,
+        batch: dict,
+        store: dict[str, list[torch.Tensor]],
+    ) -> None:
+        """Encode each object with pt_mlp1 and append to the embedding store.
+
+        Stops appending once ``cfg.eval.n_samples`` rows have been collected
+        for a given object.  The encoder is run in ``no_grad`` mode.
+        """
+        eval_cfg = self.cfg.get('eval', {})
+        n_max: int = eval_cfg.get('n_samples', 8192)
+        objects_filter = eval_cfg.get('objects', None)
+
+        for obj_name, encoder in self.encoders.items():
+            if objects_filter is not None and obj_name not in objects_filter:
+                continue
+            already = sum(t.size(0) for t in store[obj_name])
+            if already >= n_max:
+                continue
+
+            if obj_name == self.global_object:
+                X = encoder(batch['global'])        # (B, F_g, dim)
+                z = encoder.pt_mlp1(X.flatten(1))   # (B, proj_dim)
+            else:
+                const = batch['constituents'][obj_name]
+                valids_flat = rearrange(const['valid'], 'b c -> (b c)')
+                x_categ_flat = rearrange(const['categorical'], 'b c f -> (b c) f')[valids_flat]
+                x_cont_flat = rearrange(const['continuous'], 'b c f -> (b c) f')[valids_flat]
+                x_cat_enc, x_con_enc = embed_data(x_categ_flat, x_cont_flat, encoder)
+                X = encoder(x_cat_enc, x_con_enc)       # (N_valid, F, dim)
+                z = encoder.pt_mlp1(X.flatten(1, 2))    # (N_valid, proj_dim)
+
+            remaining = n_max - already
+            store[obj_name].append(z[:remaining].detach().cpu())
+
+    def _compute_and_log_embedding_metrics(
+        self,
+        store: dict[str, list[torch.Tensor]],
+        split: str,
+    ) -> None:
+        """Concatenate accumulated embeddings, gather (DDP), compute and log metrics."""
+        eval_cfg = self.cfg.get('eval', {})
+        # Iterate over ALL encoder objects so every DDP rank participates in the
+        # same collectives in the same order.  Skipping objects based on a local
+        # condition (e.g. empty chunks) would cause other ranks to block forever
+        # on the collective, producing an NCCL watchdog hang.
+        for obj_name in list(self.encoders.keys()):
+            chunks = store.get(obj_name, [])
+            z_local = torch.cat(chunks, dim=0) if chunks else None  # (N_local, D) CPU
+
+            if self.trainer.world_size > 1:
+                # All ranks report their local size.  This collective also acts as
+                # a barrier so that no rank skips the subsequent all_gather.
+                n_local = torch.tensor(
+                    [z_local.size(0) if z_local is not None else 0],
+                    device=self.device,
+                )
+                all_n = self.all_gather(n_local).view(-1)  # (world_size,)
+                n_min = int(all_n.min().item())
+                if n_min == 0:
+                    continue  # at least one rank has no data — all ranks skip
+                # Trim to the minimum size so all_gather receives same-shaped tensors.
+                z = self.all_gather(z_local[:n_min].to(self.device)).flatten(0, 1).cpu()
+            else:
+                if z_local is None:
+                    continue
+                z = z_local
+
+            if eval_cfg.get('log_uniformity', True):
+                u = uniformity(z)
+                self.log(
+                    f'{split}_{obj_name}/uniformity',
+                    u,
+                    on_step=False,
+                    on_epoch=True,
+                    sync_dist=False,
+                )
+            if eval_cfg.get('log_effective_rank', True):
+                er = torch.tensor(effective_rank(z))
+                self.log(
+                    f'{split}_{obj_name}/effective_rank',
+                    er,
+                    on_step=False,
+                    on_epoch=True,
+                    sync_dist=False,
+                )
+        store.clear()
+
+    # ------------------------------------------------------------------
     # Logging helpers
     # ------------------------------------------------------------------
 
@@ -293,12 +393,18 @@ class PretrainModule(L.LightningModule):
         loss, log_dict = self._compute_loss(batch)
         self._log_metrics(log_dict, 'train')
         self._accumulate(self._train_acc, log_dict)
+        eval_cfg = self.cfg.get('eval', {})
+        if eval_cfg.get('enabled', False) and 'train' in eval_cfg.get('splits', ['val']):
+            self._accumulate_embeddings(batch, self._train_emb_acc)
         return loss
 
     def validation_step(self, batch: dict, batch_idx: int) -> torch.Tensor:
         loss, log_dict = self._compute_loss(batch)
         self._log_metrics(log_dict, 'val')
         self._accumulate(self._val_acc, log_dict)
+        eval_cfg = self.cfg.get('eval', {})
+        if eval_cfg.get('enabled', False) and 'val' in eval_cfg.get('splits', ['val']):
+            self._accumulate_embeddings(batch, self._val_emb_acc)
         return loss
 
     def test_step(self, batch: dict, batch_idx: int) -> torch.Tensor:
@@ -310,15 +416,22 @@ class PretrainModule(L.LightningModule):
         avgs = {k: torch.stack(v).mean().item() for k, v in self._train_acc.items()}
         self.print(self._format_epoch_table('Train', avgs))
         self._train_acc.clear()
+        eval_cfg = self.cfg.get('eval', {})
+        if eval_cfg.get('enabled', False) and 'train' in eval_cfg.get('splits', ['val']):
+            self._compute_and_log_embedding_metrics(self._train_emb_acc, 'train')
 
     def on_validation_epoch_end(self) -> None:
         # Skip the sanity-check validation that runs before training starts.
         if self.trainer.sanity_checking:
             self._val_acc.clear()
+            self._val_emb_acc.clear()
             return
         avgs = {k: torch.stack(v).mean().item() for k, v in self._val_acc.items()}
         self.print(self._format_epoch_table('Val', avgs))
         self._val_acc.clear()
+        eval_cfg = self.cfg.get('eval', {})
+        if eval_cfg.get('enabled', False) and 'val' in eval_cfg.get('splits', ['val']):
+            self._compute_and_log_embedding_metrics(self._val_emb_acc, 'val')
 
     def configure_optimizers(self):  # type: ignore[override]
         opt_cfg = self.cfg.optimizer

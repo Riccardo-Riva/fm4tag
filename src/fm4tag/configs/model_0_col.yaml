@@ -122,6 +122,17 @@ encoder_ckpt:   null    # path to a PretrainModule checkpoint to load the encode
 ckpt_path:      null    # Lightning checkpoint to resume fit / run test / predict
 class_weights:  null    # [w0, w1, w2, w3] — leave null for uniform weights
 
+# ── Online representation-quality monitoring ──────────────────────────────────
+# Logs uniformity and effective rank at the end of each epoch into TensorBoard
+# and the CSV log.  Disabled by default so existing runs are unaffected.
+eval:
+  enabled: true          # master switch for online metric computation
+  splits: [val]          # val | train | both
+  n_samples: 8192        # max embeddings per object per epoch (subsampled)
+  objects: null          # null = all objects; or list of object names to restrict
+  log_uniformity: true
+  log_effective_rank: true
+
 # ── Pretraining settings ──────────────────────────────────────────────────────
 pretrain:
   tasks:           [contrastive, denoising]

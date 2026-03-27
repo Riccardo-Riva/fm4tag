@@ -463,21 +463,28 @@ def run(
             _load_pretrained_encoders(encoders, _enc_ckpt)
 
         head_cfg = cfg.head
+        enc_cfg = cfg.encoder
         n_classes = len(cfg.variables[cfg.global_object].unique_labels)
 
-        n_global_features = len(cfg.variables[cfg.global_object].inputs)
-        n_constituent_features = [
-            len(cfg.variables[obj].inputs.continuous)
-            + len(cfg.variables[obj].inputs.categorical)
-            for obj in cfg.constituent_objects
-        ]
+        # Infer pt_mlp1 output dimensions from the encoder architecture.
+        # These match the formulas in GlobalEncoder and Encoder exactly.
+        n_global = len(cfg.variables[cfg.global_object].inputs)
+        global_proj_out = n_global * enc_cfg.dim   # GlobalEncoder: out = proj_in
+
+        const_proj_outs = []
+        for obj_name in cfg.constituent_objects:
+            n_feat = (
+                len(cfg.variables[obj_name].inputs.continuous)
+                + len(cfg.variables[obj_name].inputs.categorical)
+            )
+            proj_in = n_feat * enc_cfg.dim
+            _proj_out = enc_cfg.get('proj_out') or proj_in // 2
+            const_proj_outs.append(_proj_out)
 
         head = MultiStreamClassifierHead(
-            dim=cfg.encoder.dim,
-            n_global_features=n_global_features,
-            n_constituent_features=n_constituent_features,
+            global_proj_out=global_proj_out,
+            const_proj_outs=const_proj_outs,
             y_dim=n_classes,
-            cls_dim=head_cfg.get('cls_dim', None),
             mlp_dropout=head_cfg.get('mlp_dropout', 0.0),
             ff_dropout=head_cfg.get('ff_dropout', 0.0),
             attn_dropout=head_cfg.get('attn_dropout', 0.0),
@@ -486,6 +493,23 @@ def run(
             dim_head=head_cfg.get('dim_head', 16),
             depth=head_cfg.get('depth', 3),
         )
+
+        # Assert that the inferred projection dimensions match the actual
+        # encoder pt_mlp1 output sizes.
+        enc_global_out = encoders[cfg.global_object].pt_mlp1.layers[-1].out_features
+        assert enc_global_out == global_proj_out, (
+            f'GlobalEncoder.pt_mlp1 output ({enc_global_out}) does not match '
+            f'inferred global_proj_out ({global_proj_out}). '
+            'Check encoder.dim / n_global_features.'
+        )
+        for i, obj_name in enumerate(cfg.constituent_objects):
+            enc_out = encoders[obj_name].pt_mlp1.layers[-1].out_features
+            assert enc_out == const_proj_outs[i], (
+                f'Encoder.pt_mlp1 output for {obj_name!r} ({enc_out}) does not '
+                f'match inferred const_proj_outs[{i}] ({const_proj_outs[i]}). '
+                'Check encoder.proj_out / n_features.'
+            )
+
         module = FinetuneModule(encoders, head, cfg)
 
     else:
