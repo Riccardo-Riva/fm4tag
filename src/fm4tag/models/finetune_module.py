@@ -43,7 +43,7 @@ class FinetuneModule(L.LightningModule):
         head:     :class:`MultiStreamClassifierHead` — the classification head.
         cfg:      Full Hydra config.  Relevant sub-keys:
                   ``cfg.optimizer``, ``cfg.freeze_encoder``,
-                  ``cfg.class_weights``, ``cfg.global_object``,
+                  ``cfg.class_dict``, ``cfg.global_object``,
                   ``cfg.constituent_objects``.
     """
 
@@ -61,7 +61,14 @@ class FinetuneModule(L.LightningModule):
         self.head = head
         self.cfg = cfg
 
-        class_weights = cfg.get('class_weights')
+        class_weights = None
+        if cfg.get('class_dict'):
+            from omegaconf import OmegaConf
+            cd = OmegaConf.to_container(OmegaConf.load(cfg.class_dict), resolve=True)
+            global_obj = cfg.global_object
+            label_var = cfg.variables[global_obj].label
+            class_weights = cd.get(global_obj, {}).get(label_var)
+
         if class_weights is not None:
             self.register_buffer(
                 'class_weights', torch.tensor(class_weights, dtype=torch.float)

@@ -121,7 +121,6 @@ head:
 freeze_encoder: false
 encoder_ckpt:   null
 ckpt_path:      null
-class_weights:  null
 
 # ── Online representation-quality monitoring ──────────────────────────────────
 # Logs uniformity and effective rank at the end of each epoch into TensorBoard

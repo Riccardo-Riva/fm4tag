@@ -120,7 +120,6 @@ freeze_encoder: false   # true → encoder frozen initially; BackboneFinetuning
                         #        callback unfreezes at unfreeze_backbone_at_epoch
 encoder_ckpt:   null    # path to a PretrainModule checkpoint to load the encoder
 ckpt_path:      null    # Lightning checkpoint to resume fit / run test / predict
-class_weights:  null    # [w0, w1, w2, w3] — leave null for uniform weights
 
 # ── Online representation-quality monitoring ──────────────────────────────────
 # Logs uniformity and effective rank at the end of each epoch into TensorBoard
