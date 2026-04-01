@@ -174,7 +174,7 @@ callbacks:
 
   model_checkpoint:
     monitor:    val_loss
-    save_top_k: -1
+    save_top_k: 3
     mode:       min
 
   early_stopping:

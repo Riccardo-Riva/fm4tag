@@ -28,7 +28,10 @@ def effective_rank(z: torch.Tensor) -> float:
         Effective rank scalar (in [1, D]).
     """
     z_f = z.float()
-    s = torch.linalg.svdvals(z_f - z_f.mean(0, keepdim=True))
+    z_f = z_f - z_f.mean(0, keepdim=True)
+    if not torch.isfinite(z_f).all():
+        return float('nan')
+    s = torch.linalg.svdvals(z_f)
     s = s[s > 0]
     p = s / s.sum()
     return float(torch.exp(-(p * p.log()).sum()).item())

@@ -221,7 +221,7 @@ class FinetuneModule(L.LightningModule):
                     uniformity(z),
                     on_step=False,
                     on_epoch=True,
-                    sync_dist=False,
+                    sync_dist=True,
                 )
             if eval_cfg.get('log_effective_rank', True):
                 self.log(
@@ -229,7 +229,7 @@ class FinetuneModule(L.LightningModule):
                     torch.tensor(effective_rank(z)),
                     on_step=False,
                     on_epoch=True,
-                    sync_dist=False,
+                    sync_dist=True,
                 )
         self._val_emb_acc.clear()
 
@@ -295,7 +295,7 @@ class FinetuneModule(L.LightningModule):
         self.val_auroc.update(probs, labels)
 
     def on_validation_epoch_end(self) -> None:
-        self.log('val_auroc', self.val_auroc.compute(), prog_bar=True)
+        self.log('val_auroc', self.val_auroc.compute(), prog_bar=True, on_step=False, on_epoch=True, sync_dist=True)
         self.val_auroc.reset()
         eval_cfg = self.cfg.get('eval', {})
         if eval_cfg.get('enabled', False) and 'val' in eval_cfg.get('splits', ['val']):
@@ -309,7 +309,7 @@ class FinetuneModule(L.LightningModule):
         self.test_auroc.update(probs, labels)
 
     def on_test_epoch_end(self) -> None:
-        self.log('test_auroc', self.test_auroc.compute())
+        self.log('test_auroc', self.test_auroc.compute(), on_step=False, on_epoch=True, sync_dist=True)
         self.test_auroc.reset()
 
     def predict_step(self, batch: dict, batch_idx: int) -> torch.Tensor:
