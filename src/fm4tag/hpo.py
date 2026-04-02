@@ -68,8 +68,17 @@ class _OptunaMetricCallback(L.Callback):
         if self.best_value is None or value < self.best_value:
             self.best_value = value
 
+        # With DDP only rank 0 interacts with Optuna — other ranks must not
+        # report or check pruning (they hold copies of the trial object that
+        # cannot safely write to storage, and raising TrialPruned on one rank
+        # while others continue would deadlock the process group).
+        if trainer.global_rank != 0:
+            return
+
         self.trial.report(value, step=epoch)
-        if self.trial.should_prune():
+        # Pruning requires all ranks to raise simultaneously; with world_size>1
+        # we skip it to avoid a rank-0-only raise hanging the other workers.
+        if trainer.world_size == 1 and self.trial.should_prune():
             raise optuna.TrialPruned(
                 f'Trial pruned at epoch {epoch} ({self.monitor}={value:.6f})'
             )

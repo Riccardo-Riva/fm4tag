@@ -207,13 +207,31 @@ class FinetuneModule(L.LightningModule):
     def _compute_and_log_embedding_metrics(self) -> None:
         """Concatenate accumulated embeddings, gather (DDP), compute and log metrics."""
         eval_cfg = self.cfg.get('eval', {})
-        for obj_name, chunks in self._val_emb_acc.items():
-            if not chunks:
-                continue
-            z = torch.cat(chunks, dim=0)    # (N_local, D) on CPU
+        # Iterate over ALL backbone keys so every DDP rank participates in the
+        # same collectives in the same order.  Skipping objects based on a local
+        # condition (e.g. empty chunks) would cause other ranks to block forever
+        # on the collective, producing an NCCL watchdog hang.
+        for obj_name in list(self.backbone.keys()):
+            chunks = self._val_emb_acc.get(obj_name, [])
+            z_local = torch.cat(chunks, dim=0) if chunks else None  # (N_local, D) CPU
 
             if self.trainer.world_size > 1:
-                z = self.all_gather(z.to(self.device)).flatten(0, 1).cpu()
+                # All ranks report their local size.  This collective also acts as
+                # a barrier so that no rank skips the subsequent all_gather.
+                n_local = torch.tensor(
+                    [z_local.size(0) if z_local is not None else 0],
+                    device=self.device,
+                )
+                all_n = self.all_gather(n_local).view(-1)  # (world_size,)
+                n_min = int(all_n.min().item())
+                if n_min == 0:
+                    continue  # at least one rank has no data — all ranks skip
+                # Trim to the minimum size so all_gather receives same-shaped tensors.
+                z = self.all_gather(z_local[:n_min].to(self.device)).flatten(0, 1).cpu()
+            else:
+                if z_local is None:
+                    continue
+                z = z_local
 
             if eval_cfg.get('log_uniformity', True):
                 self.log(
@@ -221,7 +239,7 @@ class FinetuneModule(L.LightningModule):
                     uniformity(z),
                     on_step=False,
                     on_epoch=True,
-                    sync_dist=True,
+                    sync_dist=False,
                 )
             if eval_cfg.get('log_effective_rank', True):
                 self.log(
@@ -229,7 +247,7 @@ class FinetuneModule(L.LightningModule):
                     torch.tensor(effective_rank(z)),
                     on_step=False,
                     on_epoch=True,
-                    sync_dist=True,
+                    sync_dist=False,
                 )
         self._val_emb_acc.clear()
 
