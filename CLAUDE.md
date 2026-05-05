@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project overview
 
-**fm4tag** is a PyTorch Lightning library for pretraining and fine-tuning SAINT-based transformer encoders on mixed categorical/continuous particle physics data (jets + tracks from HDF5 files), targeting jet flavour tagging at the LHC.
+**fm4tag** is a PyTorch Lightning library for pretraining and fine-tuning transformer-based encoders on mixed categorical/continuous particle physics data (jets + tracks from HDF5 files), targeting jet flavour tagging at the LHC (especially in the ATLAS experiment).
 
 The project follows a two-phase transfer learning workflow:
 1. **Pretrain** — self-supervised (contrastive + denoising) on the encoder
