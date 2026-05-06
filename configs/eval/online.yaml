@@ -1,0 +1,9 @@
+# @package _global_
+# Online representation-quality monitoring (uniformity + effective rank)
+eval:
+  enabled:            true
+  splits:             [val]       # val | train | both
+  n_samples:          8192        # max embeddings per object per epoch
+  objects:            null        # null = all objects; list to restrict
+  log_uniformity:     true
+  log_effective_rank: true

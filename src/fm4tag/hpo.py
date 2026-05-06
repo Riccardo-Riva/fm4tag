@@ -345,7 +345,7 @@ def _finetune_objective(
 # ---------------------------------------------------------------------------
 
 
-@hydra.main(version_base=None, config_path='configs', config_name='default')
+@hydra.main(version_base=None, config_path='../../configs', config_name='default')
 def main(cfg: DictConfig) -> None:
     """Run the Optuna HPO study (entry point for ``fm4tag-hpo``)."""
     hpo_cfg = cfg.get('hpo', {})

@@ -50,10 +50,10 @@ from einops import rearrange
 from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import DataLoader
 
-from fm4tag.data.augmentations import embed_data
-from fm4tag.data.datasets import DatasetCatCon, cat_con_collate_fn
-from fm4tag.engine import _build_encoders, _load_pretrained_encoders
-from fm4tag.models.components.eval_metrics import effective_rank, uniformity
+from fm4tag.augmentations import embed_data
+from fm4tag.datasets import DatasetCatCon, cat_con_collate_fn
+from fm4tag.utils.builders import build_encoders as _build_encoders, load_pretrained_encoders as _load_pretrained_encoders
+from fm4tag.metrics import effective_rank, uniformity
 
 
 # ---------------------------------------------------------------------------
@@ -311,7 +311,7 @@ def _print_results(results: dict[str, dict[str, float]]) -> None:
 # ---------------------------------------------------------------------------
 
 
-@hydra.main(version_base=None, config_path='configs', config_name='default')
+@hydra.main(version_base=None, config_path='../../configs', config_name='default')
 def main(cfg: DictConfig) -> None:
     _ckpt = cfg.get('ckpt_path')
     results = evaluate(cfg, ckpt_path=_ckpt)

@@ -27,9 +27,9 @@ from omegaconf import DictConfig
 from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
 from torchmetrics.classification import MulticlassAUROC
 
-from .components.eval_metrics import effective_rank, uniformity
+from ..metrics import effective_rank, uniformity
 from .components.heads import MultiStreamClassifierHead
-from ..data.augmentations import embed_data
+from ..augmentations import embed_data
 
 
 class FinetuneModule(L.LightningModule):

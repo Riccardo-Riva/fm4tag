@@ -1,0 +1,4 @@
+# AdamW with linear warmup + cosine annealing (schedule built in LightningModule)
+lr:           1.0e-3
+backbone_lr:  1.0e-4   # backbone LR when freeze_encoder=false
+weight_decay: 1.0e-5

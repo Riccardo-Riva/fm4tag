@@ -1,0 +1,41 @@
+# ════════════════════════════════════════════════════════════════════════════
+# fm4tag — finetuning config
+#
+# Usage:
+#   fm4tag-finetune                                        # random-init encoder
+#   fm4tag-finetune encoder_ckpt=/path/to/pretrain.ckpt   # load pretrained encoder
+#   fm4tag-finetune ckpt_path=/path/to/finetune.ckpt      # resume training
+#   fm4tag-finetune action=test ckpt_path=/path/to/best.ckpt
+#   fm4tag-finetune encoder=saint_small head.depth=2
+# ════════════════════════════════════════════════════════════════════════════
+
+defaults:
+  - data: atlas_tracks
+  - encoder: saint_base
+  - head: multistream
+  - optimizer: adamw_cosine
+  - trainer: gpu_ddp
+  - callbacks: default
+  - eval: online
+  - _self_
+
+seed:            42
+experiment_name: fm4tag_finetune
+output_dir:      outputs
+action:          fit          # fit | test | predict
+
+# ── Checkpoint paths ──────────────────────────────────────────────────────────
+encoder_ckpt: null    # path to a PretrainModule checkpoint to load encoder
+ckpt_path:    null    # Lightning checkpoint to resume fit / run test / predict
+
+# ── Encoder freeze / progressive unfreezing ───────────────────────────────────
+freeze_encoder: false
+
+# ── Profiler (disabled by default) ───────────────────────────────────────────
+profiler:
+  enabled:          false
+  type:             simple
+  row_limit:        25
+  export_to_chrome: true
+  with_stack:       false
+  profile_memory:   false

@@ -59,7 +59,7 @@ from lightning.pytorch.profilers import (
     SimpleProfiler,
 )
 
-from fm4tag.data import PT_FT_DataModule
+from fm4tag.datamodules import PT_FT_DataModule
 from fm4tag.models import FinetuneModule, PretrainModule
 from fm4tag.models.components.encoder import Encoder, GlobalEncoder
 from fm4tag.models.components.heads import MultiStreamClassifierHead
@@ -543,6 +543,6 @@ def run(
 # ---------------------------------------------------------------------------
 
 
-@hydra.main(version_base=None, config_path='configs', config_name='default')
+@hydra.main(version_base=None, config_path='../../configs', config_name='default')
 def main(cfg: DictConfig) -> None:
     run(cfg)

@@ -82,6 +82,16 @@ class DatasetCatCon(Dataset):
         self.file = None  # lazy file opening: one handle opened per worker
 
     # ------------------------------------------------------------------
+    # variable to idx mapping
+    # ------------------------------------------------------------------
+
+    def global_variable_idx(self, name: str) -> int:
+        return self.variables[self.global_object]['inputs'].index(name)
+
+    def constituent_variable_idx(self, obj_name: str, data_format: str, name: str) -> int:
+        return self.variables[obj_name]['inputs'][data_format].index(name)
+
+    # ------------------------------------------------------------------
     # Normalisation
     # ------------------------------------------------------------------
 

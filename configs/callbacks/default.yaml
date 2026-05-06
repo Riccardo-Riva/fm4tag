@@ -1,0 +1,26 @@
+# Standard Lightning callback configuration
+model_summary:
+  max_depth: 2
+
+progress_bar:
+  refresh_rate: 500
+
+model_checkpoint:
+  monitor:    val_loss
+  save_top_k: 3
+  mode:       min
+
+early_stopping:
+  monitor:  val_loss
+  patience: 15
+  mode:     min
+
+backbone_finetuning:
+  enabled:                    true
+  unfreeze_backbone_at_epoch: 10
+  backbone_initial_ratio_lr:  0.1
+  train_bn:                   false
+
+memory_monitor:
+  enabled:           false
+  log_every_n_steps: 100

@@ -32,9 +32,9 @@ from omegaconf import DictConfig
 from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
 
 from .components.encoder import Encoder, GlobalEncoder
-from .components.eval_metrics import effective_rank, uniformity
-from .components.losses import DenoisingLoss, InfoNCELoss
-from ..data.augmentations import add_noise, embed_data, mixup_data
+from ..metrics import effective_rank, uniformity
+from ..losses import DenoisingLoss, InfoNCELoss
+from ..augmentations import AugmentationPipeline, embed_data
 
 
 class PretrainModule(L.LightningModule):
@@ -49,14 +49,20 @@ class PretrainModule(L.LightningModule):
                   ``cfg.global_object``, ``cfg.constituent_objects``.
     """
 
-    def __init__(self, encoders: torch.nn.ModuleDict, cfg: DictConfig) -> None:
+    def __init__(
+        self,
+        encoders: torch.nn.ModuleDict,
+        cfg: DictConfig,
+        aug_pipeline: AugmentationPipeline | None = None,
+    ) -> None:
         super().__init__()
-        self.save_hyperparameters(ignore=['encoders'])
+        self.save_hyperparameters(ignore=['encoders', 'aug_pipeline'])
 
         self.encoders = encoders
         self.cfg = cfg
         self.global_object = cfg.global_object
         self.constituent_objects = list(cfg.constituent_objects)
+        self.aug_pipeline = aug_pipeline or AugmentationPipeline()
 
         self.contrastive_loss = InfoNCELoss(temperature=cfg.pretrain.nce_temp)
         self.denoising_loss = DenoisingLoss()
@@ -84,20 +90,15 @@ class PretrainModule(L.LightningModule):
         cfg_pt = self.cfg.pretrain
         x_global = batch['global']  # (B, F_g)
 
-        # ── Corrupted view 2 ────────────────────────────────────────────────
-        if 'cutmix' in cfg_pt.aug:
-            _, x_global_2 = add_noise(None, x_global, lam=cfg_pt.aug_lambda)
-        else:
-            x_global_2 = x_global
+        # ── Corrupted view 2: raw-stage augmentation ─────────────────────────
+        _, x_global_2 = self.aug_pipeline.apply_raw(None, x_global)
 
         # ── Embed both views ─────────────────────────────────────────────────
-        X_1 = encoder(x_global)  # (B, F_g, dim)
-        X_2 = encoder(x_global_2)  # (B, F_g, dim)
+        X_1 = encoder(x_global)   # (B, F_g, dim)
+        X_2 = encoder(x_global_2) # (B, F_g, dim)
 
-        # ── Mixup in embedding space (applied to view 2) ─────────────────────
-        if 'mixup' in cfg_pt.aug:
-            idx = torch.randperm(X_2.size(0), device=X_2.device)
-            X_2 = cfg_pt.aug_lambda * X_2 + (1.0 - cfg_pt.aug_lambda) * X_2[idx]
+        # ── Latent-stage augmentation (view 2) ───────────────────────────────
+        (X_2,) = self.aug_pipeline.apply_latent(X_2)
 
         # ── Losses ────────────────────────────────────────────────────────────
         total_loss = X_1.new_zeros(())
@@ -138,21 +139,15 @@ class PretrainModule(L.LightningModule):
         x_categ = rearrange(const['categorical'], 'b c f -> (b c) f')[valids_flat]
         x_cont = rearrange(const['continuous'], 'b c f -> (b c) f')[valids_flat]
 
-        # ── Corrupted view 2 ────────────────────────────────────────────────
-        if 'cutmix' in cfg_pt.aug:
-            x_categ_2, x_cont_2 = add_noise(x_categ, x_cont, lam=cfg_pt.aug_lambda)
-        else:
-            x_categ_2, x_cont_2 = x_categ, x_cont
+        # ── Corrupted view 2: raw-stage augmentation ─────────────────────────
+        x_categ_2, x_cont_2 = self.aug_pipeline.apply_raw(x_categ, x_cont)
 
         # ── Embed both views ─────────────────────────────────────────────────
         x_cat_enc_1, x_con_enc_1 = embed_data(x_categ, x_cont, encoder)
         x_cat_enc_2, x_con_enc_2 = embed_data(x_categ_2, x_cont_2, encoder)
 
-        # ── Mixup in embedding space (applied to view 2) ─────────────────────
-        if 'mixup' in cfg_pt.aug:
-            x_cat_enc_2, x_con_enc_2 = mixup_data(
-                x_cat_enc_2, x_con_enc_2, lam=cfg_pt.aug_lambda
-            )
+        # ── Latent-stage augmentation (view 2) ───────────────────────────────
+        x_cat_enc_2, x_con_enc_2 = self.aug_pipeline.apply_latent(x_cat_enc_2, x_con_enc_2)
 
         # ── Encode both views ─────────────────────────────────────────────────
         X_1 = encoder(x_cat_enc_1, x_con_enc_1)  # (N_valid, F, dim)
