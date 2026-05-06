@@ -1,3 +1,4 @@
+import numpy as np
 from numpy.lib.recfunctions import structured_to_unstructured as s2u
 
 import h5py
@@ -167,21 +168,25 @@ class DatasetCatCon(Dataset):
         # Constituent features, one dict entry per object
         constituents = {}
         for obj_name in self.constituent_objects:
+            # np.array() forces a fresh contiguous copy of the h5py row before
+            # field selection.  Without this, mixed-width structured dtypes
+            # produce strides that are not multiples of the sub-field itemsize,
+            # causing torch.from_numpy to raise a ValueError.
+            # Read the full constituent row as a contiguous numpy array, then
+            # select fields.  s2u on a field-subset of a mixed-dtype structured
+            # array can produce non-contiguous output; np.ascontiguousarray
+            # guarantees torch.from_numpy can wrap the result without a copy.
+            row = self.c_dsets[obj_name][idx][()]  # shape (C,), structured
+
             X_cat = torch.from_numpy(
-                s2u(
-                    self.c_dsets[obj_name][idx][
-                        self.variables[obj_name].inputs.categorical
-                    ],
-                    dtype=None,
+                np.ascontiguousarray(
+                    s2u(row[self.variables[obj_name].inputs.categorical], dtype=None)
                 )
             )
 
             X_con = torch.from_numpy(
-                s2u(
-                    self.c_dsets[obj_name][idx][
-                        self.variables[obj_name].inputs.continuous
-                    ],
-                    dtype=None,
+                np.ascontiguousarray(
+                    s2u(row[self.variables[obj_name].inputs.continuous], dtype=None)
                 )
             ).float()
 
@@ -189,11 +194,9 @@ class DatasetCatCon(Dataset):
             if obj_name in self._norm:
                 mean = self._norm[obj_name]['mean']
                 std = self._norm[obj_name]['std']
-                X_con = (X_con - mean) / std.clamp(
-                    min=1e-8
-                )  # avoid div by zero (limits values in a tensor)
+                X_con = (X_con - mean) / std.clamp(min=1e-8)
 
-            valid = torch.from_numpy(self.c_dsets[obj_name][idx]['valid'])
+            valid = torch.from_numpy(np.ascontiguousarray(row['valid']))
 
             constituents[obj_name] = {
                 'categorical': X_cat,  # (N, F_cat)
