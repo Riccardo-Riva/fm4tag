@@ -1,14 +1,19 @@
 """Finetuning CLI entry point.
 
+A model config file must always be specified with --config-name.
+The same config used for pretraining also drives finetuning — it contains
+both pretrain and finetune sections; each CLI reads what it needs.
+
 Run::
 
-    fm4tag-finetune                                              # random-init encoder
-    fm4tag-finetune encoder_ckpt=/path/to/pretrain.ckpt         # load pretrained encoder
-    fm4tag-finetune ckpt_path=/path/to/finetune.ckpt            # resume training
-    fm4tag-finetune action=test ckpt_path=/path/to/best.ckpt    # evaluate
-    fm4tag-finetune action=predict ckpt_path=/path/to/best.ckpt # predict
-    fm4tag-finetune encoder=saint_small head.depth=2            # Hydra overrides
-    fm4tag-finetune freeze_encoder=true                         # progressive unfreezing
+    fm4tag-finetune --config-name=atlas_tracks_saint
+    fm4tag-finetune --config-name=atlas_tracks_saint encoder_ckpt=/path/to/pretrain.ckpt
+    fm4tag-finetune --config-name=atlas_tracks_saint ckpt_path=/path/to/resume.ckpt
+    fm4tag-finetune --config-name=atlas_tracks_saint action=test ckpt_path=/path/to/best.ckpt
+    fm4tag-finetune --config-name=atlas_tracks_saint freeze_encoder=true
+
+    # Config file outside the repo:
+    fm4tag-finetune --config-path=/my/configs --config-name=my_model
 
 On every run the fully-resolved config is written to:
     outputs/<experiment_name>/version_N/config.yaml
@@ -81,7 +86,7 @@ def _build_head(cfg: DictConfig, encoders: torch.nn.ModuleDict) -> MultiStreamCl
     return head
 
 
-@hydra.main(version_base=None, config_path='../../../configs', config_name='finetune')
+@hydra.main(version_base=None, config_path='../../../configs', config_name=None)
 def main(cfg: DictConfig) -> None:
     action = cfg.get('action', 'fit')
     enc_ckpt = cfg.get('encoder_ckpt')

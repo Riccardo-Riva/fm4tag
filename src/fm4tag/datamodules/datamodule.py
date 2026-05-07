@@ -2,7 +2,9 @@ import lightning as L
 from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import DataLoader
 
+from ..augmentations import MultiViewAugmentation
 from ..datasets import DatasetCatCon, cat_con_collate_fn
+from ..utils.builders import build_aug_module
 
 
 class PT_FT_DataModule(L.LightningDataModule):
@@ -70,6 +72,21 @@ class PT_FT_DataModule(L.LightningDataModule):
         self._train_dataset: DatasetCatCon | None = None
         self._val_dataset: DatasetCatCon | None = None
         self._test_dataset: DatasetCatCon | None = None
+        self._augmentation: MultiViewAugmentation | None = None
+
+    # ------------------------------------------------------------------
+    # Augmentation access
+    # ------------------------------------------------------------------
+
+    @property
+    def augmentation(self) -> MultiViewAugmentation | None:
+        """The :class:`~fm4tag.augmentations.MultiViewAugmentation` built from config.
+
+        Available after :meth:`setup` has been called for ``stage="fit"``.
+        The training module should retrieve this and register it as a submodule
+        so it moves to the correct device with the rest of the model.
+        """
+        return self._augmentation
 
     # ------------------------------------------------------------------
     # Helpers
@@ -155,6 +172,11 @@ class PT_FT_DataModule(L.LightningDataModule):
                     self._pretrain_val_dataset = DatasetCatCon(
                         file_path=pretrain_val_file, **kwargs
                     )
+                # Build augmentation module with feature-name resolution against
+                # the pretrain dataset so object-aware augmentations are ready.
+                self._augmentation = build_aug_module(
+                    self.cfg, dataset=self._pretrain_dataset
+                )
             else:  # "finetune"
                 self._train_dataset = DatasetCatCon(
                     file_path=self.cfg.train_file, **kwargs

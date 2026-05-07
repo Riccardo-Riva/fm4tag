@@ -1,0 +1,6 @@
+# Single view: uniform dilation of all continuous features.
+views:
+  - raw:
+      - _target_: fm4tag.augmentations.ContinuousDilation
+        alpha: 0.9
+    latent: []

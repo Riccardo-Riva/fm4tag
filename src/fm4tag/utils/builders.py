@@ -16,7 +16,7 @@ from lightning.pytorch.callbacks import (
 )
 from lightning.pytorch.profilers import AdvancedProfiler, PyTorchProfiler, SimpleProfiler
 
-from fm4tag.augmentations import AugmentationPipeline
+from fm4tag.augmentations import AugmentationPipeline, MultiViewAugmentation
 from fm4tag.models.components.encoder import Encoder, GlobalEncoder
 from fm4tag.utils.callbacks import MemoryMonitorCallback, PrecisionProgressBar
 
@@ -107,16 +107,58 @@ def load_pretrained_encoders(
 # ---------------------------------------------------------------------------
 
 
-def build_aug_pipeline(cfg: DictConfig) -> AugmentationPipeline:
-    """Build an :class:`AugmentationPipeline` from ``cfg.augmentation``.
+def build_aug_module(
+    cfg: DictConfig,
+    dataset=None,
+) -> MultiViewAugmentation:
+    """Build a :class:`MultiViewAugmentation` from ``cfg.augmentation``.
 
-    Each entry in ``cfg.augmentation.raw`` and ``cfg.augmentation.latent``
-    must have a ``_target_`` key (the fully-qualified class name) plus any
-    constructor kwargs.  Uses ``hydra.utils.instantiate`` for construction.
+    The augmentation config must contain a ``views`` list.  Each entry
+    describes one augmented view and may have ``raw`` and ``latent`` sublists,
+    each with ``_target_``-keyed dicts consumed by ``hydra.utils.instantiate``.
+
+    If *dataset* is provided, :meth:`~MultiViewAugmentation.setup_for_dataset`
+    is called immediately so that object-aware augmentations
+    (:class:`~fm4tag.augmentations.ContinuousFeatureDilation`,
+    :class:`~fm4tag.augmentations.CategoricalShift`) have their per-object
+    feature indices resolved before training begins.
+
+    Args:
+        cfg:     Fully resolved Hydra config containing ``cfg.augmentation``.
+        dataset: Optional :class:`~fm4tag.datasets.DatasetCatCon` instance
+                 used to resolve feature names to column indices.
     """
     aug_cfg = cfg.get('augmentation', {})
-    raw_augs = [instantiate(a) for a in aug_cfg.get('raw', [])]
-    latent_augs = [instantiate(a) for a in aug_cfg.get('latent', [])]
+    pipelines = []
+    for view_cfg in aug_cfg.get('views', []):
+        raw_augs = [instantiate(a) for a in view_cfg.get('raw', [])]
+        latent_augs = [instantiate(a) for a in view_cfg.get('latent', [])]
+        pipelines.append(AugmentationPipeline(raw=raw_augs, latent=latent_augs))
+    module = MultiViewAugmentation(pipelines)
+    if dataset is not None:
+        module.setup_for_dataset(dataset)
+    return module
+
+
+def build_aug_pipeline(cfg: DictConfig) -> AugmentationPipeline:
+    """Build a single :class:`AugmentationPipeline` from ``cfg.augmentation``.
+
+    .. deprecated::
+        Use :func:`build_aug_module` with the ``views:`` config format instead.
+        This function is kept for backward compatibility with code that passes
+        an ``AugmentationPipeline`` directly to :class:`PretrainModule`.
+
+    Accepts both the old flat format (``raw:`` / ``latent:`` at top level) and
+    the new ``views:`` format (returns the first view's pipeline).
+    """
+    aug_cfg = cfg.get('augmentation', {})
+    if 'views' in aug_cfg and aug_cfg['views']:
+        view_cfg = aug_cfg['views'][0]
+        raw_augs = [instantiate(a) for a in view_cfg.get('raw', [])]
+        latent_augs = [instantiate(a) for a in view_cfg.get('latent', [])]
+    else:
+        raw_augs = [instantiate(a) for a in aug_cfg.get('raw', [])]
+        latent_augs = [instantiate(a) for a in aug_cfg.get('latent', [])]
     return AugmentationPipeline(raw=raw_augs, latent=latent_augs)
 
 

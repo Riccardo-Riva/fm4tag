@@ -1,16 +1,18 @@
 """Pretraining CLI entry point.
 
+A model config file must always be specified with --config-name.
+Model configs live in the configs/ directory and contain all settings
+(data, encoder, trainer, pretrain, finetune) in a single file.
+
 Run::
 
-    fm4tag-pretrain                                   # all defaults
-    fm4tag-pretrain encoder=saint_small               # swap encoder group
-    fm4tag-pretrain augmentation=cutmix_only          # no latent mixup
-    fm4tag-pretrain augmentation=none                 # no augmentation
-    fm4tag-pretrain trainer.max_epochs=50             # Hydra dot-notation
-    fm4tag-pretrain --config-path=/my/configs --config-name=my_pretrain
+    fm4tag-pretrain --config-name=atlas_tracks_saint
+    fm4tag-pretrain --config-name=atlas_tracks_saint augmentation=dilation
+    fm4tag-pretrain --config-name=atlas_tracks_saint trainer.max_epochs=50
+    fm4tag-pretrain --config-name=atlas_tracks_saint augmentation=multi_view
 
-    # Load config from outside the repo:
-    fm4tag-pretrain --config-path=/path/to/configs --config-name=experiment_A
+    # Config file outside the repo:
+    fm4tag-pretrain --config-path=/my/configs --config-name=my_model
 
 On every run the fully-resolved config is written to:
     outputs/<experiment_name>/version_N/config.yaml
@@ -36,7 +38,7 @@ from fm4tag.utils.builders import (
 )
 
 
-@hydra.main(version_base=None, config_path='../../../configs', config_name='pretrain')
+@hydra.main(version_base=None, config_path='../../../configs', config_name=None)
 def main(cfg: DictConfig) -> None:
     torch.set_float32_matmul_precision('high')
     L.seed_everything(cfg.get('seed', 42), workers=True)

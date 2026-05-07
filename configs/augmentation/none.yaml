@@ -1,3 +1,2 @@
-# No augmentation — both views are identical (clean pair).
-raw: []
-latent: []
+# No augmentation — no views are generated (training step gets clean batch only).
+views: []

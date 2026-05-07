@@ -4,7 +4,7 @@ global_object: jets
 constituent_objects:
   - tracks
 
-# ── Data — feature definitions ──────────────────────────────────────────────
+# ── Data — feature definitions and properties ──────────────────────────────────────────────
 variables:
   jets:
     inputs:
@@ -46,26 +46,3 @@ variables:
         numberOfPixelSharedHits:                  [0,1]
         numberOfPixelSplitHits:                   [0,1,2,3,4,5,6,7,8,9,10,11]
         numberOfSCTSharedHits:                    [0,1,2,3]
-
-# ── Data — file paths ────────────────────────────────────────────────────────
-base_path: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_112137
-
-pretrain_file:     ${base_path}/pretrain/output/pp_output_pretrain.h5
-pretrain_val_file: null
-
-train_file: ${base_path}/train/output/pp_output_train.h5
-val_file:   ${base_path}/val/output/pp_output_val.h5
-test_file:  ${base_path}/test/output/pp_output_test.h5
-
-norm_dict:  ${base_path}/pretrain/output/norm_dict.yaml
-class_dict: ${base_path}/pretrain/output/class_dict.yaml
-
-# ── Data — loader settings ───────────────────────────────────────────────────
-dataloader:
-  batch_size:      1024
-  num_workers:     4
-  prefetch_factor: 2
-  pin_memory:      true
-
-pretrain_dataloader:
-  batch_size: 2048

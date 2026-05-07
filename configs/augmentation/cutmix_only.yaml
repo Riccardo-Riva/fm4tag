@@ -1,6 +1,6 @@
-# Raw-only augmentation: CutMix corruption on pre-embedding features.
-raw:
-  - _target_: fm4tag.augmentations.CutMix
-    lam: 0.1
-
-latent: []
+# Single view: CutMix corruption on pre-embedding features.
+views:
+  - raw:
+      - _target_: fm4tag.augmentations.CutMix
+        lam: 0.1
+    latent: []

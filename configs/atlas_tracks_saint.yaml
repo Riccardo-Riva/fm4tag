@@ -1,0 +1,129 @@
+# ════════════════════════════════════════════════════════════════════════════
+# fm4tag — model config: ATLAS tracks, SAINT-base encoder
+#
+# A single config file covers both pretrain and finetune phases.
+# Pass this file to whichever CLI you need:
+#
+#   fm4tag-pretrain --config-name=atlas_tracks_saint
+#   fm4tag-finetune --config-name=atlas_tracks_saint
+#
+# Composable groups (swap at the command line):
+#   fm4tag-pretrain --config-name=atlas_tracks_saint augmentation=dilation
+#   fm4tag-pretrain --config-name=atlas_tracks_saint augmentation=multi_view
+#
+# Inline keys (data, encoder, trainer, head) are fixed to this model;
+# change them directly here rather than swapping a group.
+# ════════════════════════════════════════════════════════════════════════════
+
+defaults:
+  - data: atlas_tracks
+  - augmentation: cutmix_mixup   # swap to: none | cutmix_only | dilation | multi_view
+  - optimizer: adamw_cosine
+  - callbacks: default
+  - eval: online
+  - _self_
+
+# ── Experiment ────────────────────────────────────────────────────────────────
+seed:            42
+experiment_name: atlas_tracks_saint
+output_dir:      outputs
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DATA
+# ─────────────────────────────────────────────────────────────────────────────
+
+base_path: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_112137
+
+pretrain_file:     ${base_path}/pretrain/output/pp_output_pretrain.h5
+pretrain_val_file: null
+
+train_file: ${base_path}/train/output/pp_output_train.h5
+val_file:   ${base_path}/val/output/pp_output_val.h5
+test_file:  ${base_path}/test/output/pp_output_test.h5
+
+norm_dict:  ${base_path}/pretrain/output/norm_dict.yaml
+class_dict: ${base_path}/pretrain/output/class_dict.yaml
+
+dataloader:
+  batch_size:      1024
+  num_workers:     4
+  prefetch_factor: 2
+  pin_memory:      true
+
+pretrain_dataloader:
+  batch_size: 2048
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ENCODER  (SAINT-base)
+# ─────────────────────────────────────────────────────────────────────────────
+
+encoder:
+  dim:             32
+  depth:           6
+  col_heads:       8
+  row_heads:       8
+  dim_head:        16
+  dim_row_head:    64
+  attn_dropout:    0.0
+  ff_dropout:      0.0
+  ff_mult:         1
+  cont_embeddings: MLP    # MLP | pos_singleMLP
+  attentiontype:   col    # col | colrow | row | concat
+  final_mlp_style: sep    # sep | common
+  proj_hidden:     null   # null → auto (3/4 × dim × n_tokens)
+  proj_out:        null   # null → auto (1/2 × dim × n_tokens)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TRAINER
+# ─────────────────────────────────────────────────────────────────────────────
+
+trainer:
+  max_epochs:        100
+  accelerator:       gpu
+  devices:           1
+  strategy:          ddp_find_unused_parameters_true
+  precision:         "bf16-mixed"
+  log_every_n_steps: 50
+  gradient_clip_val: 1.0
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PRETRAIN  (used by fm4tag-pretrain only)
+# ─────────────────────────────────────────────────────────────────────────────
+
+pretrain:
+  tasks:          [contrastive, denoising]
+  projhead_style: diff   # diff | same
+  nce_temp:       0.7
+  lam0:           1.0    # contrastive loss weight
+  lam1:           1.0    # categorical denoising loss weight
+  lam2:           10.0   # continuous denoising loss weight
+
+# ─────────────────────────────────────────────────────────────────────────────
+# FINETUNE  (used by fm4tag-finetune only)
+# ─────────────────────────────────────────────────────────────────────────────
+
+action:         fit    # fit | test | predict
+encoder_ckpt:   null   # path to PretrainModule checkpoint → loads encoder weights
+ckpt_path:      null   # Lightning checkpoint → resume fit / run test / predict
+freeze_encoder: false
+
+head:
+  mlp_dropout:  0.1
+  ff_dropout:   0.0
+  attn_dropout: 0.0
+  ff_mult:      4
+  heads:        8
+  dim_head:     16
+  depth:        3
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PROFILER  (disabled by default)
+# ─────────────────────────────────────────────────────────────────────────────
+
+profiler:
+  enabled:          false
+  type:             simple   # simple | advanced | pytorch
+  row_limit:        25
+  export_to_chrome: true
+  with_stack:       false
+  profile_memory:   false

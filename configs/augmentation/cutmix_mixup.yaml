@@ -1,9 +1,8 @@
-# Two-stage augmentation: CutMix on raw features, then Mixup in latent space.
-# Both use the same lambda for simplicity; override per-aug if needed.
-raw:
-  - _target_: fm4tag.augmentations.CutMix
-    lam: 0.1
-
-latent:
-  - _target_: fm4tag.augmentations.Mixup
-    lam: 0.1
+# Single view: CutMix on raw features, then Mixup in latent space.
+views:
+  - raw:
+      - _target_: fm4tag.augmentations.CutMix
+        lam: 0.1
+    latent:
+      - _target_: fm4tag.augmentations.Mixup
+        lam: 0.1

@@ -1,0 +1,28 @@
+# Multi-view example: three augmented views used as positive pairs.
+#
+# View 1 — CutMix + Mixup (classic two-stage corruption).
+# View 2 — Uniform dilation of all continuous features.
+# View 3 — Feature-specific dilation + categorical shift.
+#           Replace the feature names below with the actual continuous
+#           feature names defined in your data config.
+#           setup_for_object() resolves names to column indices at init time.
+views:
+  - raw:
+      - _target_: fm4tag.augmentations.CutMix
+        lam: 0.1
+    latent:
+      - _target_: fm4tag.augmentations.Mixup
+        lam: 0.1
+
+  - raw:
+      - _target_: fm4tag.augmentations.ContinuousDilation
+        alpha: 0.9
+    latent: []
+
+  - raw:
+      - _target_: fm4tag.augmentations.ContinuousFeatureDilation
+        features: [d0, z0SinTheta]   # adjust to your feature names
+        alpha: 0.8
+      - _target_: fm4tag.augmentations.CategoricalShift
+        p: 0.3
+    latent: []
