@@ -1,0 +1,94 @@
+.
+├── configs
+│   ├── atlas_tracks_saint.yaml
+│   ├── augmentation
+│   │   ├── 4view.yaml
+│   │   ├── cutmix_mixup.yaml
+│   │   ├── cutmix_only.yaml
+│   │   ├── dilation.yaml
+│   │   ├── multi_view.yaml
+│   │   └── none.yaml
+│   ├── callbacks
+│   │   └── default.yaml
+│   ├── data
+│   │   └── atlas_tracks.yaml
+│   ├── encoder
+│   │   ├── saint_base.yaml
+│   │   └── saint_small.yaml
+│   ├── eval
+│   │   ├── disabled.yaml
+│   │   └── online.yaml
+│   ├── head
+│   │   └── multistream.yaml
+│   ├── __init__ copy.py
+│   ├── __init__.py
+│   ├── optimizer
+│   │   └── adamw_cosine.yaml
+│   └── trainer
+│       ├── gpu_ddp.yaml
+│       └── gpu_single.yaml
+├── LICENSE
+├── notebooks
+│   ├── augmentations.ipynb
+│   ├── dataset_dataloader.ipynb
+│   ├── erank1p5.png
+│   ├── isotropic.png
+│   ├── roc_comparison.png
+│   ├── roc_plots.ipynb
+│   └── simple_plots.ipynb
+├── pyproject.toml
+├── README.md
+├── scripts
+│   ├── model_summary.py
+│   ├── plot_losses.py
+│   ├── plot_uniformity.py
+│   └── plot_uniformity_yaml.py
+├── src
+│   └── fm4tag
+│       ├── augmentations
+│       │   ├── augmentations.py
+│       │   └── __init__.py
+│       ├── cli
+│       │   ├── finetune.py
+│       │   ├── __init__.py
+│       │   └── pretrain.py
+│       ├── datamodules
+│       │   ├── datamodule.py
+│       │   └── __init__.py
+│       ├── datasets
+│       │   ├── dataset_cat_con.py
+│       │   └── __init__.py
+│       ├── engine.py
+│       ├── eval_encoder.py
+│       ├── hpo.py
+│       ├── __init__.py
+│       ├── losses
+│       │   ├── __init__.py
+│       │   └── losses.py
+│       ├── metrics
+│       │   ├── __init__.py
+│       │   └── metrics.py
+│       ├── models
+│       │   ├── components
+│       │   │   ├── attention.py
+│       │   │   ├── blocks.py
+│       │   │   ├── encoder.py
+│       │   │   ├── heads.py
+│       │   │   ├── mlp.py
+│       │   │   └── transformers.py
+│       │   ├── finetune_module.py
+│       │   ├── __init__.py
+│       │   └── pretrain_module.py
+│       └── utils
+│           ├── builders.py
+│           ├── callbacks.py
+│           └── __init__.py
+├── tests
+│   ├── conftest.py
+│   ├── __init__.py
+│   ├── test_augmentations.py
+│   └── test_datasets.py
+├── tree.txt
+└── uv.lock
+
+24 directories, 68 files
