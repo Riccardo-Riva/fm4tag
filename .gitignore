@@ -2,7 +2,7 @@
 notebooks/*.png
 
 # slurm
-slurm/
+#slurm/
 
 # outputs
 outputs/

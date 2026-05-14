@@ -1,0 +1,31 @@
+# 4-view augmentation for multi-view contrastive pretraining.
+#
+# View 1 — identity (no augmentation; clean reference view)
+# View 2 — CutMix corruption in feature space + Mixup in embedding space
+# View 3 — uniform continuous feature scaling
+# View 4 — uniform continuous feature scaling + random categorical index shift
+#
+# CategoricalShift requires setup_for_object() to know per-feature class
+# counts; this is handled automatically by the datamodule (PT_FT_DataModule).
+views:
+  - raw: []
+    latent: []
+
+  - raw:
+      - _target_: fm4tag.augmentations.CutMix
+        lam: 0.1
+    latent:
+      - _target_: fm4tag.augmentations.Mixup
+        lam: 0.1
+
+  - raw:
+      - _target_: fm4tag.augmentations.ContinuousDilation
+        alpha: 0.9
+    latent: []
+
+  - raw:
+      - _target_: fm4tag.augmentations.ContinuousDilation
+        alpha: 0.9
+      - _target_: fm4tag.augmentations.CategoricalShift
+        p: 0.3
+    latent: []

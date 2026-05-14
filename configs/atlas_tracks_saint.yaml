@@ -51,7 +51,8 @@ dataloader:
   pin_memory:      true
 
 pretrain_dataloader:
-  batch_size: 2048
+  batch_size:  2048
+  num_workers: 4
 
 # ─────────────────────────────────────────────────────────────────────────────
 # ENCODER  (SAINT-base)
@@ -92,8 +93,9 @@ trainer:
 
 pretrain:
   tasks:          [contrastive, denoising]
-  projhead_style: diff   # diff | same
+  projhead_style: diff   # diff | same  (ignored for multi-view; pt_mlp1 used for all views)
   nce_temp:       0.7
+  exclude_positives_from_denominator: false  # false = SupCon; true = negatives-only denominator
   lam0:           1.0    # contrastive loss weight
   lam1:           1.0    # categorical denoising loss weight
   lam2:           10.0   # continuous denoising loss weight

@@ -1,3 +1,3 @@
-from .losses import DenoisingLoss, InfoNCELoss
+from .losses import DenoisingLoss, InfoNCELoss, MultiViewInfoNCELoss
 
-__all__ = ['DenoisingLoss', 'InfoNCELoss']
+__all__ = ['DenoisingLoss', 'InfoNCELoss', 'MultiViewInfoNCELoss']

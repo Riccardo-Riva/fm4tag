@@ -22,6 +22,7 @@ On every run the fully-resolved config is written to:
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 import hydra
 import lightning as L
@@ -86,7 +87,10 @@ def _build_head(cfg: DictConfig, encoders: torch.nn.ModuleDict) -> MultiStreamCl
     return head
 
 
-@hydra.main(version_base=None, config_path='../../../configs', config_name=None)
+_CONFIGS = str((Path(__file__).resolve().parent / "../../../configs").resolve())
+
+
+@hydra.main(version_base=None, config_path=_CONFIGS, config_name=None)
 def main(cfg: DictConfig) -> None:
     action = cfg.get('action', 'fit')
     enc_ckpt = cfg.get('encoder_ckpt')

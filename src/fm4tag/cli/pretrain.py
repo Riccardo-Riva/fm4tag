@@ -21,6 +21,7 @@ On every run the fully-resolved config is written to:
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 import hydra
 import lightning as L
@@ -31,14 +32,17 @@ from lightning.pytorch.loggers import CSVLogger, TensorBoardLogger
 from fm4tag.datamodules import PT_FT_DataModule
 from fm4tag.models import PretrainModule
 from fm4tag.utils.builders import (
-    build_aug_pipeline,
+    build_aug_module,
     build_callbacks,
     build_encoders,
     build_profiler,
 )
 
 
-@hydra.main(version_base=None, config_path='../../../configs', config_name=None)
+_CONFIGS = str((Path(__file__).resolve().parent / "../../../configs").resolve())
+
+
+@hydra.main(version_base=None, config_path=_CONFIGS, config_name=None)
 def main(cfg: DictConfig) -> None:
     torch.set_float32_matmul_precision('high')
     L.seed_everything(cfg.get('seed', 42), workers=True)
@@ -61,7 +65,7 @@ def main(cfg: DictConfig) -> None:
 
     # ── Build components ──────────────────────────────────────────────────────
     encoders = build_encoders(cfg)
-    aug_pipeline = build_aug_pipeline(cfg)
+    aug_pipeline = build_aug_module(cfg)
     callbacks = build_callbacks(cfg, phase='pretrain')
     profiler = build_profiler(cfg)
 

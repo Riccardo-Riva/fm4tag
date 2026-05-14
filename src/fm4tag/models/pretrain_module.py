@@ -31,10 +31,12 @@ from einops import rearrange
 from omegaconf import DictConfig
 from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
 
+from copy import deepcopy
+
 from .components.encoder import Encoder, GlobalEncoder
 from ..metrics import effective_rank, uniformity
-from ..losses import DenoisingLoss, InfoNCELoss
-from ..augmentations import AugmentationPipeline, embed_data
+from ..losses import DenoisingLoss, MultiViewInfoNCELoss
+from ..augmentations import AugmentationPipeline, MultiViewAugmentation, embed_data
 
 
 class PretrainModule(L.LightningModule):
@@ -62,9 +64,23 @@ class PretrainModule(L.LightningModule):
         self.cfg = cfg
         self.global_object = cfg.global_object
         self.constituent_objects = list(cfg.constituent_objects)
-        self.aug_pipeline = aug_pipeline or AugmentationPipeline()
 
-        self.contrastive_loss = InfoNCELoss(temperature=cfg.pretrain.nce_temp)
+        if isinstance(aug_pipeline, MultiViewAugmentation):
+            self.aug_pipeline = aug_pipeline
+        elif isinstance(aug_pipeline, AugmentationPipeline):
+            # Backward compat: wrap single pipeline as two independent augmented views.
+            self.aug_pipeline = MultiViewAugmentation([aug_pipeline, deepcopy(aug_pipeline)])
+        else:
+            self.aug_pipeline = MultiViewAugmentation(
+                [AugmentationPipeline(), AugmentationPipeline()]
+            )
+
+        self.contrastive_loss = MultiViewInfoNCELoss(
+            temperature=cfg.pretrain.nce_temp,
+            exclude_positives_from_denominator=cfg.pretrain.get(
+                'exclude_positives_from_denominator', False
+            ),
+        )
         self.denoising_loss = DenoisingLoss()
 
         # Per-epoch metric buffers for the epoch-end summary table.
@@ -90,33 +106,31 @@ class PretrainModule(L.LightningModule):
         cfg_pt = self.cfg.pretrain
         x_global = batch['global']  # (B, F_g)
 
-        # ── Corrupted view 2: raw-stage augmentation ─────────────────────────
-        _, x_global_2 = self.aug_pipeline.apply_raw(None, x_global)
+        # ── N augmented views ─────────────────────────────────────────────────
+        # aug_pipeline(None, x_global) returns [(None, x_g_i), ...], one per view.
+        raw_views = self.aug_pipeline(None, x_global)
 
-        # ── Embed both views ─────────────────────────────────────────────────
-        X_1 = encoder(x_global)   # (B, F_g, dim)
-        X_2 = encoder(x_global_2) # (B, F_g, dim)
-
-        # ── Latent-stage augmentation (view 2) ───────────────────────────────
-        (X_2,) = self.aug_pipeline.apply_latent(X_2)
+        X_views: list[torch.Tensor] = []
+        z_list: list[torch.Tensor] = []
+        for i, (_, x_g_i) in enumerate(raw_views):
+            X_i = encoder(x_g_i)                                         # (B, F_g, dim)
+            (X_i,) = self.aug_pipeline.pipelines[i].apply_latent(X_i)
+            X_views.append(X_i)
+            if 'contrastive' in cfg_pt.tasks:
+                z_list.append(encoder.pt_mlp1(X_i.flatten(1)))           # (B, proj_dim)
 
         # ── Losses ────────────────────────────────────────────────────────────
-        total_loss = X_1.new_zeros(())
+        total_loss = x_global.new_zeros(())
         log_dict: dict[str, torch.Tensor] = {}
 
         if 'contrastive' in cfg_pt.tasks:
-            proj1 = encoder.pt_mlp1
-            proj2 = (
-                encoder.pt_mlp2 if cfg_pt.projhead_style == 'diff' else encoder.pt_mlp1
-            )
-            z1 = proj1(X_1.flatten(1))  # (B, proj_dim)
-            z2 = proj2(X_2.flatten(1))
-            l_cont = self.contrastive_loss(z1, z2)
+            z = torch.stack(z_list, dim=1)                               # (B, N, proj_dim)
+            l_cont = self.contrastive_loss(z)
             log_dict['loss_contrastive'] = l_cont
             total_loss = total_loss + cfg_pt.lam0 * l_cont
 
         if 'denoising' in cfg_pt.tasks:
-            con_pred = torch.cat(encoder.mlp_recon(X_2), dim=1)  # (B, F_g)
+            con_pred = torch.cat(encoder.mlp_recon(X_views[0]), dim=1)  # (B, F_g)
             l_con = F.mse_loss(con_pred, x_global)
             log_dict['loss_denoising_con'] = l_con
             total_loss = total_loss + cfg_pt.lam2 * l_con
@@ -139,38 +153,35 @@ class PretrainModule(L.LightningModule):
         x_categ = rearrange(const['categorical'], 'b c f -> (b c) f')[valids_flat]
         x_cont = rearrange(const['continuous'], 'b c f -> (b c) f')[valids_flat]
 
-        # ── Corrupted view 2: raw-stage augmentation ─────────────────────────
-        x_categ_2, x_cont_2 = self.aug_pipeline.apply_raw(x_categ, x_cont)
+        # ── N augmented views ─────────────────────────────────────────────────
+        raw_views = self.aug_pipeline(x_categ, x_cont, obj_name)
 
-        # ── Embed both views ─────────────────────────────────────────────────
-        x_cat_enc_1, x_con_enc_1 = embed_data(x_categ, x_cont, encoder)
-        x_cat_enc_2, x_con_enc_2 = embed_data(x_categ_2, x_cont_2, encoder)
-
-        # ── Latent-stage augmentation (view 2) ───────────────────────────────
-        x_cat_enc_2, x_con_enc_2 = self.aug_pipeline.apply_latent(x_cat_enc_2, x_con_enc_2)
-
-        # ── Encode both views ─────────────────────────────────────────────────
-        X_1 = encoder(x_cat_enc_1, x_con_enc_1)  # (N_valid, F, dim)
-        X_2 = encoder(x_cat_enc_2, x_con_enc_2)  # (N_valid, F, dim)
+        X_views: list[torch.Tensor] = []
+        z_list: list[torch.Tensor] = []
+        for i, (x_categ_i, x_cont_i) in enumerate(raw_views):
+            x_cat_enc_i, x_con_enc_i = embed_data(x_categ_i, x_cont_i, encoder)
+            x_cat_enc_i, x_con_enc_i = self.aug_pipeline.pipelines[i].apply_latent(
+                x_cat_enc_i, x_con_enc_i
+            )
+            X_i = encoder(x_cat_enc_i, x_con_enc_i)                     # (N_valid, F, dim)
+            X_views.append(X_i)
+            if 'contrastive' in cfg_pt.tasks:
+                z_list.append(encoder.pt_mlp1(X_i.flatten(1, 2)))       # (N_valid, proj_dim)
 
         # ── Losses ────────────────────────────────────────────────────────────
-        total_loss = X_1.new_zeros(())
+        total_loss = X_views[0].new_zeros(())
         log_dict: dict[str, torch.Tensor] = {}
 
         if 'contrastive' in cfg_pt.tasks:
-            proj1 = encoder.pt_mlp1
-            proj2 = (
-                encoder.pt_mlp2 if cfg_pt.projhead_style == 'diff' else encoder.pt_mlp1
-            )
-            z1 = proj1(X_1.flatten(1, 2))
-            z2 = proj2(X_2.flatten(1, 2))
-            l_cont = self.contrastive_loss(z1, z2)
+            z = torch.stack(z_list, dim=1)                               # (N_valid, N, proj_dim)
+            l_cont = self.contrastive_loss(z)
             log_dict['loss_contrastive'] = l_cont
             total_loss = total_loss + cfg_pt.lam0 * l_cont
 
         if 'denoising' in cfg_pt.tasks:
-            cat_outs = encoder.mlp1(X_2[:, : encoder.num_categories, :])
-            con_outs = encoder.mlp2(X_2[:, encoder.num_categories :, :])
+            # View 0's augmented representation reconstructs the original x_categ/x_cont.
+            cat_outs = encoder.mlp1(X_views[0][:, : encoder.num_categories, :])
+            con_outs = encoder.mlp2(X_views[0][:, encoder.num_categories :, :])
             l_cat, l_con = self.denoising_loss(cat_outs, x_categ, con_outs, x_cont)
             log_dict['loss_denoising_cat'] = l_cat
             log_dict['loss_denoising_con'] = l_con
@@ -383,6 +394,25 @@ class PretrainModule(L.LightningModule):
     # ------------------------------------------------------------------
     # LightningModule hooks
     # ------------------------------------------------------------------
+
+    # ------------------------------------------------------------------
+    # Lightning hooks
+    # ------------------------------------------------------------------
+
+    def on_fit_start(self) -> None:
+        """Swap in the datamodule's augmentation (built with dataset setup).
+
+        The datamodule calls ``build_aug_module(cfg, dataset=...)`` inside its
+        own ``setup()``, which resolves feature names to column indices for
+        object-aware augmentations (CategoricalShift, ContinuousFeatureDilation).
+        The CLI builds the augmentation *before* the dataset exists, so those
+        augmentations are no-ops until we swap here.
+        """
+        dm = getattr(self.trainer, 'datamodule', None)
+        if dm is not None:
+            aug = getattr(dm, 'augmentation', None)
+            if aug is not None:
+                self.aug_pipeline = aug
 
     def training_step(self, batch: dict, batch_idx: int) -> torch.Tensor:
         loss, log_dict = self._compute_loss(batch)
