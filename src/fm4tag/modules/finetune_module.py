@@ -64,6 +64,7 @@ class FinetuneModule(L.LightningModule):
         class_weights = None
         if cfg.get('class_dict'):
             from omegaconf import OmegaConf
+
             cd = OmegaConf.to_container(OmegaConf.load(cfg.class_dict), resolve=True)
             global_obj = cfg.global_object
             label_var = cfg.variables[global_obj].label
@@ -111,8 +112,8 @@ class FinetuneModule(L.LightningModule):
         # ── Global ───────────────────────────────────────────────────────────
         global_name = self.cfg.global_object
         enc_global = self.backbone[global_name]
-        X_global = enc_global(batch['global'])                  # (B, F_g, dim)
-        z_global = enc_global.pt_mlp1(X_global.flatten(1))     # (B, g_dim)
+        X_global = enc_global(batch['global'])  # (B, F_g, dim)
+        z_global = enc_global.pt_mlp1(X_global.flatten(1))  # (B, g_dim)
 
         # ── Constituents ─────────────────────────────────────────────────────
         z_consts: list[torch.Tensor] = []
@@ -123,9 +124,9 @@ class FinetuneModule(L.LightningModule):
             encoder = self.backbone[obj_name]
             const = batch['constituents'][obj_name]
 
-            x_categ = const['categorical']   # (B, C, F_cat)
-            x_cont = const['continuous']     # (B, C, F_con)
-            valids = const['valid']          # (B, C)
+            x_categ = const['categorical']  # (B, C, F_cat)
+            x_cont = const['continuous']  # (B, C, F_con)
+            valids = const['valid']  # (B, C)
 
             B, C, _ = x_categ.shape
             valids_flat = rearrange(valids, 'b c -> (b c)')
@@ -136,8 +137,8 @@ class FinetuneModule(L.LightningModule):
             x_cat_enc, x_con_enc = embed_data(
                 x_categ_flat[valids_flat], x_cont_flat[valids_flat], encoder
             )
-            X_valid = encoder(x_cat_enc, x_con_enc)             # (N_valid, F, dim)
-            z_valid = encoder.pt_mlp1(X_valid.flatten(1, 2))   # (N_valid, c_dim)
+            X_valid = encoder(x_cat_enc, x_con_enc)  # (N_valid, F, dim)
+            z_valid = encoder.pt_mlp1(X_valid.flatten(1, 2))  # (N_valid, c_dim)
 
             # Scatter projected embeddings back into (B, C, c_dim).
             c_dim = z_valid.shape[1]
@@ -200,9 +201,7 @@ class FinetuneModule(L.LightningModule):
             already = sum(t.size(0) for t in self._val_emb_acc[obj_name])
             remaining = n_max - already
             if remaining > 0:
-                self._val_emb_acc[obj_name].append(
-                    z_valid[:remaining].detach().cpu()
-                )
+                self._val_emb_acc[obj_name].append(z_valid[:remaining].detach().cpu())
 
     def _compute_and_log_embedding_metrics(self) -> None:
         """Concatenate accumulated embeddings, gather (DDP), compute and log metrics."""
@@ -290,7 +289,9 @@ class FinetuneModule(L.LightningModule):
 
     def validation_step(self, batch: dict, batch_idx: int) -> None:
         eval_cfg = self.cfg.get('eval', {})
-        do_eval = eval_cfg.get('enabled', False) and 'val' in eval_cfg.get('splits', ['val'])
+        do_eval = eval_cfg.get('enabled', False) and 'val' in eval_cfg.get(
+            'splits', ['val']
+        )
 
         if do_eval:
             # Run encode_all to get both logits and pt_mlp1 projections.
@@ -307,13 +308,25 @@ class FinetuneModule(L.LightningModule):
         acc = (preds == labels).float().mean()
 
         self.log(
-            'val_loss', loss, on_step=False, on_epoch=True, prog_bar=True, sync_dist=True
+            'val_loss',
+            loss,
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
+            sync_dist=True,
         )
         self.log('val_acc', acc, on_step=False, on_epoch=True, sync_dist=True)
         self.val_auroc.update(probs, labels)
 
     def on_validation_epoch_end(self) -> None:
-        self.log('val_auroc', self.val_auroc.compute(), prog_bar=True, on_step=False, on_epoch=True, sync_dist=True)
+        self.log(
+            'val_auroc',
+            self.val_auroc.compute(),
+            prog_bar=True,
+            on_step=False,
+            on_epoch=True,
+            sync_dist=True,
+        )
         self.val_auroc.reset()
         eval_cfg = self.cfg.get('eval', {})
         if eval_cfg.get('enabled', False) and 'val' in eval_cfg.get('splits', ['val']):
@@ -327,7 +340,13 @@ class FinetuneModule(L.LightningModule):
         self.test_auroc.update(probs, labels)
 
     def on_test_epoch_end(self) -> None:
-        self.log('test_auroc', self.test_auroc.compute(), on_step=False, on_epoch=True, sync_dist=True)
+        self.log(
+            'test_auroc',
+            self.test_auroc.compute(),
+            on_step=False,
+            on_epoch=True,
+            sync_dist=True,
+        )
         self.test_auroc.reset()
 
     def predict_step(self, batch: dict, batch_idx: int) -> torch.Tensor:

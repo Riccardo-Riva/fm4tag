@@ -406,13 +406,12 @@ def run(
         # Infer pt_mlp1 output dimensions from the encoder architecture.
         # These match the formulas in GlobalEncoder and Encoder exactly.
         n_global = len(cfg.variables[cfg.global_object].inputs)
-        global_proj_out = n_global * enc_cfg.dim   # GlobalEncoder: out = proj_in
+        global_proj_out = n_global * enc_cfg.dim  # GlobalEncoder: out = proj_in
 
         const_proj_outs = []
         for obj_name in cfg.constituent_objects:
-            n_feat = (
-                len(cfg.variables[obj_name].inputs.continuous)
-                + len(cfg.variables[obj_name].inputs.categorical)
+            n_feat = len(cfg.variables[obj_name].inputs.continuous) + len(
+                cfg.variables[obj_name].inputs.categorical
             )
             proj_in = n_feat * enc_cfg.dim
             _proj_out = enc_cfg.get('proj_out') or proj_in // 2

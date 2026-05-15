@@ -36,7 +36,6 @@ import sys
 from pathlib import Path
 
 import matplotlib.pyplot as plt
-import torch
 from omegaconf import OmegaConf
 
 # Allow running without installing the package (add src/ to path).
@@ -123,14 +122,14 @@ def _plot(
     ncols = min(3, n_panels)
     nrows = (n_panels + ncols - 1) // ncols
 
-    fig, axes = plt.subplots(nrows, ncols, figsize=(5 * ncols, 4 * nrows), squeeze=False)
+    fig, axes = plt.subplots(
+        nrows, ncols, figsize=(5 * ncols, 4 * nrows), squeeze=False
+    )
     ax_flat = [ax for row in axes for ax in row]
 
     for idx, (obj, key) in enumerate(obj_metric_pairs):
         ax = ax_flat[idx]
-        values = [
-            m[obj][key] for m in metrics_per_epoch if obj in m and key in m[obj]
-        ]
+        values = [m[obj][key] for m in metrics_per_epoch if obj in m and key in m[obj]]
         ep = [
             epochs[i]
             for i, m in enumerate(metrics_per_epoch)
@@ -148,15 +147,26 @@ def _plot(
         else:
             best_idx = int(max(range(len(values)), key=lambda i: values[i]))
             label = 'best'
-        ax.axvline(ep[best_idx], color='red', linestyle='--', alpha=0.5,
-                   label=f'{label}: epoch {ep[best_idx]} ({values[best_idx]:.3f})')
+        ax.axvline(
+            ep[best_idx],
+            color='red',
+            linestyle='--',
+            alpha=0.5,
+            label=f'{label}: epoch {ep[best_idx]} ({values[best_idx]:.3f})',
+        )
         ax.legend(fontsize=8)
 
     if has_val_loss:
         ax = ax_flat[len(obj_metric_pairs)]
         vl = [(e, v) for e, v in zip(epochs, val_losses) if v is not None]
-        ax.plot([x[0] for x in vl], [x[1] for x in vl],
-                marker='o', markersize=4, linewidth=1.5, color='tab:orange')
+        ax.plot(
+            [x[0] for x in vl],
+            [x[1] for x in vl],
+            marker='o',
+            markersize=4,
+            linewidth=1.5,
+            color='tab:orange',
+        )
         ax.set_xlabel('Epoch')
         ax.set_title('val_loss')
         ax.grid(True, alpha=0.3)
@@ -185,7 +195,7 @@ def main() -> None:
         'version_dir',
         type=Path,
         help='Path to the Lightning version directory '
-             '(contains checkpoints/ and metrics.csv).',
+        '(contains checkpoints/ and metrics.csv).',
     )
     parser.add_argument(
         '--config',
@@ -198,7 +208,7 @@ def main() -> None:
         type=str,
         default=None,
         help='HDF5 file to evaluate on. Falls back to pretrain_val_file / '
-             'test_file from config.',
+        'test_file from config.',
     )
     parser.add_argument(
         '--output',
@@ -250,8 +260,7 @@ def main() -> None:
         config_path = _find_config(version_dir)
     if config_path is None:
         sys.exit(
-            'Error: could not auto-discover config.yaml. '
-            'Pass --config explicitly.'
+            'Error: could not auto-discover config.yaml. Pass --config explicitly.'
         )
     print(f'Using config: {config_path}')
     cfg = OmegaConf.load(config_path)

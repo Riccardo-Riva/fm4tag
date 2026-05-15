@@ -147,8 +147,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description='Plot uniformity/effective-rank from a pre-computed YAML summary.'
     )
-    parser.add_argument('--file', type=Path, required=True, help='Path to uniformity_evolution.yaml')
-    parser.add_argument('--outdir', type=Path, required=True, help='Directory to store the output plots')
+    parser.add_argument(
+        '--file', type=Path, required=True, help='Path to uniformity_evolution.yaml'
+    )
+    parser.add_argument(
+        '--outdir', type=Path, required=True, help='Directory to store the output plots'
+    )
     args = parser.parse_args()
 
     yaml_file: Path = args.file.resolve()
@@ -193,7 +197,10 @@ def main() -> None:
         _save(fig, out_dir, 'tracks_uniformity.png')
 
     # ── Tracks effective rank (paired) ────────────────────────────────────────
-    if 'tracks.track_effective_rank' in series and 'tracks.jet_effective_rank' in series:
+    if (
+        'tracks.track_effective_rank' in series
+        and 'tracks.jet_effective_rank' in series
+    ):
         fig = _paired_plot(
             epochs,
             series['tracks.track_effective_rank'],

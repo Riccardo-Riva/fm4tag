@@ -102,9 +102,9 @@ def _encode_constituent(
                  valid tracks, projected through ``pt_mlp1``).
     """
     const = batch['constituents'][obj_name]
-    x_categ = const['categorical'].to(device)   # (B, C, F_cat)
-    x_cont = const['continuous'].to(device)     # (B, C, F_con)
-    valid = const['valid'].to(device)           # (B, C)
+    x_categ = const['categorical'].to(device)  # (B, C, F_cat)
+    x_cont = const['continuous'].to(device)  # (B, C, F_con)
+    valid = const['valid'].to(device)  # (B, C)
 
     B, C = valid.shape
     valids_flat = rearrange(valid, 'b c -> (b c)')
@@ -169,11 +169,7 @@ def evaluate(
     if _ckpt is None:
         raise ValueError('ckpt_path must be provided either as argument or in cfg.')
 
-    _eval_file = (
-        eval_file
-        or cfg.get('test_file')
-        or cfg.get('pretrain_val_file')
-    )
+    _eval_file = eval_file or cfg.get('test_file') or cfg.get('pretrain_val_file')
     if _eval_file is None:
         raise ValueError(
             'No eval file found. Set pretrain_val_file or test_file in cfg, '
@@ -236,12 +232,10 @@ def evaluate(
 
         # Stop early once we have enough samples everywhere.
         enough_tracks = all(
-            sum(t.size(0) for t in v) >= max_track_samples
-            for v in track_store.values()
+            sum(t.size(0) for t in v) >= max_track_samples for v in track_store.values()
         )
         enough_jets = all(
-            sum(t.size(0) for t in v) >= max_jet_samples
-            for v in jet_store.values()
+            sum(t.size(0) for t in v) >= max_jet_samples for v in jet_store.values()
         )
         if enough_tracks and enough_jets:
             break

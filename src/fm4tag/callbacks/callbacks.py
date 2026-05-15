@@ -41,7 +41,9 @@ class MemoryMonitorCallback(Callback):
             pl_module.log_dict(self._mem_stats(), on_step=True, on_epoch=False)
 
     def on_validation_epoch_end(self, trainer, pl_module) -> None:
-        pl_module.log_dict(self._mem_stats(), on_step=False, on_epoch=True, sync_dist=True)
+        pl_module.log_dict(
+            self._mem_stats(), on_step=False, on_epoch=True, sync_dist=True
+        )
 
 
 class _PrecisionProgressBar(TQDMProgressBar):

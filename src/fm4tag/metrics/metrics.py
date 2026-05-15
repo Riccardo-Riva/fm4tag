@@ -38,7 +38,9 @@ def effective_rank(z: torch.Tensor) -> float:
 
 
 @torch.no_grad()
-def uniformity(z: torch.Tensor, t: float = 2.0, max_samples: int = 4096) -> torch.Tensor:
+def uniformity(
+    z: torch.Tensor, t: float = 2.0, max_samples: int = 4096
+) -> torch.Tensor:
     """Uniformity metric (Wang & Isola, NeurIPS 2020).
 
     Measures how uniformly embeddings are spread on the unit hypersphere.

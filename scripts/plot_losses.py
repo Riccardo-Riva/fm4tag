@@ -21,7 +21,9 @@ def main() -> None:
         description='Plot train/val loss vs epoch from a Lightning metrics.csv.'
     )
     parser.add_argument('--file', type=Path, required=True, help='Path to metrics.csv')
-    parser.add_argument('--outdir', type=Path, required=True, help='Directory to store the output plot')
+    parser.add_argument(
+        '--outdir', type=Path, required=True, help='Directory to store the output plot'
+    )
     args = parser.parse_args()
 
     out_dir: Path = args.outdir.resolve()
@@ -36,10 +38,22 @@ def main() -> None:
     val = val.groupby('epoch', as_index=False)['val_loss'].mean()
 
     fig, ax = plt.subplots(figsize=(7, 4))
-    ax.plot(train['epoch'], train['train_loss_epoch'],
-            marker='o', markersize=3, linewidth=1.5, label='train loss')
-    ax.plot(val['epoch'], val['val_loss'],
-            marker='s', markersize=3, linewidth=1.5, label='val loss')
+    ax.plot(
+        train['epoch'],
+        train['train_loss_epoch'],
+        marker='o',
+        markersize=3,
+        linewidth=1.5,
+        label='train loss',
+    )
+    ax.plot(
+        val['epoch'],
+        val['val_loss'],
+        marker='s',
+        markersize=3,
+        linewidth=1.5,
+        label='val loss',
+    )
     ax.set_xlabel('Epoch')
     ax.set_ylabel('Loss')
     ax.set_title('Train / Val loss')

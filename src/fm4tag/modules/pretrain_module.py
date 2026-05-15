@@ -232,16 +232,20 @@ class PretrainModule(L.LightningModule):
                 continue
 
             if obj_name == self.global_object:
-                X = encoder(batch['global'])        # (B, F_g, dim)
-                z = encoder.pt_mlp1(X.flatten(1))   # (B, proj_dim)
+                X = encoder(batch['global'])  # (B, F_g, dim)
+                z = encoder.pt_mlp1(X.flatten(1))  # (B, proj_dim)
             else:
                 const = batch['constituents'][obj_name]
                 valids_flat = rearrange(const['valid'], 'b c -> (b c)')
-                x_categ_flat = rearrange(const['categorical'], 'b c f -> (b c) f')[valids_flat]
-                x_cont_flat = rearrange(const['continuous'], 'b c f -> (b c) f')[valids_flat]
+                x_categ_flat = rearrange(const['categorical'], 'b c f -> (b c) f')[
+                    valids_flat
+                ]
+                x_cont_flat = rearrange(const['continuous'], 'b c f -> (b c) f')[
+                    valids_flat
+                ]
                 x_cat_enc, x_con_enc = embed_data(x_categ_flat, x_cont_flat, encoder)
-                X = encoder(x_cat_enc, x_con_enc)       # (N_valid, F, dim)
-                z = encoder.pt_mlp1(X.flatten(1, 2))    # (N_valid, proj_dim)
+                X = encoder(x_cat_enc, x_con_enc)  # (N_valid, F, dim)
+                z = encoder.pt_mlp1(X.flatten(1, 2))  # (N_valid, proj_dim)
 
             remaining = n_max - already
             store[obj_name].append(z[:remaining].detach().cpu())
@@ -394,7 +398,9 @@ class PretrainModule(L.LightningModule):
         self._log_metrics(log_dict, 'train')
         self._accumulate(self._train_acc, log_dict)
         eval_cfg = self.cfg.get('eval', {})
-        if eval_cfg.get('enabled', False) and 'train' in eval_cfg.get('splits', ['val']):
+        if eval_cfg.get('enabled', False) and 'train' in eval_cfg.get(
+            'splits', ['val']
+        ):
             self._accumulate_embeddings(batch, self._train_emb_acc)
         return loss
 
@@ -417,7 +423,9 @@ class PretrainModule(L.LightningModule):
         self.print(self._format_epoch_table('Train', avgs))
         self._train_acc.clear()
         eval_cfg = self.cfg.get('eval', {})
-        if eval_cfg.get('enabled', False) and 'train' in eval_cfg.get('splits', ['val']):
+        if eval_cfg.get('enabled', False) and 'train' in eval_cfg.get(
+            'splits', ['val']
+        ):
             self._compute_and_log_embedding_metrics(self._train_emb_acc, 'train')
 
     def on_validation_epoch_end(self) -> None:
