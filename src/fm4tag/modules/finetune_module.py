@@ -1,7 +1,7 @@
 """Supervised fine-tuning Lightning module.
 
 Wraps a :class:`~torch.nn.ModuleDict` of pretrained (or randomly initialised)
-encoders and a :class:`~fm4tag.models.components.heads.MultiStreamClassifierHead`
+encoders and a :class:`~fm4tag.models.heads.MultiStreamClassifierHead`
 into a full Lightning module that supports:
 
 * ``fit``     — supervised training (with optional encoder freezing /
@@ -27,9 +27,9 @@ from omegaconf import DictConfig
 from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
 from torchmetrics.classification import MulticlassAUROC
 
-from .components.eval_metrics import effective_rank, uniformity
-from .components.heads import MultiStreamClassifierHead
-from ..data.augmentations import embed_data
+from ..metrics.metrics import effective_rank, uniformity
+from ..models.heads import MultiStreamClassifierHead
+from ..augmentations.augmentations import embed_data
 
 
 class FinetuneModule(L.LightningModule):

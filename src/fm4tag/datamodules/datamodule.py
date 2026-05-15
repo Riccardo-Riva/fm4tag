@@ -2,7 +2,7 @@ import lightning as L
 from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import DataLoader
 
-from .datasets import DatasetCatCon, cat_con_collate_fn
+from ..datasets.datasets import DatasetCatCon, cat_con_collate_fn
 
 
 class PT_FT_DataModule(L.LightningDataModule):

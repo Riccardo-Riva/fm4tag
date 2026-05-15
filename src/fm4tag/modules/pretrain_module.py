@@ -31,10 +31,10 @@ from einops import rearrange
 from omegaconf import DictConfig
 from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
 
-from .components.encoder import Encoder, GlobalEncoder
-from .components.eval_metrics import effective_rank, uniformity
-from .components.losses import DenoisingLoss, InfoNCELoss
-from ..data.augmentations import add_noise, embed_data, mixup_data
+from ..models.encoder import Encoder, GlobalEncoder
+from ..metrics.metrics import effective_rank, uniformity
+from ..losses.losses import DenoisingLoss, InfoNCELoss
+from ..augmentations.augmentations import add_noise, embed_data, mixup_data
 
 
 class PretrainModule(L.LightningModule):
