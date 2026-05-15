@@ -35,6 +35,7 @@ from ..models.encoder import Encoder, GlobalEncoder
 from ..metrics.metrics import effective_rank, uniformity
 from ..losses.losses import DenoisingLoss, InfoNCELoss
 from ..augmentations.augmentations import add_noise, embed_data, mixup_data
+from ..utils.ddp import gather_embeddings_sized
 
 
 class PretrainModule(L.LightningModule):
@@ -265,23 +266,11 @@ class PretrainModule(L.LightningModule):
             chunks = store.get(obj_name, [])
             z_local = torch.cat(chunks, dim=0) if chunks else None  # (N_local, D) CPU
 
-            if self.trainer.world_size > 1:
-                # All ranks report their local size.  This collective also acts as
-                # a barrier so that no rank skips the subsequent all_gather.
-                n_local = torch.tensor(
-                    [z_local.size(0) if z_local is not None else 0],
-                    device=self.device,
-                )
-                all_n = self.all_gather(n_local).view(-1)  # (world_size,)
-                n_min = int(all_n.min().item())
-                if n_min == 0:
-                    continue  # at least one rank has no data — all ranks skip
-                # Trim to the minimum size so all_gather receives same-shaped tensors.
-                z = self.all_gather(z_local[:n_min].to(self.device)).flatten(0, 1).cpu()
-            else:
-                if z_local is None:
-                    continue
-                z = z_local
+            z = gather_embeddings_sized(
+                z_local, self.trainer.world_size, self.all_gather, self.device
+            )
+            if z is None:
+                continue
 
             if eval_cfg.get('log_uniformity', True):
                 u = uniformity(z)

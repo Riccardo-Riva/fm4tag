@@ -24,6 +24,7 @@ fm4tag-eval = "fm4tag.eval_encoder:main"
 [dependency-groups]
 dev = [
     "pytest>=9.0.2",
+    "pytest-timeout>=2.3.1",
     "ruff>=0.14.11",
     "setuptools<71",
 ]
@@ -31,6 +32,11 @@ dev = [
 [build-system]
 requires = ["uv_build>=0.8.17,<0.9.0"]
 build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+markers = [
+    "ddp: mark test as requiring a DDP process group (gloo backend, CPU-only)",
+]
 
 [tool.ruff.format]
 quote-style = "single"
