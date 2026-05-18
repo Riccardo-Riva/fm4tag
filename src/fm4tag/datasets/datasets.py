@@ -116,9 +116,10 @@ class DatasetCatCon(Dataset):
                 'mean': torch.tensor(
                     [obj_norm[f]['mean'] for f in features], dtype=torch.float32
                 ),
+                # Pre-clamped so __getitem__ can divide directly without per-sample ops.
                 'std': torch.tensor(
                     [obj_norm[f]['std'] for f in features], dtype=torch.float32
-                ),
+                ).clamp(min=1e-8),
             }
 
     # ------------------------------------------------------------------
@@ -138,52 +139,35 @@ class DatasetCatCon(Dataset):
         if self.file is None:
             self._open_file()
 
-        # Label
-        label = torch.tensor(self.g_dset[idx][self.label_name], dtype=torch.long)
+        # Single read per object — h5py dataset[idx] is a disk access each time.
+        g_record = self.g_dset[idx]
+        label = torch.tensor(g_record[self.label_name], dtype=torch.long)
 
         # Global features (all numerical, shape: (F_g,))
         X_g = torch.from_numpy(
-            s2u(
-                self.g_dset[idx][self.variables[self.global_object].inputs],
-                dtype=None,
-            )
+            s2u(g_record[self.variables[self.global_object].inputs], dtype=None)
         ).float()
 
         if self.global_object in self._norm:
-            mean = self._norm[self.global_object]['mean']
-            std = self._norm[self.global_object]['std']
-            X_g = (X_g - mean) / std.clamp(min=1e-8)
+            norm = self._norm[self.global_object]
+            X_g = (X_g - norm['mean']) / norm['std']
 
         # Constituent features, one dict entry per object
         constituents = {}
         for obj_name in self.constituent_objects:
+            c_record = self.c_dsets[obj_name][idx]
             X_cat = torch.from_numpy(
-                s2u(
-                    self.c_dsets[obj_name][idx][
-                        self.variables[obj_name].inputs.categorical
-                    ],
-                    dtype=None,
-                )
+                s2u(c_record[self.variables[obj_name].inputs.categorical], dtype=None)
             )
-
             X_con = torch.from_numpy(
-                s2u(
-                    self.c_dsets[obj_name][idx][
-                        self.variables[obj_name].inputs.continuous
-                    ],
-                    dtype=None,
-                )
+                s2u(c_record[self.variables[obj_name].inputs.continuous], dtype=None)
             ).float()
 
-            # Normalise continuous features with pre-computed tensors
             if obj_name in self._norm:
-                mean = self._norm[obj_name]['mean']
-                std = self._norm[obj_name]['std']
-                X_con = (X_con - mean) / std.clamp(
-                    min=1e-8
-                )  # avoid div by zero (limits values in a tensor)
+                norm = self._norm[obj_name]
+                X_con = (X_con - norm['mean']) / norm['std']
 
-            valid = torch.from_numpy(self.c_dsets[obj_name][idx]['valid'])
+            valid = torch.from_numpy(c_record['valid'])
 
             constituents[obj_name] = {
                 'categorical': X_cat,  # (N, F_cat)
