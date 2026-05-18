@@ -71,7 +71,7 @@ class CatConDataModule(L.LightningDataModule):
             collate_fn=cat_con_collate_fn,
             prefetch_factor=self._prefetch_factor if self._num_workers > 0 else None,
             # Keep workers alive between epochs so HDF5 handles are not reopened.
-            persistent_workers=self._num_workers > 0,
+            persistent_workers=False, #self._num_workers > 0,
             pin_memory=self._pin_memory,
         )
 
