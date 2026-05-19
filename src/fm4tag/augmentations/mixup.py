@@ -13,10 +13,9 @@ from __future__ import annotations
 
 import torch
 
-from .base import Augmentation, Stage, register
+from .base import Augmentation, Stage
 
 
-@register('mixup')
 class Mixup(Augmentation):
     """Linear interpolation of embedded tokens with a shuffled batch copy.
 

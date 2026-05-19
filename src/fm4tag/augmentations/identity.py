@@ -12,10 +12,9 @@ from __future__ import annotations
 
 import torch
 
-from .base import Augmentation, Stage, register
+from .base import Augmentation, Stage
 
 
-@register('identity')
 class Identity(Augmentation):
     """No-op augmentation."""
 

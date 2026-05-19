@@ -32,6 +32,7 @@ from enum import Enum
 from typing import ClassVar
 
 import torch
+from hydra.utils import instantiate
 from torch import nn
 
 
@@ -145,55 +146,22 @@ class Compose(nn.Module):
         return '\n'.join(lines)
 
 
-# ---------------------------------------------------------------------------
-# Registry — maps config-string names to Augmentation classes
-# ---------------------------------------------------------------------------
-
-_REGISTRY: dict[str, type[Augmentation]] = {}
-
-
-def register(name: str):
-    """Class decorator that registers an :class:`Augmentation` subclass under
-    ``name`` so it can be looked up from a YAML config."""
-
-    def _decorator(cls: type[Augmentation]) -> type[Augmentation]:
-        if name in _REGISTRY:
-            raise ValueError(
-                f'Augmentation {name!r} is already registered '
-                f'(existing: {_REGISTRY[name].__name__})'
-            )
-        _REGISTRY[name] = cls
-        return cls
-
-    return _decorator
-
-
-def get(name: str) -> type[Augmentation]:
-    """Look up a registered :class:`Augmentation` class by its config name."""
-    if name not in _REGISTRY:
-        available = ', '.join(sorted(_REGISTRY))
-        raise KeyError(
-            f'Augmentation {name!r} not in registry. Available: {available}'
-        )
-    return _REGISTRY[name]
-
-
 def build_from_config(
     aug_configs: list[dict] | None,
 ) -> Compose:
-    """Build a :class:`Compose` from a list of config entries.
+    """Build a :class:`Compose` from a list of Hydra-style config entries.
 
-    Each entry must have a ``name`` key matching a registered augmentation;
-    any other keys are passed as ``__init__`` kwargs.
+    Each entry must have a ``_target_`` key with the fully-qualified class
+    path; any other keys are passed as ``__init__`` kwargs.
 
     Example YAML::
 
         augmentations:
-          - name: track_dropout
+          - _target_: fm4tag.augmentations.TrackDropout
             drop_prob: 0.15
-          - name: cutmix
+          - _target_: fm4tag.augmentations.CutMix
             lam: 0.7
-          - name: gaussian_noise
+          - _target_: fm4tag.augmentations.GaussianNoise
             space: embedding
             sigma: 0.05
 
@@ -201,10 +169,4 @@ def build_from_config(
     """
     if not aug_configs:
         return Compose([])
-    built: list[Augmentation] = []
-    for entry in aug_configs:
-        entry = dict(entry)  # local copy — don't mutate the omegaconf node
-        name = entry.pop('name')
-        cls = get(name)
-        built.append(cls(**entry))
-    return Compose(built)
+    return Compose([instantiate(cfg) for cfg in aug_configs])

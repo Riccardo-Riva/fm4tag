@@ -14,11 +14,9 @@ from __future__ import annotations
 
 import torch
 
-from .base import Augmentation, Stage, register
+from .base import Augmentation, Stage
 
 
-@register('track_dropout')
-@register('constituent_dropout')
 class TrackDropout(Augmentation):
     """Drop a random subset of valid constituents per jet.
 

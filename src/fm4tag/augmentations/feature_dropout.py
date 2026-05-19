@@ -16,11 +16,9 @@ from __future__ import annotations
 
 import torch
 
-from .base import Augmentation, Stage, register
+from .base import Augmentation, Stage
 
 
-@register('feature_dropout')
-@register('scarf')
 class FeatureDropout(Augmentation):
     """Random per-feature resampling from the batch marginal.
 
