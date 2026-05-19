@@ -50,7 +50,7 @@ from einops import rearrange
 from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import DataLoader
 
-from fm4tag.augmentations.augmentations import embed_data
+from fm4tag.models.encoder import embed_data
 from fm4tag.datasets.datasets import DatasetCatCon, cat_con_collate_fn
 from fm4tag.cli.engine import _build_encoders, _load_pretrained_encoders
 from fm4tag.metrics.metrics import effective_rank, uniformity

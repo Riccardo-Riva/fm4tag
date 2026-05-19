@@ -60,8 +60,7 @@ from fm4tag.callbacks.callbacks import MemoryMonitorCallback, _PrecisionProgress
 from fm4tag.datamodules.datamodule import PT_FT_DataModule
 from fm4tag.modules.finetune_module import FinetuneModule
 from fm4tag.modules.pretrain_module import PretrainModule
-from fm4tag.models.encoder import Encoder, GlobalEncoder
-from fm4tag.models.heads import MultiStreamClassifierHead
+from fm4tag.utils import instantiate
 
 
 # ---------------------------------------------------------------------------
@@ -72,44 +71,29 @@ from fm4tag.models.heads import MultiStreamClassifierHead
 def _build_encoders(cfg: DictConfig) -> torch.nn.ModuleDict:
     """Build one encoder per object (global + all constituents).
 
-    Returns a :class:`~torch.nn.ModuleDict` keyed by object name:
+    Returns a :class:`~torch.nn.ModuleDict` keyed by object name.  Each encoder
+    is built via ``instantiate`` from its config section:
 
-    * ``cfg.global_object``      → :class:`GlobalEncoder` (per-feature MLP)
-    * each ``cfg.constituent_objects`` → :class:`Encoder` (transformer)
+    * ``cfg.global_encoder``      → :class:`~fm4tag.models.GlobalEncoder`
+    * ``cfg.encoder``             → :class:`~fm4tag.models.Encoder` (one per
+                                    constituent type, with data-driven
+                                    ``categories`` and ``num_continuous``
+                                    injected at runtime)
     """
-    enc_cfg = cfg.encoder
     encoders: dict[str, torch.nn.Module] = {}
 
-    # ── Global encoder (continuous-only, MLP) ────────────────────────────────
     global_name = cfg.global_object
     n_global = len(cfg.variables[global_name].inputs)
-    encoders[global_name] = GlobalEncoder(
-        num_features=n_global,
-        dim=enc_cfg.dim,
-    )
+    encoders[global_name] = instantiate(cfg.global_encoder, num_features=n_global)
 
-    # ── Constituent encoders (transformer) ───────────────────────────────────
     for obj_name in cfg.constituent_objects:
         obj_vars = cfg.variables[obj_name].inputs
         categories = [len(classes) for classes in obj_vars.cat_classes.values()]
         num_continuous = len(obj_vars.continuous)
-        encoders[obj_name] = Encoder(
+        encoders[obj_name] = instantiate(
+            cfg.encoder,
             categories=categories,
             num_continuous=num_continuous,
-            dim=enc_cfg.dim,
-            depth=enc_cfg.depth,
-            col_heads=enc_cfg.get('col_heads', 8),
-            row_heads=enc_cfg.get('row_heads', 8),
-            dim_head=enc_cfg.get('dim_head', 16),
-            dim_row_head=enc_cfg.get('dim_row_head', 64),
-            attn_dropout=enc_cfg.get('attn_dropout', 0.0),
-            ff_dropout=enc_cfg.get('ff_dropout', 0.0),
-            ff_mult=enc_cfg.get('ff_mult', 1),
-            cont_embeddings=enc_cfg.get('cont_embeddings', 'MLP'),
-            attentiontype=enc_cfg.get('attentiontype', 'col'),
-            final_mlp_style=enc_cfg.get('final_mlp_style', 'sep'),
-            proj_hidden=enc_cfg.get('proj_hidden', None),
-            proj_out=enc_cfg.get('proj_out', None),
         )
 
     return torch.nn.ModuleDict(encoders)
@@ -134,7 +118,6 @@ def _load_pretrained_encoders(
     state = ckpt.get('state_dict', ckpt)
 
     for obj_name, encoder in encoders.items():
-        # Try new format: encoders.<obj_name>.*
         prefix_new = f'encoders.{obj_name}.'
         enc_state = {
             k[len(prefix_new) :]: v
@@ -142,7 +125,6 @@ def _load_pretrained_encoders(
             if k.startswith(prefix_new)
         }
 
-        # Fall back to legacy single-encoder format: encoder.*
         if not enc_state:
             prefix_old = 'encoder.'
             enc_state = {
@@ -174,23 +156,17 @@ def _build_callbacks(cfg: DictConfig, phase: str) -> list:
     cb_cfg = cfg.get('callbacks', {})
     callbacks = []
 
-    # Choose the right monitor metric.  Fall back to train/loss when no
-    # validation file is configured for the current phase.
     _val_key = 'pretrain_val_file' if phase == 'pretrain' else 'val_file'
     _has_val = bool(cfg.get(_val_key))
     _default_monitor = 'val_loss' if _has_val else 'train_loss'
 
-    # ── ModelSummary ────────────────────────────────────────────────────────
     ms = cb_cfg.get('model_summary', {})
     callbacks.append(ModelSummary(max_depth=ms.get('max_depth', 2)))
 
-    # ── ProgressBar ──────────────────────────────────────────────────────────
     pb = cb_cfg.get('progress_bar', {})
     callbacks.append(_PrecisionProgressBar(refresh_rate=pb.get('refresh_rate', 50)))
 
-    # ── ModelCheckpoint ──────────────────────────────────────────────────────
     ckpt = cb_cfg.get('model_checkpoint', {})
-    # When there is no val set, force train/loss regardless of the config value.
     _ckpt_monitor = (
         _default_monitor if not _has_val else ckpt.get('monitor', _default_monitor)
     )
@@ -206,7 +182,6 @@ def _build_callbacks(cfg: DictConfig, phase: str) -> list:
         )
     )
 
-    # ── EarlyStopping ────────────────────────────────────────────────────────
     es = cb_cfg.get('early_stopping', {})
     _es_monitor = (
         _default_monitor if not _has_val else es.get('monitor', _default_monitor)
@@ -218,15 +193,12 @@ def _build_callbacks(cfg: DictConfig, phase: str) -> list:
             mode=es.get('mode', 'min'),
             verbose=True,
             check_finite=True,
-            # When monitoring a train metric there is no validation loop to hook into.
             check_on_train_epoch_end=not _has_val,
         )
     )
 
-    # ── LearningRateMonitor ───────────────────────────────────────────────────
     callbacks.append(LearningRateMonitor(logging_interval='step'))
 
-    # ── MemoryMonitor ────────────────────────────────────────────────────────
     mm = cb_cfg.get('memory_monitor', {})
     if mm.get('enabled', False):
         log_every = mm.get(
@@ -234,7 +206,6 @@ def _build_callbacks(cfg: DictConfig, phase: str) -> list:
         )
         callbacks.append(MemoryMonitorCallback(log_every_n_steps=log_every))
 
-    # ── BackboneFinetuning (finetune phase + freeze_encoder only) ────────────
     if phase == 'finetune' and cfg.get('freeze_encoder', False):
         bf = cb_cfg.get('backbone_finetuning', {})
         if bf.get('enabled', True):
@@ -282,18 +253,15 @@ def _build_profiler(cfg: DictConfig):
     row_limit = p_cfg.get('row_limit', 25)
 
     if ptype == 'simple':
-        # Saves a human-readable table to <log_dir>/profiler-simple.txt
         return SimpleProfiler(filename='profiler-simple', extended=True)
 
     if ptype == 'advanced':
-        # Saves cProfile output to <log_dir>/profiler-advanced.txt
         return AdvancedProfiler(
             filename='profiler-advanced',
             line_count_restriction=row_limit,
         )
 
     if ptype == 'pytorch':
-        # Saves a Chrome trace to <log_dir>/profiler-pytorch.json (or .txt table)
         return PyTorchProfiler(
             filename='profiler-pytorch',
             export_to_chrome=p_cfg.get('export_to_chrome', True),
@@ -349,7 +317,6 @@ def run(
     torch.set_float32_matmul_precision('high')
     L.seed_everything(cfg.get('seed', 42), workers=True)
 
-    # ── Logger ────────────────────────────────────────────────────────────────
     tb_logger = TensorBoardLogger(
         save_dir=cfg.get('output_dir', 'outputs'),
         name=cfg.get('experiment_name', 'fm4tag'),
@@ -368,15 +335,12 @@ def run(
         _f.write(OmegaConf.to_yaml(cfg, resolve=True))
     """
 
-    # ── Callbacks ─────────────────────────────────────────────────────────────
     callbacks = _build_callbacks(cfg, _phase)
     if extra_callbacks:
         callbacks.extend(extra_callbacks)
 
-    # ── Profiler ──────────────────────────────────────────────────────────────
     profiler = _build_profiler(cfg)
 
-    # ── Trainer ───────────────────────────────────────────────────────────────
     trainer_kwargs = OmegaConf.to_container(cfg.trainer, resolve=True)
     trainer = L.Trainer(
         callbacks=callbacks,
@@ -385,10 +349,8 @@ def run(
         **trainer_kwargs,
     )
 
-    # ── Data module ───────────────────────────────────────────────────────────
     dm = PT_FT_DataModule(cfg, phase=_phase)
 
-    # ── Lightning module ──────────────────────────────────────────────────────
     if _phase == 'pretrain':
         encoders = _build_encoders(cfg)
         module: L.LightningModule = PretrainModule(encoders, cfg)
@@ -399,59 +361,27 @@ def run(
         if _enc_ckpt is not None:
             _load_pretrained_encoders(encoders, _enc_ckpt)
 
-        head_cfg = cfg.head
-        enc_cfg = cfg.encoder
         n_classes = len(cfg.variables[cfg.global_object].unique_labels)
 
-        # Infer pt_mlp1 output dimensions from the encoder architecture.
-        # These match the formulas in GlobalEncoder and Encoder exactly.
-        n_global = len(cfg.variables[cfg.global_object].inputs)
-        global_proj_out = n_global * enc_cfg.dim  # GlobalEncoder: out = proj_in
+        # Read projection dimensions directly from the built encoders.
+        global_proj_out = encoders[cfg.global_object].pt_mlp1.layers[-1].out_features
+        const_proj_outs = [
+            encoders[obj_name].pt_mlp1.layers[-1].out_features
+            for obj_name in cfg.constituent_objects
+        ]
 
-        const_proj_outs = []
-        for obj_name in cfg.constituent_objects:
-            n_feat = len(cfg.variables[obj_name].inputs.continuous) + len(
-                cfg.variables[obj_name].inputs.categorical
-            )
-            proj_in = n_feat * enc_cfg.dim
-            _proj_out = enc_cfg.get('proj_out') or proj_in // 2
-            const_proj_outs.append(_proj_out)
-
-        head = MultiStreamClassifierHead(
+        head = instantiate(
+            cfg.head,
             global_proj_out=global_proj_out,
             const_proj_outs=const_proj_outs,
             y_dim=n_classes,
-            mlp_dropout=head_cfg.get('mlp_dropout', 0.0),
-            ff_dropout=head_cfg.get('ff_dropout', 0.0),
-            attn_dropout=head_cfg.get('attn_dropout', 0.0),
-            ff_mult=head_cfg.get('ff_mult', 4),
-            heads=head_cfg.get('heads', 8),
-            dim_head=head_cfg.get('dim_head', 16),
-            depth=head_cfg.get('depth', 3),
         )
-
-        # Assert that the inferred projection dimensions match the actual
-        # encoder pt_mlp1 output sizes.
-        enc_global_out = encoders[cfg.global_object].pt_mlp1.layers[-1].out_features
-        assert enc_global_out == global_proj_out, (
-            f'GlobalEncoder.pt_mlp1 output ({enc_global_out}) does not match '
-            f'inferred global_proj_out ({global_proj_out}). '
-            'Check encoder.dim / n_global_features.'
-        )
-        for i, obj_name in enumerate(cfg.constituent_objects):
-            enc_out = encoders[obj_name].pt_mlp1.layers[-1].out_features
-            assert enc_out == const_proj_outs[i], (
-                f'Encoder.pt_mlp1 output for {obj_name!r} ({enc_out}) does not '
-                f'match inferred const_proj_outs[{i}] ({const_proj_outs[i]}). '
-                'Check encoder.proj_out / n_features.'
-            )
 
         module = FinetuneModule(encoders, head, cfg)
 
     else:
         raise ValueError(f"phase must be 'pretrain' or 'finetune', got {_phase!r}")
 
-    # ── Dispatch ──────────────────────────────────────────────────────────────
     # weights_only=False: checkpoints saved by older Lightning embed omegaconf
     # objects (DictConfig, ContainerMetadata, …) which PyTorch 2.6+ rejects
     # under the new weights_only=True default.  The checkpoints are our own

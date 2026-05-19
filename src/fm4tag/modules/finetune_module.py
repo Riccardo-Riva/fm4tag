@@ -29,7 +29,7 @@ from torchmetrics.classification import MulticlassAUROC
 
 from ..metrics.metrics import effective_rank, uniformity
 from ..models.heads import MultiStreamClassifierHead
-from ..augmentations.augmentations import embed_data
+from ..models.encoder import embed_data
 from ..utils.ddp import gather_embeddings_sized
 
 

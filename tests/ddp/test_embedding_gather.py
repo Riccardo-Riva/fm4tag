@@ -72,6 +72,7 @@ def _make_cfg():
 
 def _make_encoders():
     from fm4tag.models.encoder import Encoder, GlobalEncoder
+    from fm4tag.models.transformer_blocks import ColBlock
 
     return torch.nn.ModuleDict(
         {
@@ -80,9 +81,7 @@ def _make_encoders():
                 categories=[2, 3],
                 num_continuous=2,
                 dim=4,
-                depth=1,
-                col_heads=1,
-                row_heads=1,
+                transformer_layers=[ColBlock(dim=4, heads=1, dim_head=4)],
             ),
         }
     )
@@ -116,7 +115,9 @@ def _worker_basic_gather(rank: int, world_size: int) -> None:
     all_sums = [torch.zeros(1) for _ in range(world_size)]
     dist.all_gather(all_sums, my_sum)
     for s in all_sums:
-        assert abs(s.item() - my_sum.item()) < 1e-4, 'gathered tensor differs across ranks'
+        assert abs(s.item() - my_sum.item()) < 1e-4, (
+            'gathered tensor differs across ranks'
+        )
 
 
 @pytest.mark.ddp
@@ -208,7 +209,9 @@ def _worker_pretrain_e2e(rank: int, world_size: int) -> None:
     module = PretrainModule(encoders, cfg)
 
     # Wire up a minimal trainer stub (reads from _trainer in Lightning 2.x).
-    module._trainer = SimpleNamespace(world_size=world_size, sanity_checking=False, current_epoch=0)
+    module._trainer = SimpleNamespace(
+        world_size=world_size, sanity_checking=False, current_epoch=0
+    )
 
     # Capture logged values.
     logged: dict[str, float] = {}

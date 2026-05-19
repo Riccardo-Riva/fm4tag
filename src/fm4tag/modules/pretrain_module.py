@@ -34,7 +34,7 @@ from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
 from ..models.encoder import Encoder, GlobalEncoder
 from ..metrics.metrics import effective_rank, uniformity
 from ..losses.losses import DenoisingLoss, InfoNCELoss
-from ..augmentations.augmentations import add_noise, embed_data, mixup_data
+from ..models.encoder import embed_data
 from ..utils.ddp import gather_embeddings_sized
 
 
@@ -87,7 +87,11 @@ class PretrainModule(L.LightningModule):
 
         # ── Corrupted view 2 ────────────────────────────────────────────────
         if 'cutmix' in cfg_pt.aug:
-            _, x_global_2 = add_noise(None, x_global, lam=cfg_pt.aug_lambda)
+            idx = torch.randperm(x_global.size(0), device=x_global.device)
+            keep = torch.bernoulli(
+                (1.0 - cfg_pt.aug_lambda) * torch.ones_like(x_global)
+            ).bool()
+            x_global_2 = torch.where(keep, x_global, x_global[idx])
         else:
             x_global_2 = x_global
 
@@ -141,7 +145,14 @@ class PretrainModule(L.LightningModule):
 
         # ── Corrupted view 2 ────────────────────────────────────────────────
         if 'cutmix' in cfg_pt.aug:
-            x_categ_2, x_cont_2 = add_noise(x_categ, x_cont, lam=cfg_pt.aug_lambda)
+            lam = cfg_pt.aug_lambda
+            idx = torch.randperm(x_cont.size(0), device=x_cont.device)
+            cat_keep = torch.bernoulli(
+                (1.0 - lam) * torch.ones(x_categ.shape, dtype=torch.float, device=x_categ.device)
+            ).bool()
+            x_categ_2 = torch.where(cat_keep, x_categ, x_categ[idx])
+            con_keep = torch.bernoulli((1.0 - lam) * torch.ones_like(x_cont)).bool()
+            x_cont_2 = torch.where(con_keep, x_cont, x_cont[idx])
         else:
             x_categ_2, x_cont_2 = x_categ, x_cont
 
@@ -151,9 +162,10 @@ class PretrainModule(L.LightningModule):
 
         # ── Mixup in embedding space (applied to view 2) ─────────────────────
         if 'mixup' in cfg_pt.aug:
-            x_cat_enc_2, x_con_enc_2 = mixup_data(
-                x_cat_enc_2, x_con_enc_2, lam=cfg_pt.aug_lambda
-            )
+            lam = cfg_pt.aug_lambda
+            idx = torch.randperm(x_cat_enc_2.size(0), device=x_cat_enc_2.device)
+            x_cat_enc_2 = lam * x_cat_enc_2 + (1.0 - lam) * x_cat_enc_2[idx]
+            x_con_enc_2 = lam * x_con_enc_2 + (1.0 - lam) * x_con_enc_2[idx]
 
         # ── Encode both views ─────────────────────────────────────────────────
         X_1 = encoder(x_cat_enc_1, x_con_enc_1)  # (N_valid, F, dim)

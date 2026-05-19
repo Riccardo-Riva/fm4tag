@@ -76,25 +76,68 @@ dataloader:
   prefetch_factor: 2
   pin_memory:      true
 
-# ── Encoder architecture ─────────────────────────────────────────────────────
+# ── Global encoder (continuous-only, per-feature MLP) ────────────────────────
+global_encoder:
+  _target_: fm4tag.models.GlobalEncoder
+  dim: 64   # num_features injected at runtime from variables.jets.inputs
+
+# ── Constituent encoder architecture ─────────────────────────────────────────
+# transformer_layers is a flat list of _target_ block entries, mirroring the
+# augmentation config pattern.  Each block is one depth step.
+#
+# nfeats must equal len(tracks.inputs.categorical) + len(tracks.inputs.continuous)
+# for any row-aware block (RowBlock, RowColBlock).  For tracks: 9 + 10 = 19.
+#
+# Swap a single layer from the CLI, e.g.:
+#   fm4tag encoder.transformer_layers.0._target_=fm4tag.models.ColBlock \
+#          encoder.transformer_layers.0.heads=4
 encoder:
+  _target_: fm4tag.models.Encoder
   dim:              64
-  depth:            3
-  col_heads:        2
-  row_heads:        8
-  dim_head:         32
-  dim_row_head:     32
-  attn_dropout:     0.0
-  ff_dropout:       0.0
-  ff_mult:          1
-  cont_embeddings:  MLP    # MLP | pos_singleMLP | Noemb
-  attentiontype:    colrow    # col | colrow | row | concat
+  cont_embeddings:  MLP    # MLP | pos_singleMLP
   final_mlp_style:  sep    # sep | common
-  proj_hidden:      256   # null → auto (3/4 × dim × n_tokens); set int to override
-  proj_out:         128   # null → auto (1/2 × dim × n_tokens); set int to override
+  proj_hidden:      256    # null → auto (3/4 × dim × n_tokens)
+  proj_out:         128    # null → auto (1/2 × dim × n_tokens)
+  # categories and num_continuous are injected at runtime from variables.tracks
+  transformer_layers:
+    - _target_:      fm4tag.models.RowColBlock
+      dim:           64
+      nfeats:        19       # tracks: 9 cat + 10 con
+      col_heads:     2
+      row_heads:     8
+      dim_head:      32
+      dim_row_head:  32
+      ff_mult:       1
+      attn_dropout:  0.0
+      ff_dropout:    0.0
+      chunk_size:    null     # null = whole-batch row attention
+    - _target_:      fm4tag.models.RowColBlock
+      dim:           64
+      nfeats:        19
+      col_heads:     2
+      row_heads:     8
+      dim_head:      32
+      dim_row_head:  32
+      ff_mult:       1
+      attn_dropout:  0.0
+      ff_dropout:    0.0
+      chunk_size:    null
+    - _target_:      fm4tag.models.RowColBlock
+      dim:           64
+      nfeats:        19
+      col_heads:     2
+      row_heads:     8
+      dim_head:      32
+      dim_row_head:  32
+      ff_mult:       1
+      attn_dropout:  0.0
+      ff_dropout:    0.0
+      chunk_size:    null
 
 # ── Classifier head (finetune only) ──────────────────────────────────────────
+# global_proj_out, const_proj_outs, y_dim are injected at runtime from encoders
 head:
+  _target_: fm4tag.models.MultiStreamClassifierHead
   mlp_dropout:  0.0
   ff_dropout:   0.0
   attn_dropout: 0.0
@@ -102,7 +145,6 @@ head:
   heads:        4
   dim_head:     32
   depth:        6
-  cls_dim:      128   # null → equals encoder dim; set int to override
 
 # ── Fine-tuning settings ──────────────────────────────────────────────────────
 freeze_encoder: false   # true → encoder frozen initially; BackboneFinetuning
@@ -111,13 +153,11 @@ encoder_ckpt:   null    # path to a PretrainModule checkpoint to load the encode
 ckpt_path:      null    # Lightning checkpoint to resume fit / run test / predict
 
 # ── Online representation-quality monitoring ──────────────────────────────────
-# Logs uniformity and effective rank at the end of each epoch into TensorBoard
-# and the CSV log.  Disabled by default so existing runs are unaffected.
 eval:
-  enabled: true          # master switch for online metric computation
-  splits: [val]          # val | train | both
-  n_samples: 8192        # max embeddings per object per epoch (subsampled)
-  objects: null          # null = all objects; or list of object names to restrict
+  enabled: true
+  splits: [val]
+  n_samples: 8192
+  objects: null
   log_uniformity: true
   log_effective_rank: true
 
@@ -126,17 +166,17 @@ pretrain:
   tasks:           [contrastive, denoising]
   aug:             [mixup, cutmix]
   aug_lambda:      0.05
-  projhead_style:  diff   # diff (two separate projection heads) | same
-  nce_temp:        0.31488067606450354 # found with optuna hpo; default 0.7
-  lam0:            0.6    # contrastive loss weight
-  lam1:            0.2    # categorical denoising loss weight
-  lam2:            0.2   # continuous denoising loss weight
+  projhead_style:  diff
+  nce_temp:        0.31488067606450354
+  lam0:            0.6
+  lam1:            0.2
+  lam2:            0.2
 
 # ── Optimiser ─────────────────────────────────────────────────────────────────
 optimizer:
-  lr:           0.00011284338470369939 # found with optuna hpo; default 1e-4
-  backbone_lr:  1.0e-5   # backbone LR when freeze_encoder=false (lower than head)
-  weight_decay: 5.962613854843877e-05 # found with optuna hpo; default 1e-5
+  lr:           0.00011284338470369939
+  backbone_lr:  1.0e-5
+  weight_decay: 5.962613854843877e-05
 
 # ── PyTorch Lightning Trainer ─────────────────────────────────────────────────
 trainer:
@@ -159,7 +199,7 @@ callbacks:
     max_depth: 4
 
   progress_bar:
-    refresh_rate: 500   # update every N steps (reduce to shrink SLURM logs)
+    refresh_rate: 500
 
   model_checkpoint:
     monitor:    val_loss
@@ -174,63 +214,39 @@ callbacks:
   backbone_finetuning:
     enabled:                    true
     unfreeze_backbone_at_epoch: 10
-    backbone_initial_ratio_lr:  0.1   # backbone LR = current head LR * ratio
+    backbone_initial_ratio_lr:  0.1
     train_bn:                   false
 
   memory_monitor:
     enabled:           true
-    log_every_n_steps: 100   # log CPU RSS + GPU VRAM every N train steps
+    log_every_n_steps: 100
 
 # ── Hyperparameter optimisation (fm4tag-hpo) ──────────────────────────────────
 hpo:
   study_name:   fm4tag_hpo
-  storage:      null          # e.g. "sqlite:///optuna.db" for a persistent study
+  storage:      null
   n_trials:     100
-  timeout:      null          # wall-clock seconds per phase (null = no limit)
-  phases:       [finetune]   # pretrain | finetune | both
-  pretrain_encoder_ckpt: null # set to skip the pretrain study and use this ckpt
+  timeout:      null
+  phases:       [finetune]
+  pretrain_encoder_ckpt: null
 
-  sampler:  TPE               # TPE | CmaES | Random
-  pruner:   median            # median | hyperband | nop
+  sampler:  TPE
+  pruner:   median
   pruner_n_startup_trials: 5
-  pruner_n_warmup_steps:   10  # epochs before pruning kicks in
+  pruner_n_warmup_steps:   10
   pruner_interval_steps:   1
 
-  max_epochs_pretrain:  100   # trainer.max_epochs override per pretrain trial
-  max_epochs_finetune:  100   # trainer.max_epochs override per finetune trial
+  max_epochs_pretrain:  100
+  max_epochs_finetune:  100
 
-  # ── Search spaces ────────────────────────────────────────────────────────
-  # Each entry: {param: <dot.path>, type: categorical|int|float, ...}
-  # encoder group is shared: always used in pretrain, used in finetune only
-  # when no pretrained encoder is supplied (hpo.pretrain_encoder_ckpt=null).
-  # ── Search spaces ────────────────────────────────────────────────────────
-  # Each entry: {param: <dot.path>, type: categorical|int|float, ...}
-  # encoder group is shared: always used in pretrain, used in finetune only
-  # when no pretrained encoder is supplied (hpo.pretrain_encoder_ckpt=null).
   search_space:
-#    encoder:
-#      - {param: encoder.dim,          type: categorical, choices: [16, 32, 64, 128]}
-#      - {param: encoder.depth,        type: int,         low: 2,    high: 8}
-#      - {param: encoder.col_heads,    type: categorical, choices: [2, 4, 8]}
-#      - {param: encoder.attn_dropout, type: float,       low: 0.0,  high: 0.3}
-#      - {param: encoder.ff_dropout,   type: float,       low: 0.0,  high: 0.3}
-#      - {param: encoder.ff_mult,      type: categorical, choices: [1, 2, 4]}
-
     pretrain:
       - {param: pretrain.nce_temp,              type: float, low: 0.3,   high: 1.0}
-#      - {param: pretrain.aug_lambda,            type: float, low: 0.05,  high: 0.2}
-#      - {param: pretrain.lam0,                  type: float, low: 0.1,   high: 5.0,  log: true}
-#      - {param: pretrain.lam1,                  type: float, low: 0.1,   high: 5.0,  log: true}
-#      - {param: pretrain.lam2,                  type: float, low: 1.0,   high: 50.0, log: true}
       - {param: optimizer.lr,                   type: float, low: 1e-5,  high: 1e-2, log: true}
       - {param: optimizer.weight_decay,         type: float, low: 1e-7,  high: 1e-3, log: true}
-#      - {param: pretrain_dataloader.batch_size, type: categorical, choices: [512, 1024, 2048, 4096]}
 
     finetune:
       - {param: head.depth,                        type: int,         low: 3,   high: 6}
-#      - {param: head.mlp_dropout,                  type: float,       low: 0.0, high: 0.4}
-#      - {param: head.ff_dropout,                   type: float,       low: 0.0, high: 0.3}
       - {param: head.ff_mult,                      type: categorical, choices: [2, 4]}
       - {param: optimizer.lr,                      type: float,       low: 1e-5, high: 1e-2, log: true}
       - {param: optimizer.weight_decay,            type: float,       low: 1e-7, high: 1e-3, log: true}
-#      - {param: dataloader.batch_size,             type: categorical, choices: [512, 1024, 2048, 4096]}

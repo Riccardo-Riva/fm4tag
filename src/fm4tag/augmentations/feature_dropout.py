@@ -33,9 +33,7 @@ class FeatureDropout(Augmentation):
     def __init__(self, corrupt_frac: float = 0.6) -> None:
         super().__init__()
         if not 0.0 <= corrupt_frac <= 1.0:
-            raise ValueError(
-                f'corrupt_frac must be in [0, 1], got {corrupt_frac}'
-            )
+            raise ValueError(f'corrupt_frac must be in [0, 1], got {corrupt_frac}')
         self.corrupt_frac = corrupt_frac
 
     def forward(
@@ -59,9 +57,7 @@ class FeatureDropout(Augmentation):
             # Per-feature independent random row index, same shape as x.
             # gather(0, rand_rows)[i, j] == x[rand_rows[i, j], j].
             rand_rows = torch.randint(0, N, x.shape, device=device)
-            corrupt_mask = (
-                torch.rand(x.shape, device=device) < self.corrupt_frac
-            )
+            corrupt_mask = torch.rand(x.shape, device=device) < self.corrupt_frac
             replacement = x.gather(0, rand_rows)
             out[key] = torch.where(corrupt_mask, replacement, x)
 

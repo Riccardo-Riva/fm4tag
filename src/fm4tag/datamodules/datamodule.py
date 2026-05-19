@@ -71,7 +71,7 @@ class CatConDataModule(L.LightningDataModule):
             collate_fn=cat_con_collate_fn,
             prefetch_factor=self._prefetch_factor if self._num_workers > 0 else None,
             # Keep workers alive between epochs so HDF5 handles are not reopened.
-            persistent_workers=False, #self._num_workers > 0,
+            persistent_workers=False,  # self._num_workers > 0,
             pin_memory=self._pin_memory,
         )
 
@@ -109,14 +109,18 @@ class CatConDataModule(L.LightningDataModule):
                 raise ValueError(
                     "val_dataset_path must be provided for the 'fit' stage"
                 )
-            self._val_dataset = DatasetCatCon(file_path=self._val_dataset_path, **dataset_kwargs)
+            self._val_dataset = DatasetCatCon(
+                file_path=self._val_dataset_path, **dataset_kwargs
+            )
 
         if stage in ('test', 'predict', 'all'):
             if self._test_dataset_path is None:
                 raise ValueError(
                     "test_dataset_path must be provided for the 'test' or 'predict' stage"
                 )
-            self._test_dataset = DatasetCatCon(file_path=self._test_dataset_path, **dataset_kwargs)
+            self._test_dataset = DatasetCatCon(
+                file_path=self._test_dataset_path, **dataset_kwargs
+            )
 
     def train_dataloader(self) -> DataLoader:
         return self._make_dataloader(self._train_dataset, shuffle=True)

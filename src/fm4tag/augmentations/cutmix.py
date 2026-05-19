@@ -46,7 +46,9 @@ class CutMix(Augmentation):
         self.per_feature_mask = per_feature_mask
 
     @staticmethod
-    def _swap(x: torch.Tensor, perm: torch.Tensor, keep_mask: torch.Tensor) -> torch.Tensor:
+    def _swap(
+        x: torch.Tensor, perm: torch.Tensor, keep_mask: torch.Tensor
+    ) -> torch.Tensor:
         # keep_mask broadcasts to x's shape; True = keep original.
         return torch.where(keep_mask, x, x[perm])
 

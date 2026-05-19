@@ -73,7 +73,9 @@ class TrackDropout(Augmentation):
                         continue
                     n_restore = min(needed, candidates.numel())
                     pick = candidates[
-                        torch.randperm(candidates.numel(), device=valid.device)[:n_restore]
+                        torch.randperm(candidates.numel(), device=valid.device)[
+                            :n_restore
+                        ]
                     ]
                     new_valid[b, pick] = True
 

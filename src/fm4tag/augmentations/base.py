@@ -99,9 +99,7 @@ class Compose(nn.Module):
         self.pre_flatten = nn.ModuleList(
             [a for a in augmentations if a.stage == Stage.PRE_FLATTEN]
         )
-        self.raw = nn.ModuleList(
-            [a for a in augmentations if a.stage == Stage.RAW]
-        )
+        self.raw = nn.ModuleList([a for a in augmentations if a.stage == Stage.RAW])
         self.embedding = nn.ModuleList(
             [a for a in augmentations if a.stage == Stage.EMBEDDING]
         )

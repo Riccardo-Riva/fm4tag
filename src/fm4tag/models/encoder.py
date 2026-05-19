@@ -5,7 +5,6 @@ import torch.nn.functional as F
 from torch import nn
 
 from .mlp import sep_MLP, simple_MLP
-from .transformers import Concat, RowColTransformer, RowTransformer, Transformer
 
 
 class GlobalEncoder(nn.Module):
@@ -40,7 +39,7 @@ class GlobalEncoder(nn.Module):
         self.num_features = num_features
         self.dim = dim
 
-        H = 2 * dim  # hidden size inside each per-feature MLP
+        H = 2 * dim
         self.fc1 = nn.Conv1d(
             num_features, num_features * H, kernel_size=1, groups=num_features
         )
@@ -48,10 +47,8 @@ class GlobalEncoder(nn.Module):
             num_features * H, num_features * dim, kernel_size=1, groups=num_features
         )
 
-        # Denoising reconstruction head: one scalar per feature → (N, 1) each.
         self.mlp_recon = sep_MLP(dim, num_features, [1] * num_features)
 
-        # Contrastive projection heads: hidden=2*proj_in, out=proj_in.
         proj_in = num_features * dim
         self.pt_mlp1 = simple_MLP([proj_in, 2 * proj_in, proj_in])
         self.pt_mlp2 = simple_MLP([proj_in, 2 * proj_in, proj_in])
@@ -71,44 +68,36 @@ class GlobalEncoder(nn.Module):
 
 
 class Encoder(nn.Module):
-    """SAINT-style transformer encoder for mixed categorical/continuous tabular data.
+    """SAINT-style transformer encoder with a composable list of transformer blocks.
 
-    Each constituent (e.g. track) is treated as a row of tabular features.
-    Categorical features are embedded via a learned lookup table; continuous
-    features are projected per-feature through a grouped Conv1d MLP.  All
-    embedded tokens are then processed by a standard (column-wise), row-wise,
-    or alternating transformer.
+    The transformer backbone is a flat list of block modules (e.g.
+    :class:`~fm4tag.models.transformer_blocks.ColBlock`,
+    :class:`~fm4tag.models.transformer_blocks.RowColBlock`) configured via
+    ``_target_`` entries in the YAML config, mirroring the augmentation system.
 
-    The **first categorical feature** (index 0) plays the role of a CLS token:
-    the :class:`~fm4tag.models.components.heads.ClassifierHead` extracts it as
-    the per-constituent summary, and the denoising loss skips reconstructing it.
+    Each categorical feature is embedded via a learned lookup table; each
+    continuous feature is projected per-feature through a grouped Conv1d MLP.
+    The embedded tokens are then passed through the block sequence.
+
+    The **first categorical feature** (index 0) plays the role of a CLS token.
 
     Args:
-        categories:       Cardinality of each categorical feature (positive ints).
-        num_continuous:   Number of continuous features.
-        dim:              Embedding dimension shared by all tokens.
-        depth:            Number of transformer layers.
-        col_heads:        Number of attention heads for column (within-sample) attention.
-        row_heads:        Number of attention heads for row (inter-sample) attention.
-        dim_head:         Dimension per head (column attention).
-        dim_row_head:     Dimension per head (row attention).
+        categories:         Cardinality of each categorical feature (positive ints).
+        num_continuous:     Number of continuous features.
+        dim:                Embedding dimension shared by all tokens.
+        transformer_layers: Pre-built block modules.  With Hydra ``instantiate``
+                            these are constructed from ``_target_`` list entries
+                            before being passed here.
         num_special_tokens: Extra tokens prepended to the embedding table.
-        attn_dropout:     Dropout inside attention.
-        ff_dropout:       Dropout inside feed-forward sub-layers.
-        ff_mult:          Feed-forward expansion factor.
-        cont_embeddings:  Continuous embedding strategy:
-                          ``'MLP'``            – per-feature grouped Conv1d MLP;
-                          ``'pos_singleMLP'``  – single shared MLP;
-                          ``None``             – continuous features ignored.
-        attentiontype:    Transformer variant: ``'col'``, ``'colrow'``,
-                          ``'row'``, or ``'concat'``.
-        final_mlp_style:  Reconstruction head style: ``'sep'`` (per-feature) or
-                          ``'common'`` (shared).
-        proj_hidden:      Hidden dim of the contrastive projection heads.
-                          ``None`` → ``3 * dim * (n_cat + n_con) // 4`` (auto).
-        proj_out:         Output dim of the contrastive projection heads
-                          (the space where InfoNCE loss is computed).
-                          ``None`` → ``dim * (n_cat + n_con) // 2`` (auto).
+        cont_embeddings:    Continuous embedding strategy:
+                            ``'MLP'``            – per-feature grouped Conv1d MLP;
+                            ``'pos_singleMLP'``  – single shared MLP;
+                            ``None``             – continuous features ignored.
+        final_mlp_style:    Reconstruction head style: ``'sep'`` or ``'common'``.
+        proj_hidden:        Hidden dim of the contrastive projection heads.
+                            ``None`` → ``3 * proj_in // 4`` (auto).
+        proj_out:           Output dim of the contrastive projection heads.
+                            ``None`` → ``proj_in // 2`` (auto).
     """
 
     def __init__(
@@ -117,18 +106,10 @@ class Encoder(nn.Module):
         categories,
         num_continuous,
         dim,
-        depth,
-        col_heads,
-        row_heads,
-        dim_head=16,
-        dim_row_head=64,
-        num_special_tokens=0,
-        attn_dropout=0.0,
-        ff_dropout=0.0,
-        ff_mult=1,
-        cont_embeddings='MLP',
-        attentiontype='col',
-        final_mlp_style='sep',
+        transformer_layers: list,
+        num_special_tokens: int = 0,
+        cont_embeddings: str = 'MLP',
+        final_mlp_style: str = 'sep',
         proj_hidden=None,
         proj_out=None,
     ):
@@ -139,11 +120,9 @@ class Encoder(nn.Module):
 
         self.num_categories = len(categories)
         self.num_unique_categories = sum(categories)
-
         self.num_special_tokens = num_special_tokens
         self.total_tokens = self.num_unique_categories + num_special_tokens
 
-        # Offset buffer: maps raw category indices to positions in embeds.
         categories_offset = F.pad(
             torch.tensor(list(categories)), (1, 0), value=num_special_tokens
         )
@@ -154,11 +133,9 @@ class Encoder(nn.Module):
         self.num_continuous = num_continuous
         self.dim = dim
         self.cont_embeddings = cont_embeddings
-        self.attentiontype = attentiontype
         self.final_mlp_style = final_mlp_style
 
         if num_continuous > 0 and cont_embeddings == 'MLP':
-            nfeats = self.num_categories + num_continuous
             H = 2 * dim
             self.cont_fc1 = nn.Conv1d(
                 num_continuous, num_continuous * H, kernel_size=1, groups=num_continuous
@@ -173,60 +150,17 @@ class Encoder(nn.Module):
             self.cont_MLP = nn.ModuleList(
                 [simple_MLP([1, 2 * dim, dim]) for _ in range(1)]
             )
-            nfeats = self.num_categories + num_continuous
         else:
             warnings.warn(
                 'cont_embeddings not set to MLP or pos_singleMLP — '
                 'continuous features will not be passed through attention.',
                 stacklevel=2,
             )
-            nfeats = self.num_categories
 
         self.embeds = nn.Embedding(self.total_tokens, dim)
 
-        # Transformer backbone.
-        if attentiontype == 'col':
-            self.transformer = Transformer(
-                dim=dim,
-                depth=depth,
-                heads=col_heads,
-                dim_head=dim_head,
-                attn_dropout=attn_dropout,
-                ff_dropout=ff_dropout,
-                ff_mult=ff_mult,
-            )
-        elif attentiontype == 'colrow':
-            self.transformer = RowColTransformer(
-                dim=dim,
-                nfeats=nfeats,
-                depth=depth,
-                col_heads=col_heads,
-                row_heads=row_heads,
-                dim_head=dim_head,
-                dim_row_head=dim_row_head,
-                attn_dropout=attn_dropout,
-                ff_dropout=ff_dropout,
-                ff_mult=ff_mult,
-            )
-        elif attentiontype == 'row':
-            self.transformer = RowTransformer(
-                dim=dim,
-                nfeats=nfeats,
-                depth=depth,
-                row_heads=row_heads,
-                dim_row_head=dim_row_head,
-                attn_dropout=attn_dropout,
-                ff_dropout=ff_dropout,
-                ff_mult=ff_mult,
-            )
-        elif attentiontype == 'concat':
-            self.transformer = Concat()
-        else:
-            raise NotImplementedError(
-                f'Attention type {attentiontype!r} not implemented'
-            )
+        self.transformer_layers = nn.ModuleList(transformer_layers)
 
-        # Reconstruction heads (used by DenoisingLoss during pretraining).
         if final_mlp_style == 'common':
             self.mlp1 = simple_MLP([dim, self.total_tokens * 2, self.total_tokens])
             self.mlp2 = simple_MLP([dim, num_continuous, 1])
@@ -234,12 +168,42 @@ class Encoder(nn.Module):
             self.mlp1 = sep_MLP(dim, self.num_categories, categories)
             self.mlp2 = sep_MLP(dim, num_continuous, torch.ones(num_continuous).int())
 
-        # Projection heads for the contrastive (InfoNCE) loss.
         proj_in = dim * (num_continuous + self.num_categories)
         _proj_hidden = proj_hidden if proj_hidden is not None else 3 * proj_in // 4
         _proj_out = proj_out if proj_out is not None else proj_in // 2
         self.pt_mlp1 = simple_MLP([proj_in, _proj_hidden, _proj_out])
         self.pt_mlp2 = simple_MLP([proj_in, _proj_hidden, _proj_out])
 
-    def forward(self, x_categ, x_cont, mask=None):
-        return self.transformer(x_categ, x_cont, mask)
+    def forward(self, x_categ, x_cont=None, mask=None):
+        x = x_categ
+        if x_cont is not None:
+            x = torch.cat((x, x_cont), dim=1)
+        for block in self.transformer_layers:
+            x = block(x, mask=mask)
+        return x
+
+
+def embed_data(
+    x_categ: torch.Tensor,
+    x_cont: torch.Tensor,
+    encoder: 'Encoder',
+) -> tuple[torch.Tensor, torch.Tensor | None]:
+    """Embed raw categorical indices and continuous values via the encoder's embedding layers.
+
+    Called before the transformer forward pass; separate so augmentations can be
+    applied to the embedded tokens before passing them to ``encoder.forward``.
+    """
+    x_categ = x_categ + encoder.categories_offset.type_as(x_categ)
+    x_categ_enc = encoder.embeds(x_categ)  # (N, F_cat, dim)
+
+    x_cont_enc: torch.Tensor | None = None
+    if encoder.num_continuous > 0:
+        if encoder.cont_embeddings == 'MLP':
+            x = x_cont.unsqueeze(-1)
+            h = F.relu(encoder.cont_fc1(x))
+            out = encoder.cont_fc2(h)
+            x_cont_enc = out.view(x_cont.size(0), encoder.num_continuous, encoder.dim)
+        elif encoder.cont_embeddings == 'pos_singleMLP':
+            x_cont_enc = encoder.cont_MLP[0](x_cont.unsqueeze(-1))
+
+    return x_categ_enc, x_cont_enc
