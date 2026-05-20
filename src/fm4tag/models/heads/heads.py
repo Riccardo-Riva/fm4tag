@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 
-from .mlp import MLP_dropout
+from ..mlp import MLP_dropout
 from .transformers import Classifier_Transformer
 
 

@@ -31,10 +31,10 @@ from einops import rearrange
 from omegaconf import DictConfig
 from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
 
-from ..models.encoder import Encoder, GlobalEncoder
-from ..metrics.metrics import effective_rank, uniformity
-from ..losses.losses import DenoisingLoss, InfoNCELoss
-from ..models.encoder import embed_data
+from ..models.backbones import Encoder, GlobalEncoder
+from ..models import embed_data
+from ..metrics import effective_rank, uniformity
+from ..losses import DenoisingLoss, InfoNCELoss
 from ..utils.ddp import gather_embeddings_sized
 
 
@@ -148,7 +148,8 @@ class PretrainModule(L.LightningModule):
             lam = cfg_pt.aug_lambda
             idx = torch.randperm(x_cont.size(0), device=x_cont.device)
             cat_keep = torch.bernoulli(
-                (1.0 - lam) * torch.ones(x_categ.shape, dtype=torch.float, device=x_categ.device)
+                (1.0 - lam)
+                * torch.ones(x_categ.shape, dtype=torch.float, device=x_categ.device)
             ).bool()
             x_categ_2 = torch.where(cat_keep, x_categ, x_categ[idx])
             con_keep = torch.bernoulli((1.0 - lam) * torch.ones_like(x_cont)).bool()

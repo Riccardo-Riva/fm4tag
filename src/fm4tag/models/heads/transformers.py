@@ -1,7 +1,7 @@
 from torch import nn
 
-from .attention import Classifier_Attention
-from .blocks import FeedForward, PreNorm, Residual
+from ..attention import Classifier_Attention
+from ..blocks import FeedForward, PreNorm, Residual
 
 
 class Classifier_Transformer(nn.Module):

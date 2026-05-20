@@ -1,12 +1,13 @@
-from .encoder import Encoder, GlobalEncoder
+from .backbones import Encoder, GlobalEncoder, embed_data
+from .backbones import ColTransformer, RowTransformer, RowColTransformer
 from .heads import MultiStreamClassifierHead
-from .transformer_blocks import ColBlock, RowBlock, RowColBlock
 
 __all__ = [
     'Encoder',
     'GlobalEncoder',
+    'embed_data',
     'MultiStreamClassifierHead',
-    'ColBlock',
-    'RowBlock',
-    'RowColBlock',
+    'ColTransformer',
+    'RowTransformer',
+    'RowColTransformer',
 ]

@@ -4,7 +4,14 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from .mlp import sep_MLP, simple_MLP
+from ..mlp import sep_MLP, simple_MLP
+from .transformers import ColTransformer, RowTransformer, RowColTransformer
+
+_LAYER_TYPES: dict[str, type[nn.Module]] = {
+    'col': ColTransformer,
+    'row': RowTransformer,
+    'rowcol': RowColTransformer,
+}
 
 
 class GlobalEncoder(nn.Module):
@@ -68,16 +75,23 @@ class GlobalEncoder(nn.Module):
 
 
 class Encoder(nn.Module):
-    """SAINT-style transformer encoder with a composable list of transformer blocks.
+    """SAINT-style transformer encoder with a declarative list of backbone layers.
 
-    The transformer backbone is a flat list of block modules (e.g.
-    :class:`~fm4tag.models.transformer_blocks.ColBlock`,
-    :class:`~fm4tag.models.transformer_blocks.RowColBlock`) configured via
-    ``_target_`` entries in the YAML config, mirroring the augmentation system.
+    The transformer backbone is configured via the ``layers`` list.  Each entry
+    is a plain dict (or OmegaConf DictConfig) with a ``type`` key selecting the
+    block class and any additional keyword arguments for that class:
+
+    * ``type: col``    → :class:`ColTransformer`
+    * ``type: row``    → :class:`RowTransformer`
+    * ``type: rowcol`` → :class:`RowColTransformer`
+
+    ``dim`` and ``nfeats`` (for row-aware blocks) are injected automatically —
+    they must **not** appear in the layer dicts.  All other parameters
+    (``depth``, ``heads``, ``chunk_size``, …) are forwarded as-is.
 
     Each categorical feature is embedded via a learned lookup table; each
     continuous feature is projected per-feature through a grouped Conv1d MLP.
-    The embedded tokens are then passed through the block sequence.
+    The embedded tokens are then passed through the layer sequence.
 
     The **first categorical feature** (index 0) plays the role of a CLS token.
 
@@ -85,9 +99,8 @@ class Encoder(nn.Module):
         categories:         Cardinality of each categorical feature (positive ints).
         num_continuous:     Number of continuous features.
         dim:                Embedding dimension shared by all tokens.
-        transformer_layers: Pre-built block modules.  With Hydra ``instantiate``
-                            these are constructed from ``_target_`` list entries
-                            before being passed here.
+        layers:             List of layer-config dicts.  Each dict must have a
+                            ``type`` key (``'col'``, ``'row'``, or ``'rowcol'``).
         num_special_tokens: Extra tokens prepended to the embedding table.
         cont_embeddings:    Continuous embedding strategy:
                             ``'MLP'``            – per-feature grouped Conv1d MLP;
@@ -106,7 +119,7 @@ class Encoder(nn.Module):
         categories,
         num_continuous,
         dim,
-        transformer_layers: list,
+        layers: list,
         num_special_tokens: int = 0,
         cont_embeddings: str = 'MLP',
         final_mlp_style: str = 'sep',
@@ -159,7 +172,22 @@ class Encoder(nn.Module):
 
         self.embeds = nn.Embedding(self.total_tokens, dim)
 
-        self.transformer_layers = nn.ModuleList(transformer_layers)
+        # Build backbone layers from declarative config dicts.
+        nfeats = self.num_categories + num_continuous
+        built: list[nn.Module] = []
+        for lcfg in layers:
+            kwargs = {k: v for k, v in lcfg.items()}
+            layer_type = kwargs.pop('type')
+            cls = _LAYER_TYPES.get(layer_type)
+            if cls is None:
+                raise ValueError(
+                    f'Unknown layer type {layer_type!r}. '
+                    f'Choose from: {list(_LAYER_TYPES)}'
+                )
+            if layer_type in ('row', 'rowcol'):
+                kwargs['nfeats'] = nfeats
+            built.append(cls(dim=dim, **kwargs))
+        self.layers = nn.ModuleList(built)
 
         if final_mlp_style == 'common':
             self.mlp1 = simple_MLP([dim, self.total_tokens * 2, self.total_tokens])
@@ -178,8 +206,8 @@ class Encoder(nn.Module):
         x = x_categ
         if x_cont is not None:
             x = torch.cat((x, x_cont), dim=1)
-        for block in self.transformer_layers:
-            x = block(x, mask=mask)
+        for layer in self.layers:
+            x = layer(x, mask=mask)
         return x
 
 

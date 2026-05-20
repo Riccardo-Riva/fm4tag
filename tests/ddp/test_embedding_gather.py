@@ -71,8 +71,7 @@ def _make_cfg():
 
 
 def _make_encoders():
-    from fm4tag.models.encoder import Encoder, GlobalEncoder
-    from fm4tag.models.transformer_blocks import ColBlock
+    from fm4tag.models import Encoder, GlobalEncoder
 
     return torch.nn.ModuleDict(
         {
@@ -81,7 +80,7 @@ def _make_encoders():
                 categories=[2, 3],
                 num_continuous=2,
                 dim=4,
-                transformer_layers=[ColBlock(dim=4, heads=1, dim_head=4)],
+                layers=[{'type': 'col', 'heads': 1, 'dim_head': 4}],
             ),
         }
     )

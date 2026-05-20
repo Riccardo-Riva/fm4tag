@@ -76,63 +76,52 @@ dataloader:
   prefetch_factor: 2
   pin_memory:      true
 
-# ── Global encoder (continuous-only, per-feature MLP) ────────────────────────
-global_encoder:
-  _target_: fm4tag.models.GlobalEncoder
-  dim: 64   # num_features injected at runtime from variables.jets.inputs
+# ── Backbone architecture ─────────────────────────────────────────────────────
+# backbone.global_encoder: config for the global-object (continuous-only) encoder.
+# backbone.constituents.<name>: one Encoder config per constituent object.
+#
+# Each constituent's "layers" list selects block types without _target_:
+#   type: col    → ColTransformer   (column / within-sample attention)
+#   type: row    → RowTransformer   (row / intersample attention)
+#   type: rowcol → RowColTransformer (col-then-row in one depth step)
+#
+# "dim" and "nfeats" are injected automatically — do not set them in layers.
+# "depth" stacks that many attention+FFN sub-steps inside the same block.
+#
+# Multiple constituent objects with different architectures:
+#   backbone:
+#     constituents:
+#       tracks:   {dim: 64, layers: [{type: rowcol, depth: 3, ...}]}
+#       vertices: {dim: 32, layers: [{type: col,    depth: 2, ...}]}
+#
+# CLI layer override example:
+#   fm4tag backbone.constituents.tracks.layers.0.type=col \
+#          backbone.constituents.tracks.layers.0.depth=3
+backbone:
+  global_encoder:
+    _target_: fm4tag.models.GlobalEncoder
+    dim: 64   # num_features injected at runtime from variables.jets.inputs
 
-# ── Constituent encoder architecture ─────────────────────────────────────────
-# transformer_layers is a flat list of _target_ block entries, mirroring the
-# augmentation config pattern.  Each block is one depth step.
-#
-# nfeats must equal len(tracks.inputs.categorical) + len(tracks.inputs.continuous)
-# for any row-aware block (RowBlock, RowColBlock).  For tracks: 9 + 10 = 19.
-#
-# Swap a single layer from the CLI, e.g.:
-#   fm4tag encoder.transformer_layers.0._target_=fm4tag.models.ColBlock \
-#          encoder.transformer_layers.0.heads=4
-encoder:
-  _target_: fm4tag.models.Encoder
-  dim:              64
-  cont_embeddings:  MLP    # MLP | pos_singleMLP
-  final_mlp_style:  sep    # sep | common
-  proj_hidden:      256    # null → auto (3/4 × dim × n_tokens)
-  proj_out:         128    # null → auto (1/2 × dim × n_tokens)
-  # categories and num_continuous are injected at runtime from variables.tracks
-  transformer_layers:
-    - _target_:      fm4tag.models.RowColBlock
-      dim:           64
-      nfeats:        19       # tracks: 9 cat + 10 con
-      col_heads:     2
-      row_heads:     8
-      dim_head:      32
-      dim_row_head:  32
-      ff_mult:       1
-      attn_dropout:  0.0
-      ff_dropout:    0.0
-      chunk_size:    null     # null = whole-batch row attention
-    - _target_:      fm4tag.models.RowColBlock
-      dim:           64
-      nfeats:        19
-      col_heads:     2
-      row_heads:     8
-      dim_head:      32
-      dim_row_head:  32
-      ff_mult:       1
-      attn_dropout:  0.0
-      ff_dropout:    0.0
-      chunk_size:    null
-    - _target_:      fm4tag.models.RowColBlock
-      dim:           64
-      nfeats:        19
-      col_heads:     2
-      row_heads:     8
-      dim_head:      32
-      dim_row_head:  32
-      ff_mult:       1
-      attn_dropout:  0.0
-      ff_dropout:    0.0
-      chunk_size:    null
+  constituents:
+    tracks:
+      _target_: fm4tag.models.Encoder
+      dim:              64
+      cont_embeddings:  MLP    # MLP | pos_singleMLP
+      final_mlp_style:  sep    # sep | common
+      proj_hidden:      256    # null → auto (3/4 × dim × n_tokens)
+      proj_out:         128    # null → auto (1/2 × dim × n_tokens)
+      # categories and num_continuous are injected at runtime from variables.tracks
+      layers:
+        - type:          rowcol
+          depth:         3       # stacks 3 col+row steps in a single block
+          col_heads:     2
+          row_heads:     8
+          dim_head:      32
+          dim_row_head:  32
+          ff_mult:       1
+          attn_dropout:  0.0
+          ff_dropout:    0.0
+          chunk_size:    null    # null = whole-batch row attention
 
 # ── Classifier head (finetune only) ──────────────────────────────────────────
 # global_proj_out, const_proj_outs, y_dim are injected at runtime from encoders

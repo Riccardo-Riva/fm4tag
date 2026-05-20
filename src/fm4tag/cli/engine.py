@@ -71,27 +71,27 @@ from fm4tag.utils import instantiate
 def _build_encoders(cfg: DictConfig) -> torch.nn.ModuleDict:
     """Build one encoder per object (global + all constituents).
 
-    Returns a :class:`~torch.nn.ModuleDict` keyed by object name.  Each encoder
-    is built via ``instantiate`` from its config section:
+    Reads architecture from ``cfg.backbone``:
 
-    * ``cfg.global_encoder``      → :class:`~fm4tag.models.GlobalEncoder`
-    * ``cfg.encoder``             → :class:`~fm4tag.models.Encoder` (one per
-                                    constituent type, with data-driven
-                                    ``categories`` and ``num_continuous``
-                                    injected at runtime)
+    * ``cfg.backbone.global_encoder`` → :class:`~fm4tag.models.GlobalEncoder`
+    * ``cfg.backbone.constituents.<name>`` → :class:`~fm4tag.models.Encoder`
+      (one per constituent type, with ``categories`` and ``num_continuous``
+      injected from the variable definitions at runtime)
     """
     encoders: dict[str, torch.nn.Module] = {}
 
     global_name = cfg.global_object
     n_global = len(cfg.variables[global_name].inputs)
-    encoders[global_name] = instantiate(cfg.global_encoder, num_features=n_global)
+    encoders[global_name] = instantiate(
+        cfg.backbone.global_encoder, num_features=n_global
+    )
 
     for obj_name in cfg.constituent_objects:
         obj_vars = cfg.variables[obj_name].inputs
         categories = [len(classes) for classes in obj_vars.cat_classes.values()]
         num_continuous = len(obj_vars.continuous)
         encoders[obj_name] = instantiate(
-            cfg.encoder,
+            cfg.backbone.constituents[obj_name],
             categories=categories,
             num_continuous=num_continuous,
         )

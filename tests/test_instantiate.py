@@ -1,12 +1,10 @@
-"""Tests for model instantiation via Hydra _target_ — Task B."""
+"""Tests for model instantiation via dict-based layer config."""
 
 from __future__ import annotations
 
 import torch
-from omegaconf import OmegaConf
-from hydra.utils import instantiate
 
-from fm4tag.models import ColBlock, RowColBlock
+from fm4tag.models import Encoder, ColTransformer, RowColTransformer
 
 
 # ---------------------------------------------------------------------------
@@ -27,104 +25,71 @@ def _make_tokens():
     return x_categ, x_cont
 
 
-def _col_encoder_cfg(n_layers: int = 2):
-    return OmegaConf.create(
-        {
-            '_target_': 'fm4tag.models.Encoder',
-            'dim': _DIM,
-            'cont_embeddings': 'MLP',
-            'final_mlp_style': 'sep',
-            'proj_hidden': 64,
-            'proj_out': 32,
-            'transformer_layers': [
-                {
-                    '_target_': 'fm4tag.models.ColBlock',
-                    'dim': _DIM,
-                    'heads': 2,
-                    'dim_head': 8,
-                    'ff_mult': 1,
-                    'attn_dropout': 0.0,
-                    'ff_dropout': 0.0,
-                }
-            ]
-            * n_layers,
-        }
-    )
-
-
-def _rowcol_encoder_cfg():
-    return OmegaConf.create(
-        {
-            '_target_': 'fm4tag.models.Encoder',
-            'dim': _DIM,
-            'cont_embeddings': 'MLP',
-            'final_mlp_style': 'sep',
-            'proj_hidden': 64,
-            'proj_out': 32,
-            'transformer_layers': [
-                {
-                    '_target_': 'fm4tag.models.RowColBlock',
-                    'dim': _DIM,
-                    'nfeats': _NFEATS,
-                    'col_heads': 2,
-                    'row_heads': 2,
-                    'dim_head': 8,
-                    'dim_row_head': 8,
-                    'ff_mult': 1,
-                    'attn_dropout': 0.0,
-                    'ff_dropout': 0.0,
-                    'chunk_size': None,
-                }
-            ],
-        }
-    )
-
-
 # ---------------------------------------------------------------------------
 # Test 1: default config builds and runs a forward pass
 # ---------------------------------------------------------------------------
 
 
 def test_default_config_builds_and_runs():
-    """Default encoder config builds via instantiate and runs forward correctly."""
-    cfg = _col_encoder_cfg(n_layers=2)
-    model = instantiate(cfg, categories=_CATEGORIES, num_continuous=_NUM_CONTINUOUS)
+    """Encoder builds from dict-based layer config and runs forward correctly."""
+    model = Encoder(
+        categories=_CATEGORIES,
+        num_continuous=_NUM_CONTINUOUS,
+        dim=_DIM,
+        proj_hidden=64,
+        proj_out=32,
+        layers=[
+            {'type': 'col', 'depth': 2, 'heads': 2, 'dim_head': 8},
+        ],
+    )
 
     x_categ, x_cont = _make_tokens()
     out = model(x_categ, x_cont)
 
-    assert out.shape == (_B, len(_CATEGORIES) + _NUM_CONTINUOUS, _DIM)
+    assert out.shape == (_B, _NFEATS, _DIM)
     assert not out.isnan().any()
 
 
 # ---------------------------------------------------------------------------
-# Test 2: swapping a block type via config override
+# Test 2: swapping a block type produces the expected class and runs forward
 # ---------------------------------------------------------------------------
 
 
 def test_layer_swap_produces_correct_block_type_and_runs():
-    """Swapping _target_ in transformer_layers produces the expected block and runs."""
-    model_col = instantiate(
-        _col_encoder_cfg(n_layers=1),
+    """Changing 'type' in the layers list produces the expected block class."""
+    model_col = Encoder(
         categories=_CATEGORIES,
         num_continuous=_NUM_CONTINUOUS,
+        dim=_DIM,
+        proj_hidden=64,
+        proj_out=32,
+        layers=[{'type': 'col', 'heads': 2, 'dim_head': 8}],
     )
-    model_rowcol = instantiate(
-        _rowcol_encoder_cfg(),
+    model_rowcol = Encoder(
         categories=_CATEGORIES,
         num_continuous=_NUM_CONTINUOUS,
+        dim=_DIM,
+        proj_hidden=64,
+        proj_out=32,
+        layers=[
+            {
+                'type': 'rowcol',
+                'col_heads': 2,
+                'row_heads': 2,
+                'dim_head': 8,
+                'dim_row_head': 8,
+            }
+        ],
     )
 
-    # Verify the swapped block type.
-    assert isinstance(model_col.transformer_layers[0], ColBlock)
-    assert isinstance(model_rowcol.transformer_layers[0], RowColBlock)
+    assert isinstance(model_col.layers[0], ColTransformer)
+    assert isinstance(model_rowcol.layers[0], RowColTransformer)
 
     x_categ, x_cont = _make_tokens()
     out_col = model_col(x_categ, x_cont)
     out_rowcol = model_rowcol(x_categ, x_cont)
 
-    expected_shape = (_B, len(_CATEGORIES) + _NUM_CONTINUOUS, _DIM)
-    assert out_col.shape == expected_shape
-    assert out_rowcol.shape == expected_shape
+    assert out_col.shape == (_B, _NFEATS, _DIM)
+    assert out_rowcol.shape == (_B, _NFEATS, _DIM)
     assert not out_col.isnan().any()
     assert not out_rowcol.isnan().any()
