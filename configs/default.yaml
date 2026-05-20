@@ -121,7 +121,7 @@ backbone:
           ff_mult:       1
           attn_dropout:  0.0
           ff_dropout:    0.0
-          chunk_size:    null    # null = whole-batch row attention
+          chunk_size:    512    # null = whole-batch row attention
 
 # ── Classifier head (finetune only) ──────────────────────────────────────────
 # global_proj_out, const_proj_outs, y_dim are injected at runtime from encoders
