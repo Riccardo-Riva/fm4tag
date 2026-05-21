@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import warnings
 
 import torch
@@ -5,7 +7,7 @@ import torch.nn.functional as F
 from torch import nn
 
 from ..mlp import sep_MLP, simple_MLP
-from .transformers import ColTransformer, RowTransformer, RowColTransformer
+from .transformers import ColTransformer, RowColTransformer, RowTransformer
 
 _LAYER_TYPES: dict[str, type[nn.Module]] = {
     'col': ColTransformer,
@@ -19,22 +21,18 @@ class GlobalEncoder(nn.Module):
 
     Each of the ``num_features`` continuous features is independently projected
     to a ``dim``-dimensional embedding via a 2-layer grouped Conv1d MLP.  No
-    attention is applied across features — the output is a plain set of token
-    embeddings, one per global feature.
+    attention is applied — the output is a plain set of token embeddings, one
+    per global feature.
 
-    This encoder is used to pretrain global-object representations alongside the
-    constituent :class:`Encoder`.  Its output shape ``(N, F_g, dim)`` mirrors the
-    per-constituent-token output of :class:`Encoder`, so downstream heads can
-    treat both uniformly.
-
-    The contrastive projection heads always use ``proj_in = num_features * dim``
-    as input, ``2 * proj_in`` as the hidden dimension, and ``proj_in`` as the
-    output dimension.
+    Heads
+    -----
+    * ``projector``     — MLP mapping ``(num_features * dim)`` → projection space,
+                          shared across all views for the contrastive loss.
+    * ``reconstructor`` — per-feature sep_MLP for denoising reconstruction (MSE).
 
     Args:
         num_features: Number of global continuous features ``F_g``.
-        dim:          Embedding dimension (should match the constituent
-                      :class:`Encoder` ``dim``).
+        dim:          Embedding dimension.
     """
 
     def __init__(
@@ -54,11 +52,9 @@ class GlobalEncoder(nn.Module):
             num_features * H, num_features * dim, kernel_size=1, groups=num_features
         )
 
-        self.mlp_recon = sep_MLP(dim, num_features, [1] * num_features)
-
         proj_in = num_features * dim
-        self.pt_mlp1 = simple_MLP([proj_in, 2 * proj_in, proj_in])
-        self.pt_mlp2 = simple_MLP([proj_in, 2 * proj_in, proj_in])
+        self.projector = simple_MLP([proj_in, 2 * proj_in, proj_in])
+        self.reconstructor = sep_MLP(dim, num_features, [1] * num_features)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Embed global features.
@@ -69,9 +65,9 @@ class GlobalEncoder(nn.Module):
         Returns:
             ``(N, F_g, dim)`` — one embedding token per feature.
         """
-        h = F.relu(self.fc1(x.unsqueeze(-1)))  # (N, F_g*H, 1)
-        out = self.fc2(h).squeeze(-1)  # (N, F_g*dim)
-        return out.view(x.size(0), self.num_features, self.dim)  # (N, F_g, dim)
+        h = F.relu(self.fc1(x.unsqueeze(-1)))   # (N, F_g*H, 1)
+        out = self.fc2(h).squeeze(-1)            # (N, F_g*dim)
+        return out.view(x.size(0), self.num_features, self.dim)
 
 
 class Encoder(nn.Module):
@@ -86,31 +82,26 @@ class Encoder(nn.Module):
     * ``type: rowcol`` → :class:`RowColTransformer`
 
     ``dim`` and ``nfeats`` (for row-aware blocks) are injected automatically —
-    they must **not** appear in the layer dicts.  All other parameters
-    (``depth``, ``heads``, ``chunk_size``, …) are forwarded as-is.
+    they must **not** appear in the layer dicts.
 
     Each categorical feature is embedded via a learned lookup table; each
     continuous feature is projected per-feature through a grouped Conv1d MLP.
-    The embedded tokens are then passed through the layer sequence.
 
-    The **first categorical feature** (index 0) plays the role of a CLS token.
+    Heads
+    -----
+    * ``projector``          — shared MLP for all views' contrastive projection.
+    * ``cat_reconstructor``  — sep_MLP for categorical denoising (cross-entropy).
+    * ``con_reconstructor``  — sep_MLP for continuous denoising (MSE).
 
     Args:
-        categories:         Cardinality of each categorical feature (positive ints).
+        categories:         Cardinality of each categorical feature.
         num_continuous:     Number of continuous features.
-        dim:                Embedding dimension shared by all tokens.
-        layers:             List of layer-config dicts.  Each dict must have a
-                            ``type`` key (``'col'``, ``'row'``, or ``'rowcol'``).
+        dim:                Embedding dimension.
+        layers:             List of layer-config dicts.
         num_special_tokens: Extra tokens prepended to the embedding table.
-        cont_embeddings:    Continuous embedding strategy:
-                            ``'MLP'``            – per-feature grouped Conv1d MLP;
-                            ``'pos_singleMLP'``  – single shared MLP;
-                            ``None``             – continuous features ignored.
-        final_mlp_style:    Reconstruction head style: ``'sep'`` or ``'common'``.
-        proj_hidden:        Hidden dim of the contrastive projection heads.
-                            ``None`` → ``3 * proj_in // 4`` (auto).
-        proj_out:           Output dim of the contrastive projection heads.
-                            ``None`` → ``proj_in // 2`` (auto).
+        cont_embeddings:    ``'MLP'`` (grouped Conv1d) or ``'pos_singleMLP'``.
+        proj_hidden:        Hidden dim of the projector. ``None`` → auto (3/4 of proj_in).
+        proj_out:           Output dim of the projector. ``None`` → auto (1/2 of proj_in).
     """
 
     def __init__(
@@ -122,7 +113,6 @@ class Encoder(nn.Module):
         layers: list,
         num_special_tokens: int = 0,
         cont_embeddings: str = 'MLP',
-        final_mlp_style: str = 'sep',
         proj_hidden=None,
         proj_out=None,
     ):
@@ -131,6 +121,7 @@ class Encoder(nn.Module):
             'number of each category must be positive'
         )
 
+        self.categories = tuple(int(c) for c in categories)
         self.num_categories = len(categories)
         self.num_unique_categories = sum(categories)
         self.num_special_tokens = num_special_tokens
@@ -146,7 +137,6 @@ class Encoder(nn.Module):
         self.num_continuous = num_continuous
         self.dim = dim
         self.cont_embeddings = cont_embeddings
-        self.final_mlp_style = final_mlp_style
 
         if num_continuous > 0 and cont_embeddings == 'MLP':
             H = 2 * dim
@@ -172,7 +162,6 @@ class Encoder(nn.Module):
 
         self.embeds = nn.Embedding(self.total_tokens, dim)
 
-        # Build backbone layers from declarative config dicts.
         nfeats = self.num_categories + num_continuous
         built: list[nn.Module] = []
         for lcfg in layers:
@@ -189,18 +178,17 @@ class Encoder(nn.Module):
             built.append(cls(dim=dim, **kwargs))
         self.layers = nn.ModuleList(built)
 
-        if final_mlp_style == 'common':
-            self.mlp1 = simple_MLP([dim, self.total_tokens * 2, self.total_tokens])
-            self.mlp2 = simple_MLP([dim, num_continuous, 1])
-        else:
-            self.mlp1 = sep_MLP(dim, self.num_categories, categories)
-            self.mlp2 = sep_MLP(dim, num_continuous, torch.ones(num_continuous).int())
+        # Denoising reconstruction heads (always sep style).
+        self.cat_reconstructor = sep_MLP(dim, self.num_categories, categories)
+        self.con_reconstructor = sep_MLP(
+            dim, num_continuous, torch.ones(num_continuous, dtype=torch.int)
+        )
 
+        # Contrastive projection head — shared across all views.
         proj_in = dim * (num_continuous + self.num_categories)
         _proj_hidden = proj_hidden if proj_hidden is not None else 3 * proj_in // 4
         _proj_out = proj_out if proj_out is not None else proj_in // 2
-        self.pt_mlp1 = simple_MLP([proj_in, _proj_hidden, _proj_out])
-        self.pt_mlp2 = simple_MLP([proj_in, _proj_hidden, _proj_out])
+        self.projector = simple_MLP([proj_in, _proj_hidden, _proj_out])
 
     def forward(self, x_categ, x_cont=None, mask=None):
         x = x_categ
@@ -222,7 +210,7 @@ def embed_data(
     applied to the embedded tokens before passing them to ``encoder.forward``.
     """
     x_categ = x_categ + encoder.categories_offset.type_as(x_categ)
-    x_categ_enc = encoder.embeds(x_categ)  # (N, F_cat, dim)
+    x_categ_enc = encoder.embeds(x_categ)   # (N, F_cat, dim)
 
     x_cont_enc: torch.Tensor | None = None
     if encoder.num_continuous > 0:

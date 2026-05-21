@@ -6,6 +6,8 @@
 # ════════════════════════════════════════════════════════════════════════════
 
 # ── Run control ─────────────────────────────────────────────────────────────
+phase:  pretrain   # pretrain | finetune
+action: fit        # fit | test | predict
 seed:   42
 experiment_name: model_0_colrow
 output_dir: outputs
@@ -59,8 +61,8 @@ variables:
         numberOfSCTSharedHits:                    [0,1,2,3]
 
 # ── Data — file paths ────────────────────────────────────────────────────────
-base_path: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_152051 # 60M
-#base_path: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251114_155623 # 6M # set to a path to enable validation during pretraining
+#base_path: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_152051 # 60M
+base_path: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251114_155623 # 6M 
 
 train_dataset_path: ${base_path}/train/output/pp_output_train.h5
 val_dataset_path:   ${base_path}/val/output/pp_output_val.h5
@@ -107,7 +109,6 @@ backbone:
       _target_: fm4tag.models.Encoder
       dim:              64
       cont_embeddings:  MLP    # MLP | pos_singleMLP
-      final_mlp_style:  sep    # sep | common
       proj_hidden:      256    # null → auto (3/4 × dim × n_tokens)
       proj_out:         128    # null → auto (1/2 × dim × n_tokens)
       # categories and num_continuous are injected at runtime from variables.tracks
@@ -147,19 +148,34 @@ eval:
   splits: [val]
   n_samples: 8192
   objects: null
-  log_uniformity: true
-  log_effective_rank: true
+  metrics: [uniformity, effective_rank]
 
 # ── Pretraining settings ──────────────────────────────────────────────────────
 pretrain:
-  tasks:           [contrastive, denoising]
-  aug:             [mixup, cutmix]
-  aug_lambda:      0.05
-  projhead_style:  diff
-  nce_temp:        0.31488067606450354
-  lam0:            0.6
-  lam1:            0.2
-  lam2:            0.2
+  _target_: fm4tag.modules.ContrastiveDenoisingModule
+
+  # Multi-view augmentation pipelines.
+  # First view is the denoising input; all views participate in contrastive.
+  views:
+    - _target_: fm4tag.augmentations.Compose
+      augmentations:
+        - _target_: fm4tag.augmentations.CutMix
+          lam: 0.05
+        - _target_: fm4tag.augmentations.Mixup
+          lam: 0.05
+    - _target_: fm4tag.augmentations.Compose
+      augmentations:
+        - _target_: fm4tag.augmentations.Identity
+
+  # Contrastive loss
+  nce_temp:             0.31488067606450354
+  loss_type:            out     # 'out' (L_out) or 'in' (L_in) from SupCon paper
+  include_pos_in_denom: true    # true = standard SupCon denominator, includes positives; false = only negatives
+
+  # Loss weights
+  lam_contrastive:      0.6
+  lam_denoising_cat:    0.2     # categorical reconstruction (constituents only)
+  lam_denoising_con:    0.2     # continuous reconstruction
 
 # ── Optimiser ─────────────────────────────────────────────────────────────────
 optimizer:

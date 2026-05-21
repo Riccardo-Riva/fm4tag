@@ -24,6 +24,18 @@ by stage so the pretraining module can apply them at the right point.
 For the **global object** (continuous-only, no constituents) the
 :attr:`Stage.PRE_FLATTEN` step is skipped — the global path has no valid
 mask.  Augmentations targeting raw or embedding stages still apply.
+
+Compose instances are built from config via Hydra's ``instantiate``, which
+handles the nested ``_target_`` list recursively::
+
+    views:
+      - _target_: fm4tag.augmentations.Compose
+        augmentations:
+          - _target_: fm4tag.augmentations.CutMix
+            lam: 0.7
+          - _target_: fm4tag.augmentations.GaussianNoise
+            space: embedding
+            sigma: 0.05
 """
 
 from __future__ import annotations
@@ -32,7 +44,6 @@ from enum import Enum
 from typing import ClassVar
 
 import torch
-from hydra.utils import instantiate
 from torch import nn
 
 
@@ -105,7 +116,7 @@ class Compose(nn.Module):
         )
 
     @staticmethod
-    def _apply(
+    def _run_stage(
         modules: nn.ModuleList,
         data: dict[str, torch.Tensor | None],
     ) -> dict[str, torch.Tensor | None]:
@@ -116,17 +127,17 @@ class Compose(nn.Module):
     def apply_pre_flatten(
         self, data: dict[str, torch.Tensor | None]
     ) -> dict[str, torch.Tensor | None]:
-        return self._apply(self.pre_flatten, data)
+        return self._run_stage(self.pre_flatten, data)
 
     def apply_raw(
         self, data: dict[str, torch.Tensor | None]
     ) -> dict[str, torch.Tensor | None]:
-        return self._apply(self.raw, data)
+        return self._run_stage(self.raw, data)
 
     def apply_embedding(
         self, data: dict[str, torch.Tensor | None]
     ) -> dict[str, torch.Tensor | None]:
-        return self._apply(self.embedding, data)
+        return self._run_stage(self.embedding, data)
 
     def __repr__(self) -> str:
         lines = ['Compose(']
@@ -142,29 +153,3 @@ class Compose(nn.Module):
                 lines.append(f'    {m}')
         lines.append(')')
         return '\n'.join(lines)
-
-
-def build_from_config(
-    aug_configs: list[dict] | None,
-) -> Compose:
-    """Build a :class:`Compose` from a list of Hydra-style config entries.
-
-    Each entry must have a ``_target_`` key with the fully-qualified class
-    path; any other keys are passed as ``__init__`` kwargs.
-
-    Example YAML::
-
-        augmentations:
-          - _target_: fm4tag.augmentations.TrackDropout
-            drop_prob: 0.15
-          - _target_: fm4tag.augmentations.CutMix
-            lam: 0.7
-          - _target_: fm4tag.augmentations.GaussianNoise
-            space: embedding
-            sigma: 0.05
-
-    An empty or ``None`` list returns an empty :class:`Compose`.
-    """
-    if not aug_configs:
-        return Compose([])
-    return Compose([instantiate(cfg) for cfg in aug_configs])

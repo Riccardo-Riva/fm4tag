@@ -34,11 +34,13 @@ For notebooks / scripts (Hydra not involved)::
 
 from __future__ import annotations
 
+import importlib
 import os
 import warnings
 
 import hydra
 import torch
+from hydra.utils import instantiate as hydra_instantiate
 from omegaconf import DictConfig, OmegaConf
 
 import lightning as L
@@ -57,10 +59,15 @@ from lightning.pytorch.profilers import (
 )
 
 from fm4tag.callbacks.callbacks import MemoryMonitorCallback, _PrecisionProgressBar
-from fm4tag.datamodules.datamodule import PT_FT_DataModule
+from fm4tag.datamodules.datamodule import CatConDataModule
 from fm4tag.modules.finetune_module import FinetuneModule
-from fm4tag.modules.pretrain_module import PretrainModule
 from fm4tag.utils import instantiate
+
+
+def _load_class(dotted_path: str) -> type:
+    """Import and return a class from its fully-qualified dotted path."""
+    module_path, cls_name = dotted_path.rsplit('.', 1)
+    return getattr(importlib.import_module(module_path), cls_name)
 
 
 # ---------------------------------------------------------------------------
@@ -349,11 +356,30 @@ def run(
         **trainer_kwargs,
     )
 
-    dm = PT_FT_DataModule(cfg, phase=_phase)
+    dl_cfg = cfg.dataloader
+    dm = CatConDataModule(
+        train_dataset_path=cfg.train_dataset_path,
+        val_dataset_path=cfg.val_dataset_path,
+        test_dataset_path=cfg.test_dataset_path,
+        variables=cfg.variables,
+        global_object=cfg.global_object,
+        constituent_objects=list(cfg.constituent_objects),
+        norm_dict_path=cfg.get('norm_dict_path'),
+        class_dict_path=cfg.get('class_dict_path'),
+        batch_size=dl_cfg.batch_size,
+        num_workers=dl_cfg.num_workers,
+        prefetch_factor=dl_cfg.get('prefetch_factor', 2),
+        pin_memory=dl_cfg.get('pin_memory', True),
+    )
 
     if _phase == 'pretrain':
         encoders = _build_encoders(cfg)
-        module: L.LightningModule = PretrainModule(encoders, cfg)
+        # Build view pipelines from the config's _target_-annotated list.
+        views = [hydra_instantiate(v) for v in cfg.pretrain.views]
+        # Select the module class via _target_ and instantiate directly
+        # (encoders and cfg are runtime objects, not from YAML).
+        module_cls = _load_class(cfg.pretrain._target_)
+        module: L.LightningModule = module_cls(encoders=encoders, views=views, cfg=cfg)
 
     elif _phase == 'finetune':
         encoders = _build_encoders(cfg)
@@ -363,10 +389,10 @@ def run(
 
         n_classes = len(cfg.variables[cfg.global_object].unique_labels)
 
-        # Read projection dimensions directly from the built encoders.
-        global_proj_out = encoders[cfg.global_object].pt_mlp1.layers[-1].out_features
+        # Read projection dimensions from the built encoders.
+        global_proj_out = encoders[cfg.global_object].projector.layers[-1].out_features
         const_proj_outs = [
-            encoders[obj_name].pt_mlp1.layers[-1].out_features
+            encoders[obj_name].projector.layers[-1].out_features
             for obj_name in cfg.constituent_objects
         ]
 

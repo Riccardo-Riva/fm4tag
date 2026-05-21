@@ -49,22 +49,20 @@ def _make_cfg():
             'global_object': 'jets',
             'constituent_objects': ['tracks'],
             'pretrain': {
+                '_target_': 'fm4tag.modules.ContrastiveDenoisingModule',
                 'nce_temp': 0.07,
-                'aug': [],
-                'tasks': ['contrastive'],
-                'projhead_style': 'same',
-                'aug_lambda': 0.1,
-                'lam0': 1.0,
-                'lam1': 1.0,
-                'lam2': 1.0,
+                'loss_type': 'out',
+                'include_pos_in_denom': True,
+                'lam_contrastive': 1.0,
+                'lam_denoising_cat': 0.0,
+                'lam_denoising_con': 0.0,
             },
             'optimizer': {'lr': 1e-3},
             'eval': {
                 'enabled': True,
                 'splits': ['val'],
                 'n_samples': 8192,
-                'log_uniformity': True,
-                'log_effective_rank': True,
+                'metrics': ['uniformity', 'effective_rank'],
             },
         }
     )
@@ -200,12 +198,14 @@ def _worker_pretrain_e2e(rank: int, world_size: int) -> None:
     own slice; after the gather the logged metrics must match those computed
     on the full dataset.
     """
-    from fm4tag.modules.pretrain_module import PretrainModule
-    from fm4tag.metrics.metrics import effective_rank, uniformity
+    from fm4tag.augmentations import Compose
+    from fm4tag.metrics import effective_rank, uniformity
+    from fm4tag.modules import ContrastiveDenoisingModule
 
     cfg = _make_cfg()
     encoders = _make_encoders()
-    module = PretrainModule(encoders, cfg)
+    views = [Compose([]), Compose([])]
+    module = ContrastiveDenoisingModule(encoders=encoders, views=views, cfg=cfg)
 
     # Wire up a minimal trainer stub (reads from _trainer in Lightning 2.x).
     module._trainer = SimpleNamespace(
@@ -276,11 +276,13 @@ def test_pretrain_module_e2e():
 
 def test_sanity_check_skip():
     """sanity_checking=True branch clears buffers and logs nothing (no DDP)."""
-    from fm4tag.modules.pretrain_module import PretrainModule
+    from fm4tag.augmentations import Compose
+    from fm4tag.modules import ContrastiveDenoisingModule
 
     cfg = _make_cfg()
     encoders = _make_encoders()
-    module = PretrainModule(encoders, cfg)
+    views = [Compose([]), Compose([])]
+    module = ContrastiveDenoisingModule(encoders=encoders, views=views, cfg=cfg)
 
     module._trainer = SimpleNamespace(world_size=1, sanity_checking=True)
     module.print = lambda *a, **_kw: None
