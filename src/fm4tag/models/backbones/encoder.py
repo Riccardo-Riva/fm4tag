@@ -38,23 +38,25 @@ class GlobalEncoder(nn.Module):
     def __init__(
         self,
         num_features: int,
+        feature_dim: int,  # injected at runtime from variables.jets.inputs
         dim: int,
     ) -> None:
         super().__init__()
         self.num_features = num_features
         self.dim = dim
+        self.feature_dim = feature_dim
 
-        H = 2 * dim
+        H = 2 * self.feature_dim
         self.fc1 = nn.Conv1d(
             num_features, num_features * H, kernel_size=1, groups=num_features
         )
         self.fc2 = nn.Conv1d(
-            num_features * H, num_features * dim, kernel_size=1, groups=num_features
+            num_features * H, num_features * self.feature_dim, kernel_size=1, groups=num_features
         )
 
-        proj_in = num_features * dim
-        self.projector = simple_MLP([proj_in, 2 * proj_in, proj_in])
-        self.reconstructor = sep_MLP(dim, num_features, [1] * num_features)
+        proj_in = num_features * self.feature_dim
+        self.projector = simple_MLP([proj_in, 2 * proj_in, self.dim])
+        self.reconstructor = sep_MLP(self.feature_dim, num_features, [1] * num_features)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Embed global features.
@@ -66,8 +68,8 @@ class GlobalEncoder(nn.Module):
             ``(N, F_g, dim)`` — one embedding token per feature.
         """
         h = F.relu(self.fc1(x.unsqueeze(-1)))   # (N, F_g*H, 1)
-        out = self.fc2(h).squeeze(-1)            # (N, F_g*dim)
-        return out.view(x.size(0), self.num_features, self.dim)
+        out = self.fc2(h).squeeze(-1)            # (N, F_g*feature_dim)
+        return out.view(x.size(0), self.num_features, self.feature_dim)
 
 
 class Encoder(nn.Module):

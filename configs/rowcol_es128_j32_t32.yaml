@@ -101,9 +101,8 @@ dataloader:
 #          backbone.constituents.tracks.layers.0.depth=3
 backbone:
   global_encoder:
-    _target_: fm4tag.models.GlobalEncoder
-    feature_dim: 128
-    dim: 128   # num_features injected at runtime from variables.jets.inputs
+    feature_dim: 64
+    dim: 64   # num_features injected at runtime from variables.jets.inputs
 
   constituents:
     tracks:
@@ -116,7 +115,7 @@ backbone:
       layers:
         - type:          rowcol
           depth:         6       # stacks 3 col+row steps in a single block
-          col_heads:     2
+          col_heads:     1
           row_heads:     8
           dim_head:      32
           dim_row_head:  32

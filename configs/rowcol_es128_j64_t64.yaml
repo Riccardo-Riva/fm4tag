@@ -102,13 +102,13 @@ dataloader:
 backbone:
   global_encoder:
     _target_: fm4tag.models.GlobalEncoder
-    feature_dim: 128
-    dim: 128   # num_features injected at runtime from variables.jets.inputs
+    feature_dim: 64
+    dim: 64   # num_features injected at runtime from variables.jets.inputs
 
   constituents:
     tracks:
       _target_: fm4tag.models.Encoder
-      dim:              32
+      dim:              64
       cont_embeddings:  MLP    # MLP | pos_singleMLP
       proj_hidden:      256    # null → auto (3/4 × dim × n_tokens)
       proj_out:         128    # null → auto (1/2 × dim × n_tokens)
