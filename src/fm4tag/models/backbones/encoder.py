@@ -16,6 +16,30 @@ _LAYER_TYPES: dict[str, type[nn.Module]] = {
 }
 
 
+def _build_layers(layers: list, *, dim: int, nfeats: int) -> nn.ModuleList:
+    """Build transformer blocks from a declarative layer-config list.
+
+    Each entry is a dict with a ``type`` key (``col`` | ``row`` | ``rowcol``)
+    selecting the block class plus its keyword arguments.  ``dim`` and (for
+    row-aware blocks) ``nfeats`` are injected here and must not appear in the
+    layer dicts.
+    """
+    built: list[nn.Module] = []
+    for lcfg in layers:
+        kwargs = {k: v for k, v in lcfg.items()}
+        layer_type = kwargs.pop('type')
+        cls = _LAYER_TYPES.get(layer_type)
+        if cls is None:
+            raise ValueError(
+                f'Unknown layer type {layer_type!r}. '
+                f'Choose from: {list(_LAYER_TYPES)}'
+            )
+        if layer_type in ('row', 'rowcol'):
+            kwargs['nfeats'] = nfeats
+        built.append(cls(dim=dim, **kwargs))
+    return nn.ModuleList(built)
+
+
 class GlobalEncoder(nn.Module):
     """Per-feature MLP encoder for global flat continuous features.
 
@@ -65,11 +89,59 @@ class GlobalEncoder(nn.Module):
             x: ``(N, F_g)`` continuous feature values (already normalised).
 
         Returns:
-            ``(N, F_g, dim)`` — one embedding token per feature.
+            ``(N, F_g, feature_dim)`` — one embedding token per feature.
         """
         h = F.relu(self.fc1(x.unsqueeze(-1)))   # (N, F_g*H, 1)
         out = self.fc2(h).squeeze(-1)            # (N, F_g*feature_dim)
         return out.view(x.size(0), self.num_features, self.feature_dim)
+
+
+class GlobalTransformerEncoder(GlobalEncoder):
+    """Transformer encoder for global flat continuous features.
+
+    Drop-in alternative to :class:`GlobalEncoder` (same constructor arguments
+    plus ``layers``, same heads, same forward signature).  After the
+    per-feature MLP embedding, the ``(N, F_g, feature_dim)`` tokens are
+    refined by a declarative stack of attention blocks using the same
+    ``layers`` syntax as :class:`Encoder`:
+
+    * ``type: col``    → :class:`ColTransformer`
+    * ``type: row``    → :class:`RowTransformer`
+    * ``type: rowcol`` → :class:`RowColTransformer`
+
+    The attention ``dim`` is ``feature_dim`` and ``nfeats`` (for row-aware
+    blocks) is ``num_features`` — both injected automatically.
+
+    Args:
+        num_features: Number of global continuous features ``F_g``.
+        feature_dim:  Per-feature token embedding dimension.
+        dim:          Output dimension of the contrastive projector.
+        layers:       List of layer-config dicts (see :class:`Encoder`).
+    """
+
+    def __init__(
+        self,
+        num_features: int,
+        feature_dim: int,
+        dim: int,
+        layers: list,
+    ) -> None:
+        super().__init__(num_features=num_features, feature_dim=feature_dim, dim=dim)
+        self.layers = _build_layers(layers, dim=feature_dim, nfeats=num_features)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Embed global features and refine them with attention.
+
+        Args:
+            x: ``(N, F_g)`` continuous feature values (already normalised).
+
+        Returns:
+            ``(N, F_g, feature_dim)`` — one embedding token per feature.
+        """
+        tokens = super().forward(x)
+        for layer in self.layers:
+            tokens = layer(tokens)
+        return tokens
 
 
 class Encoder(nn.Module):
@@ -165,20 +237,7 @@ class Encoder(nn.Module):
         self.embeds = nn.Embedding(self.total_tokens, dim)
 
         nfeats = self.num_categories + num_continuous
-        built: list[nn.Module] = []
-        for lcfg in layers:
-            kwargs = {k: v for k, v in lcfg.items()}
-            layer_type = kwargs.pop('type')
-            cls = _LAYER_TYPES.get(layer_type)
-            if cls is None:
-                raise ValueError(
-                    f'Unknown layer type {layer_type!r}. '
-                    f'Choose from: {list(_LAYER_TYPES)}'
-                )
-            if layer_type in ('row', 'rowcol'):
-                kwargs['nfeats'] = nfeats
-            built.append(cls(dim=dim, **kwargs))
-        self.layers = nn.ModuleList(built)
+        self.layers = _build_layers(layers, dim=dim, nfeats=nfeats)
 
         # Denoising reconstruction heads (always sep style).
         self.cat_reconstructor = sep_MLP(dim, self.num_categories, categories)

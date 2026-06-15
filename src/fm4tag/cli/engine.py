@@ -78,10 +78,13 @@ def _load_class(dotted_path: str) -> type:
 def _build_encoders(cfg: DictConfig) -> torch.nn.ModuleDict:
     """Build one encoder per object (global + all constituents).
 
-    Reads architecture from ``cfg.backbone``:
+    Reads architecture from ``cfg.backbone``; each encoder's class is selected
+    by its ``_target_`` key:
 
-    * ``cfg.backbone.global_encoder`` → :class:`~fm4tag.models.GlobalEncoder`
-    * ``cfg.backbone.constituents.<name>`` → :class:`~fm4tag.models.Encoder`
+    * ``cfg.backbone.global_encoder`` → e.g. :class:`~fm4tag.models.GlobalEncoder`
+      or :class:`~fm4tag.models.GlobalTransformerEncoder`, with ``num_features``
+      injected from the global object's variable definitions at runtime
+    * ``cfg.backbone.constituents.<name>`` → e.g. :class:`~fm4tag.models.Encoder`
       (one per constituent type, with ``categories`` and ``num_continuous``
       injected from the variable definitions at runtime)
     """

@@ -4,7 +4,13 @@ from __future__ import annotations
 
 import torch
 
-from fm4tag.models import Encoder, ColTransformer, RowColTransformer
+from fm4tag.models import (
+    ColTransformer,
+    Encoder,
+    GlobalEncoder,
+    GlobalTransformerEncoder,
+    RowColTransformer,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -93,3 +99,59 @@ def test_layer_swap_produces_correct_block_type_and_runs():
     assert out_rowcol.shape == (_B, _NFEATS, _DIM)
     assert not out_col.isnan().any()
     assert not out_rowcol.isnan().any()
+
+
+# ---------------------------------------------------------------------------
+# Test 3: GlobalTransformerEncoder matches the GlobalEncoder interface
+# ---------------------------------------------------------------------------
+
+_N_GLOBAL = 2
+_FEATURE_DIM = 16
+
+
+def test_global_transformer_encoder_builds_and_runs():
+    """GlobalTransformerEncoder is a drop-in replacement for GlobalEncoder."""
+    model = GlobalTransformerEncoder(
+        num_features=_N_GLOBAL,
+        feature_dim=_FEATURE_DIM,
+        dim=_DIM,
+        layers=[{'type': 'col', 'depth': 2, 'heads': 2, 'dim_head': 8}],
+    )
+    assert isinstance(model.layers[0], ColTransformer)
+
+    x = torch.randn(_B, _N_GLOBAL)
+    out = model(x)
+    assert out.shape == (_B, _N_GLOBAL, _FEATURE_DIM)
+    assert not out.isnan().any()
+
+    # Same heads as GlobalEncoder, used identically by the pretrain module.
+    z = model.projector(out.flatten(1))
+    assert z.shape == (_B, _DIM)
+    rec = torch.cat(model.reconstructor(out), dim=1)
+    assert rec.shape == (_B, _N_GLOBAL)
+
+
+def test_global_encoder_selected_via_hydra_target():
+    """Both global encoder classes instantiate via _target_, as in the engine."""
+    from hydra.utils import instantiate
+    from omegaconf import OmegaConf
+
+    ff_cfg = OmegaConf.create({
+        '_target_': 'fm4tag.models.GlobalEncoder',
+        'feature_dim': _FEATURE_DIM,
+        'dim': _DIM,
+    })
+    tr_cfg = OmegaConf.create({
+        '_target_': 'fm4tag.models.GlobalTransformerEncoder',
+        'feature_dim': _FEATURE_DIM,
+        'dim': _DIM,
+        'layers': [{'type': 'col', 'depth': 1, 'heads': 2, 'dim_head': 8}],
+    })
+
+    ff_enc = instantiate(ff_cfg, num_features=_N_GLOBAL)
+    tr_enc = instantiate(tr_cfg, num_features=_N_GLOBAL)
+    assert type(ff_enc) is GlobalEncoder
+    assert type(tr_enc) is GlobalTransformerEncoder
+
+    x = torch.randn(_B, _N_GLOBAL)
+    assert ff_enc(x).shape == tr_enc(x).shape == (_B, _N_GLOBAL, _FEATURE_DIM)
