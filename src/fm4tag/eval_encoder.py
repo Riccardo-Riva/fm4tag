@@ -10,7 +10,7 @@ Per object (global + each constituent type):
 
 * **Uniformity** — how uniformly projected embeddings are spread on the unit
   hypersphere (Wang & Isola, NeurIPS 2020).  More negative = better.
-  Computed on the *projection-head* output (``pt_mlp1``) when available,
+  Computed on the *projection-head* output (``projector``) when available,
   otherwise on the flattened encoder output.
 * **Effective rank** — exp(H) where H is the entropy of the normalised singular
   value spectrum of the embedding matrix.  Higher = less collapsed.
@@ -52,7 +52,7 @@ from torch.utils.data import DataLoader
 
 from fm4tag.models import embed_data
 from fm4tag.datasets.datasets import DatasetCatCon, cat_con_collate_fn
-from fm4tag.cli.engine import _build_encoders, _load_pretrained_encoders
+from fm4tag.runner.builders import _build_encoders, _load_pretrained_encoders
 from fm4tag.metrics.metrics import effective_rank, uniformity
 
 
@@ -84,7 +84,7 @@ def _encode_global(batch: dict, encoder, device: torch.device) -> torch.Tensor:
     x = batch['global'].to(device)
     with torch.no_grad():
         X = encoder(x)  # (B, F_g, dim)
-        z = encoder.pt_mlp1(X.flatten(1))  # (B, proj_dim)
+        z = encoder.projector(X.flatten(1))  # (B, proj_dim)
     return z
 
 
@@ -99,7 +99,7 @@ def _encode_constituent(
     Returns:
         z_track: ``(N_valid, proj_dim)`` projected track embeddings.
         z_jet:   ``(B, proj_dim)`` jet-level embeddings (masked mean pool over
-                 valid tracks, projected through ``pt_mlp1``).
+                 valid tracks, projected through ``projector``).
     """
     const = batch['constituents'][obj_name]
     x_categ = const['categorical'].to(device)  # (B, C, F_cat)
@@ -118,7 +118,7 @@ def _encode_constituent(
         F_feat, dim = X.shape[1], X.shape[2]
 
         # Track-level projected embeddings.
-        z_track = encoder.pt_mlp1(X.flatten(1))  # (N_valid, proj_dim)
+        z_track = encoder.projector(X.flatten(1))  # (N_valid, proj_dim)
 
         # Scatter back to (B, C, F, dim) for jet-level pooling.
         buf = torch.zeros(B * C, F_feat, dim, device=device)
@@ -129,7 +129,7 @@ def _encode_constituent(
         n_valid = valid.sum(dim=1, keepdim=True).float().clamp(min=1.0)  # (B, 1)
         jet_emb = (buf * valid.unsqueeze(-1).unsqueeze(-1)).sum(dim=1)  # (B, F, dim)
         jet_emb = jet_emb / n_valid.unsqueeze(-1)
-        z_jet = encoder.pt_mlp1(jet_emb.flatten(1))  # (B, proj_dim)
+        z_jet = encoder.projector(jet_emb.flatten(1))  # (B, proj_dim)
 
     return z_track, z_jet
 
@@ -217,14 +217,14 @@ def evaluate(
         # Global.
         global_name = cfg.global_object
         enc_global = encoders[global_name]
-        if hasattr(enc_global, 'pt_mlp1'):
+        if hasattr(enc_global, 'projector'):
             z_global = _encode_global(batch, enc_global, _device)
             _collect_embeddings(z_global, track_store[global_name], max_jet_samples)
 
         # Constituents.
         for obj_name in cfg.constituent_objects:
             enc = encoders[obj_name]
-            if not hasattr(enc, 'pt_mlp1'):
+            if not hasattr(enc, 'projector'):
                 continue
             z_track, z_jet = _encode_constituent(batch, obj_name, enc, _device)
             _collect_embeddings(z_track, track_store[obj_name], max_track_samples)
