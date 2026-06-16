@@ -125,22 +125,28 @@ backbone:
           ff_dropout:    0.0
           chunk_size:    2048    # null = whole-batch row attention
 
-# ── Classifier head (finetune only) ──────────────────────────────────────────
-# global_proj_out, const_proj_outs, y_dim are injected at runtime from encoders
-head:
-  _target_: fm4tag.models.MultiStreamClassifierHead
-  mlp_dropout:  0.0
-  ff_dropout:   0.0
-  attn_dropout: 0.0
-  ff_mult:      4
+# ── Jet aggregator (shared by pretrain + finetune) ────────────────────────────
+# Cross-constituent transformer + masked mean-pool that builds the jet embedding
+# z_jet from the per-object projections.  Output dims are read from the encoders.
+aggregator:
+  depth:        6
   heads:        4
   dim_head:     32
-  depth:        6
+  ff_mult:      4
+  ff_dropout:   0.0
+  attn_dropout: 0.0
+
+# ── Classifier head (finetune only) ──────────────────────────────────────────
+# jet_dim (= aggregator.out_dim) and y_dim are injected at runtime.
+head:
+  mlp_hidden:  null   # null → auto (max(jet_dim // 2, y_dim))
+  mlp_dropout: 0.0
 
 # ── Fine-tuning settings ──────────────────────────────────────────────────────
 freeze_encoder: false   # true → encoder frozen initially; BackboneFinetuning
                         #        callback unfreezes at unfreeze_backbone_at_epoch
 encoder_ckpt:   null    # path to a PretrainModule checkpoint to load the encoder
+load_aggregator: true   # also load the aggregator from encoder_ckpt (shared weights)
 ckpt_path:      null    # Lightning checkpoint to resume fit / run test / predict
 
 # ── Online representation-quality monitoring ──────────────────────────────────
@@ -168,15 +174,46 @@ pretrain:
       augmentations:
         - _target_: fm4tag.augmentations.Identity
 
-  # Contrastive loss
-  nce_temp:             0.7
-  loss_type:            out     # 'out' (L_out) or 'in' (L_in) from SupCon paper
-  include_pos_in_denom: true    # true = standard SupCon denominator, includes positives; false = only negatives
+  # Composable loss: total = Σ weight_i * term_i  (see fm4tag.modules.losses)
+  loss:
+    _target_: fm4tag.modules.losses.PretrainLoss
+    terms:
+      - _target_: fm4tag.modules.losses.ContrastiveTermAdapter
+        temperature:          0.7
+        loss_type:            out     # 'out' (L_out) or 'in' (L_in) from SupCon paper
+        include_pos_in_denom: true    # standard SupCon denominator (includes positives)
+      - _target_: fm4tag.modules.losses.DenoisingTermAdapter
+        weight_cat: 0.2     # categorical reconstruction (constituents only)
+        weight_con: 0.2     # continuous reconstruction
+      - _target_: fm4tag.modules.losses.JetContrastiveTermAdapter
+        temperature:          0.7
+        loss_type:            out
+        include_pos_in_denom: true
+    weights: [0.6, 1.0, 1.0]   # [per-object contrastive, denoising, jet contrastive]
 
-  # Loss weights
-  lam_contrastive:      0.6
-  lam_denoising_cat:    0.2     # categorical reconstruction (constituents only)
-  lam_denoising_con:    0.2     # continuous reconstruction
+# ── Fine-tuning loss + views ──────────────────────────────────────────────────
+finetune:
+  # Views are used only by the jet-contrastive term (mirror the pretrain views).
+  views:
+    - _target_: fm4tag.augmentations.Compose
+      augmentations:
+        - _target_: fm4tag.augmentations.CutMix
+          lam: 0.1
+        - _target_: fm4tag.augmentations.Mixup
+          lam: 0.1
+    - _target_: fm4tag.augmentations.Compose
+      augmentations:
+        - _target_: fm4tag.augmentations.Identity
+
+  loss:
+    _target_: fm4tag.modules.losses.FinetuneLoss
+    terms:
+      - _target_: fm4tag.modules.losses.CrossEntropyTerm
+      - _target_: fm4tag.modules.losses.JetContrastiveFinetuneTerm
+        temperature:          0.7
+        loss_type:            out
+        include_pos_in_denom: true
+    weights: [1.0, 0.3]   # [cross-entropy, jet contrastive]
 
 # ── Optimiser ─────────────────────────────────────────────────────────────────
 optimizer:
@@ -247,12 +284,12 @@ hpo:
 
   search_space:
     pretrain:
-      - {param: pretrain.nce_temp,              type: float, low: 0.3,   high: 1.0}
+      - {param: pretrain.loss.terms.0.temperature, type: float, low: 0.3,   high: 1.0}
       - {param: optimizer.lr,                   type: float, low: 1e-5,  high: 1e-2, log: true}
       - {param: optimizer.weight_decay,         type: float, low: 1e-7,  high: 1e-3, log: true}
 
     finetune:
-      - {param: head.depth,                        type: int,         low: 3,   high: 6}
-      - {param: head.ff_mult,                      type: categorical, choices: [2, 4]}
+      - {param: aggregator.depth,                  type: int,         low: 3,   high: 6}
+      - {param: aggregator.ff_mult,                type: categorical, choices: [2, 4]}
       - {param: optimizer.lr,                      type: float,       low: 1e-5, high: 1e-2, log: true}
       - {param: optimizer.weight_decay,            type: float,       low: 1e-7, high: 1e-3, log: true}
