@@ -1,0 +1,180 @@
+# ════════════════════════════════════════════════════════════════════════════
+# fm4tag — GLOBAL-ONLY (no constituents) smoke-test config
+#
+# Same as default.yaml but with an empty constituent_objects list, to exercise
+# the no-constituent code path end-to-end (encoders / aggregator / losses).
+# With no constituents the JetAggregator has no parameters and z_jet == z_global.
+# trainer.limit_*_batches keep the 10-epoch run fast.
+# ════════════════════════════════════════════════════════════════════════════
+
+# ── Run control ─────────────────────────────────────────────────────────────
+phase:  pretrain   # pretrain | finetune
+action: fit        # fit | test | predict
+seed:   42
+experiment_name: jets_only_test
+output_dir: outputs
+
+# ── Data — objects ──────────────────────────────────────────────────────────
+global_object: jets
+constituent_objects: []
+
+# ── Data — feature definitions ──────────────────────────────────────────────
+variables:
+  jets:
+    inputs:
+      - pt_btagJes
+      - eta_btagJes
+    label: flavour_label
+    unique_labels: [0, 1, 2, 3]
+
+# ── Data — file paths ────────────────────────────────────────────────────────
+base_path: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251114_155623 # 6M
+
+train_dataset_path: ${base_path}/train/output/pp_output_train.h5
+val_dataset_path:   ${base_path}/val/output/pp_output_val.h5
+test_dataset_path:  ${base_path}/test/output/pp_output_test.h5
+
+norm_dict_path:  ${base_path}/pretrain/output/norm_dict.yaml
+class_dict_path: ${base_path}/pretrain/output/class_dict.yaml
+
+# ── Data — loader settings ───────────────────────────────────────────────────
+dataloader:
+  batch_size:      512
+  num_workers:     4
+  prefetch_factor: 2
+  pin_memory:      true
+
+# ── Backbone architecture ─────────────────────────────────────────────────────
+backbone:
+  global_encoder:
+    _target_: fm4tag.models.GlobalEncoder
+    feature_dim: 128
+    dim: 128   # num_features injected at runtime from variables.jets.inputs
+
+# ── Jet aggregator (shared by pretrain + finetune) ────────────────────────────
+# With no constituents this has no parameters and simply passes z_global through.
+aggregator:
+  depth:        6
+  heads:        4
+  dim_head:     32
+  ff_mult:      4
+  ff_dropout:   0.0
+  attn_dropout: 0.0
+
+# ── Classifier head (finetune only) ──────────────────────────────────────────
+# jet_dim (= aggregator.out_dim) and y_dim are injected at runtime.
+head:
+  mlp_hidden:  null   # null → auto (max(jet_dim // 2, y_dim))
+  mlp_dropout: 0.0
+
+# ── Fine-tuning settings ──────────────────────────────────────────────────────
+freeze_encoder: false
+encoder_ckpt:   null
+load_aggregator: true   # also load the aggregator from encoder_ckpt (shared weights)
+ckpt_path:      null
+
+# ── Online representation-quality monitoring ──────────────────────────────────
+eval:
+  enabled: true
+  splits: [val]
+  n_samples: 8192
+  objects: null
+  metrics: [uniformity, effective_rank]
+
+# ── Pretraining settings ──────────────────────────────────────────────────────
+pretrain:
+  _target_: fm4tag.modules.ContrastiveDenoisingModule
+
+  views:
+    - _target_: fm4tag.augmentations.Compose
+      augmentations:
+        - _target_: fm4tag.augmentations.CutMix
+          lam: 0.1
+        - _target_: fm4tag.augmentations.Mixup
+          lam: 0.1
+    - _target_: fm4tag.augmentations.Compose
+      augmentations:
+        - _target_: fm4tag.augmentations.Identity
+
+  # Composable loss: total = Σ weight_i * term_i  (see fm4tag.modules.losses)
+  loss:
+    _target_: fm4tag.modules.losses.PretrainLoss
+    terms:
+      - _target_: fm4tag.modules.losses.ContrastiveTermAdapter
+        temperature:          0.7
+        loss_type:            out
+        include_pos_in_denom: true
+      - _target_: fm4tag.modules.losses.DenoisingTermAdapter
+        weight_cat: 0.2     # no categorical denoising fires (global is continuous-only)
+        weight_con: 0.2     # continuous reconstruction
+      - _target_: fm4tag.modules.losses.JetContrastiveTermAdapter
+        temperature:          0.7
+        loss_type:            out
+        include_pos_in_denom: true
+    weights: [0.6, 1.0, 1.0]   # [per-object contrastive, denoising, jet contrastive]
+
+# ── Fine-tuning loss + views ──────────────────────────────────────────────────
+finetune:
+  views:
+    - _target_: fm4tag.augmentations.Compose
+      augmentations:
+        - _target_: fm4tag.augmentations.CutMix
+          lam: 0.1
+        - _target_: fm4tag.augmentations.Mixup
+          lam: 0.1
+    - _target_: fm4tag.augmentations.Compose
+      augmentations:
+        - _target_: fm4tag.augmentations.Identity
+
+  loss:
+    _target_: fm4tag.modules.losses.FinetuneLoss
+    terms:
+      - _target_: fm4tag.modules.losses.CrossEntropyTerm
+      - _target_: fm4tag.modules.losses.JetContrastiveFinetuneTerm
+        temperature:          0.7
+        loss_type:            out
+        include_pos_in_denom: true
+    weights: [1.0, 0.3]   # [cross-entropy, jet contrastive]
+
+# ── Optimiser ─────────────────────────────────────────────────────────────────
+optimizer:
+  lr:           0.00011284338470369939
+  backbone_lr:  1.0e-5
+  weight_decay: 5.962613854843877e-05
+
+# ── PyTorch Lightning Trainer ─────────────────────────────────────────────────
+trainer:
+  max_epochs:         10
+  accelerator:        gpu
+  devices:            1
+  strategy:           auto
+  precision:          "bf16-mixed"
+  log_every_n_steps:  10
+  gradient_clip_val:  1.0
+  limit_train_batches: 30    # smoke test: keep epochs short
+  limit_val_batches:   10
+
+# ── Profiler ─────────────────────────────────────────────────────────────────
+profiler:
+  enabled: false
+
+# ── Callbacks ─────────────────────────────────────────────────────────────────
+callbacks:
+  model_summary:
+    max_depth: 2
+
+  progress_bar:
+    refresh_rate: 10
+
+  model_checkpoint:
+    monitor:    val_loss
+    save_top_k: 1
+    mode:       min
+
+  early_stopping:
+    monitor:  val_loss
+    patience: 20
+    mode:     min
+
+  memory_monitor:
+    enabled:           false
