@@ -7,8 +7,13 @@ import torch
 from omegaconf import OmegaConf
 
 from fm4tag.augmentations import Compose, CutMix, FeatureDropout, GaussianNoise
-from fm4tag.models import Encoder, GlobalEncoder
-from fm4tag.modules import ContrastiveDenoisingModule
+from fm4tag.models import Encoder, GlobalEncoder, JetAggregator
+from fm4tag.modules import (
+    ContrastiveDenoisingModule,
+    ContrastiveTermAdapter,
+    DenoisingTermAdapter,
+    PretrainLoss,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -74,6 +79,33 @@ def three_views():
     ]
 
 
+@pytest.fixture()
+def aggregator(encoders):
+    global_dim = encoders['jets'].projector.layers[-1].out_features
+    const_dims = [encoders['tracks'].projector.layers[-1].out_features]
+    return JetAggregator(
+        global_dim=global_dim,
+        const_dims=const_dims,
+        depth=1,
+        heads=2,
+        dim_head=8,
+        ff_mult=1,
+    )
+
+
+@pytest.fixture()
+def loss():
+    return PretrainLoss(
+        terms=[
+            ContrastiveTermAdapter(
+                temperature=0.1, loss_type='out', include_pos_in_denom=True
+            ),
+            DenoisingTermAdapter(weight_cat=0.2, weight_con=0.2),
+        ],
+        weights=[0.6, 1.0],
+    )
+
+
 def _make_batch(B: int = 4, C: int = 8) -> dict:
     """Build a minimal batch dict matching the expected format."""
     return {
@@ -92,18 +124,24 @@ def _make_batch(B: int = 4, C: int = 8) -> dict:
 # Construction
 # ---------------------------------------------------------------------------
 
-def test_construction(encoders, two_views, minimal_cfg):
+def test_construction(encoders, aggregator, two_views, loss, minimal_cfg):
     module = ContrastiveDenoisingModule(
-        encoders=encoders, views=two_views, cfg=minimal_cfg
+        encoders=encoders,
+        aggregator=aggregator,
+        views=two_views,
+        loss=loss,
+        cfg=minimal_cfg,
     )
     assert len(module.views) == 2
 
 
-def test_requires_two_views(encoders, minimal_cfg):
+def test_requires_two_views(encoders, aggregator, loss, minimal_cfg):
     with pytest.raises(ValueError, match='at least 2'):
         ContrastiveDenoisingModule(
             encoders=encoders,
+            aggregator=aggregator,
             views=[Compose([])],
+            loss=loss,
             cfg=minimal_cfg,
         )
 
@@ -112,9 +150,13 @@ def test_requires_two_views(encoders, minimal_cfg):
 # compute_loss
 # ---------------------------------------------------------------------------
 
-def test_compute_loss_returns_scalar(encoders, two_views, minimal_cfg):
+def test_compute_loss_returns_scalar(encoders, aggregator, two_views, loss, minimal_cfg):
     module = ContrastiveDenoisingModule(
-        encoders=encoders, views=two_views, cfg=minimal_cfg
+        encoders=encoders,
+        aggregator=aggregator,
+        views=two_views,
+        loss=loss,
+        cfg=minimal_cfg,
     )
     batch = _make_batch()
     loss, log_dict = module._compute_loss(batch)
@@ -122,9 +164,13 @@ def test_compute_loss_returns_scalar(encoders, two_views, minimal_cfg):
     assert torch.isfinite(loss)
 
 
-def test_compute_loss_log_dict_has_expected_keys(encoders, two_views, minimal_cfg):
+def test_compute_loss_log_dict_has_expected_keys(encoders, aggregator, two_views, loss, minimal_cfg):
     module = ContrastiveDenoisingModule(
-        encoders=encoders, views=two_views, cfg=minimal_cfg
+        encoders=encoders,
+        aggregator=aggregator,
+        views=two_views,
+        loss=loss,
+        cfg=minimal_cfg,
     )
     batch = _make_batch()
     _, log_dict = module._compute_loss(batch)
@@ -133,9 +179,13 @@ def test_compute_loss_log_dict_has_expected_keys(encoders, two_views, minimal_cf
     assert 'tracks/loss_contrastive' in log_dict
 
 
-def test_compute_loss_denoising_keys_present(encoders, two_views, minimal_cfg):
+def test_compute_loss_denoising_keys_present(encoders, aggregator, two_views, loss, minimal_cfg):
     module = ContrastiveDenoisingModule(
-        encoders=encoders, views=two_views, cfg=minimal_cfg
+        encoders=encoders,
+        aggregator=aggregator,
+        views=two_views,
+        loss=loss,
+        cfg=minimal_cfg,
     )
     batch = _make_batch()
     _, log_dict = module._compute_loss(batch)
@@ -144,7 +194,7 @@ def test_compute_loss_denoising_keys_present(encoders, two_views, minimal_cfg):
     assert 'tracks/loss_denoising_con' in log_dict
 
 
-def test_compute_loss_no_denoising_when_lam_zero(encoders, two_views):
+def test_compute_loss_no_denoising_when_lam_zero(encoders, aggregator, two_views):
     cfg = OmegaConf.create({
         'global_object': 'jets',
         'constituent_objects': ['tracks'],
@@ -161,16 +211,30 @@ def test_compute_loss_no_denoising_when_lam_zero(encoders, two_views):
                  'metrics': []},
         'optimizer': {'lr': 1e-3, 'weight_decay': 1e-5},
     })
-    module = ContrastiveDenoisingModule(encoders=encoders, views=two_views, cfg=cfg)
+    loss = PretrainLoss(
+        terms=[
+            ContrastiveTermAdapter(
+                temperature=0.1, loss_type='out', include_pos_in_denom=True
+            )
+        ],
+        weights=[1.0],
+    )
+    module = ContrastiveDenoisingModule(
+        encoders=encoders, aggregator=aggregator, views=two_views, loss=loss, cfg=cfg
+    )
     batch = _make_batch()
     _, log_dict = module._compute_loss(batch)
     assert 'jets/loss_denoising_con' not in log_dict
     assert 'tracks/loss_denoising_cat' not in log_dict
 
 
-def test_three_views_loss(encoders, three_views, minimal_cfg):
+def test_three_views_loss(encoders, aggregator, three_views, loss, minimal_cfg):
     module = ContrastiveDenoisingModule(
-        encoders=encoders, views=three_views, cfg=minimal_cfg
+        encoders=encoders,
+        aggregator=aggregator,
+        views=three_views,
+        loss=loss,
+        cfg=minimal_cfg,
     )
     batch = _make_batch()
     loss, _ = module._compute_loss(batch)
@@ -181,9 +245,13 @@ def test_three_views_loss(encoders, three_views, minimal_cfg):
 # Gradient flow through the full loss
 # ---------------------------------------------------------------------------
 
-def test_gradients_flow_to_encoder(encoders, two_views, minimal_cfg):
+def test_gradients_flow_to_encoder(encoders, aggregator, two_views, loss, minimal_cfg):
     module = ContrastiveDenoisingModule(
-        encoders=encoders, views=two_views, cfg=minimal_cfg
+        encoders=encoders,
+        aggregator=aggregator,
+        views=two_views,
+        loss=loss,
+        cfg=minimal_cfg,
     )
     batch = _make_batch()
     loss, _ = module._compute_loss(batch)
@@ -199,9 +267,13 @@ def test_gradients_flow_to_encoder(encoders, two_views, minimal_cfg):
 # _project_for_eval
 # ---------------------------------------------------------------------------
 
-def test_project_for_eval_global(encoders, two_views, minimal_cfg):
+def test_project_for_eval_global(encoders, aggregator, two_views, loss, minimal_cfg):
     module = ContrastiveDenoisingModule(
-        encoders=encoders, views=two_views, cfg=minimal_cfg
+        encoders=encoders,
+        aggregator=aggregator,
+        views=two_views,
+        loss=loss,
+        cfg=minimal_cfg,
     )
     batch = _make_batch()
     z = module._project_for_eval(batch, 'jets')
@@ -209,9 +281,13 @@ def test_project_for_eval_global(encoders, two_views, minimal_cfg):
     assert z.shape[0] == batch['global'].shape[0]
 
 
-def test_project_for_eval_constituent(encoders, two_views, minimal_cfg):
+def test_project_for_eval_constituent(encoders, aggregator, two_views, loss, minimal_cfg):
     module = ContrastiveDenoisingModule(
-        encoders=encoders, views=two_views, cfg=minimal_cfg
+        encoders=encoders,
+        aggregator=aggregator,
+        views=two_views,
+        loss=loss,
+        cfg=minimal_cfg,
     )
     batch = _make_batch(B=4, C=8)
     z = module._project_for_eval(batch, 'tracks')
@@ -219,9 +295,13 @@ def test_project_for_eval_constituent(encoders, two_views, minimal_cfg):
     assert z.ndim == 2   # (N_valid, proj_dim)
 
 
-def test_project_for_eval_empty_valid(encoders, two_views, minimal_cfg):
+def test_project_for_eval_empty_valid(encoders, aggregator, two_views, loss, minimal_cfg):
     module = ContrastiveDenoisingModule(
-        encoders=encoders, views=two_views, cfg=minimal_cfg
+        encoders=encoders,
+        aggregator=aggregator,
+        views=two_views,
+        loss=loss,
+        cfg=minimal_cfg,
     )
     batch = _make_batch()
     batch['constituents']['tracks']['valid'][:] = False
@@ -233,9 +313,13 @@ def test_project_for_eval_empty_valid(encoders, two_views, minimal_cfg):
 # predict_step
 # ---------------------------------------------------------------------------
 
-def test_predict_step_structure(encoders, two_views, minimal_cfg):
+def test_predict_step_structure(encoders, aggregator, two_views, loss, minimal_cfg):
     module = ContrastiveDenoisingModule(
-        encoders=encoders, views=two_views, cfg=minimal_cfg
+        encoders=encoders,
+        aggregator=aggregator,
+        views=two_views,
+        loss=loss,
+        cfg=minimal_cfg,
     )
     batch = _make_batch()
     out = module.predict_step(batch, 0)
@@ -252,9 +336,13 @@ def test_predict_step_structure(encoders, two_views, minimal_cfg):
     assert len(out['constituents']['tracks']['views']) == 2
 
 
-def test_predict_step_view_has_pre_flatten_and_raw(encoders, two_views, minimal_cfg):
+def test_predict_step_view_has_pre_flatten_and_raw(encoders, aggregator, two_views, loss, minimal_cfg):
     module = ContrastiveDenoisingModule(
-        encoders=encoders, views=two_views, cfg=minimal_cfg
+        encoders=encoders,
+        aggregator=aggregator,
+        views=two_views,
+        loss=loss,
+        cfg=minimal_cfg,
     )
     batch = _make_batch()
     out = module.predict_step(batch, 0)
@@ -265,9 +353,13 @@ def test_predict_step_view_has_pre_flatten_and_raw(encoders, two_views, minimal_
     assert 'continuous' in view['raw']
 
 
-def test_predict_step_output_is_cpu(encoders, two_views, minimal_cfg):
+def test_predict_step_output_is_cpu(encoders, aggregator, two_views, loss, minimal_cfg):
     module = ContrastiveDenoisingModule(
-        encoders=encoders, views=two_views, cfg=minimal_cfg
+        encoders=encoders,
+        aggregator=aggregator,
+        views=two_views,
+        loss=loss,
+        cfg=minimal_cfg,
     )
     batch = _make_batch()
     out = module.predict_step(batch, 0)

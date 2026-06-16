@@ -73,7 +73,7 @@ def _make_encoders():
 
     return torch.nn.ModuleDict(
         {
-            'jets': GlobalEncoder(num_features=2, dim=4),
+            'jets': GlobalEncoder(num_features=2, feature_dim=4, dim=4),
             'tracks': Encoder(
                 categories=[2, 3],
                 num_continuous=2,
@@ -81,6 +81,34 @@ def _make_encoders():
                 layers=[{'type': 'col', 'heads': 1, 'dim_head': 4}],
             ),
         }
+    )
+
+
+def _make_aggregator(encoders):
+    from fm4tag.models import JetAggregator
+
+    global_dim = encoders['jets'].projector.layers[-1].out_features
+    const_dims = [encoders['tracks'].projector.layers[-1].out_features]
+    return JetAggregator(
+        global_dim=global_dim,
+        const_dims=const_dims,
+        depth=1,
+        heads=1,
+        dim_head=4,
+        ff_mult=1,
+    )
+
+
+def _make_loss():
+    from fm4tag.modules import ContrastiveTermAdapter, PretrainLoss
+
+    return PretrainLoss(
+        terms=[
+            ContrastiveTermAdapter(
+                temperature=0.07, loss_type='out', include_pos_in_denom=True
+            )
+        ],
+        weights=[1.0],
     )
 
 
@@ -205,7 +233,11 @@ def _worker_pretrain_e2e(rank: int, world_size: int) -> None:
     cfg = _make_cfg()
     encoders = _make_encoders()
     views = [Compose([]), Compose([])]
-    module = ContrastiveDenoisingModule(encoders=encoders, views=views, cfg=cfg)
+    aggregator = _make_aggregator(encoders)
+    loss = _make_loss()
+    module = ContrastiveDenoisingModule(
+        encoders=encoders, aggregator=aggregator, views=views, loss=loss, cfg=cfg
+    )
 
     # Wire up a minimal trainer stub (reads from _trainer in Lightning 2.x).
     module._trainer = SimpleNamespace(
@@ -282,7 +314,11 @@ def test_sanity_check_skip():
     cfg = _make_cfg()
     encoders = _make_encoders()
     views = [Compose([]), Compose([])]
-    module = ContrastiveDenoisingModule(encoders=encoders, views=views, cfg=cfg)
+    aggregator = _make_aggregator(encoders)
+    loss = _make_loss()
+    module = ContrastiveDenoisingModule(
+        encoders=encoders, aggregator=aggregator, views=views, loss=loss, cfg=cfg
+    )
 
     module._trainer = SimpleNamespace(world_size=1, sanity_checking=True)
     module.print = lambda *a, **_kw: None
