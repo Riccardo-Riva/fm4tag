@@ -3,16 +3,21 @@
 from __future__ import annotations
 
 import torch
-import torch.nn.functional as F
 from einops import rearrange
 from omegaconf import DictConfig
 from torch import nn
 
 from ..augmentations import Compose
-from ..losses import DenoisingLoss, MultiViewSupConLoss
 from ..models import embed_data
+from ..models.aggregator import JetAggregator
 from ..models.backbones import Encoder, GlobalEncoder
 from .base_pretrain_module import BasePretrainModule
+from .losses import PretrainLoss, loss_wants
+from .view_encoding import (
+    encode_constituent_view,
+    encode_global_view,
+    scatter_valid,
+)
 
 
 class ContrastiveDenoisingModule(BasePretrainModule):
@@ -20,13 +25,23 @@ class ContrastiveDenoisingModule(BasePretrainModule):
 
     For each object (global + constituents) and each batch:
 
-    1. **Contrastive** — all ``V`` views are encoded and projected; a
-       :class:`~fm4tag.losses.MultiViewSupConLoss` treats all views of the
+    1. **Contrastive** — all ``V`` views are encoded and projected (POINT A,
+       ``encoder.projector``); the contrastive term treats all views of the
        same sample as positives and all views of other samples as negatives.
 
     2. **Denoising** — the *first* view's encoded representation reconstructs
        the original (pre-augmentation) features via ``sep``-style MLP heads;
        supervised with cross-entropy (categorical) + MSE (continuous).
+
+    3. **Jet contrastive (optional)** — if the loss contains a term consuming
+       ``z_jet_list``, the per-view projections of *all* objects are aggregated
+       into one ``z_jet`` per view (POINT B, via :class:`JetAggregator`) and a
+       jet-level contrastive term is applied once per batch.
+
+    The loss is fully described by the injected :class:`PretrainLoss`: each term
+    declares the inputs it needs and is dispatched only when those inputs are
+    available (per-object scope vs jet-level scope), so a single loss object
+    drives both scopes without double-counting.
 
     Valid-mask consistency
     ----------------------
@@ -38,26 +53,26 @@ class ContrastiveDenoisingModule(BasePretrainModule):
     the training loss; they are visible only in :meth:`predict_step` output.
 
     Args:
-        encoders: :class:`~torch.nn.ModuleDict` mapping object name → encoder.
-        views:    List of :class:`~fm4tag.augmentations.Compose` pipelines, one
-                  per view.  Instantiated externally (e.g. via
-                  ``hydra.utils.instantiate``) and passed in.  The first view
-                  is used as the denoising input; the original batch data is
-                  always the reconstruction target.
-        cfg:      Full Hydra config.  Relevant sub-keys:
-
-                  ``cfg.pretrain.nce_temp``           — contrastive temperature
-                  ``cfg.pretrain.loss_type``           — ``'out'`` or ``'in'``
-                  ``cfg.pretrain.include_pos_in_denom``— bool
-                  ``cfg.pretrain.lam_contrastive``     — contrastive loss weight
-                  ``cfg.pretrain.lam_denoising_cat``   — categorical denoising weight
-                  ``cfg.pretrain.lam_denoising_con``   — continuous denoising weight
+        encoders:   :class:`~torch.nn.ModuleDict` mapping object name → encoder.
+        aggregator: :class:`JetAggregator` mapping per-object projections to a
+                    single jet embedding ``z_jet`` (POINT B).  Shared (same
+                    weights) with fine-tuning.  Receives no gradient unless the
+                    loss contains a jet-level term.
+        views:      List of :class:`~fm4tag.augmentations.Compose` pipelines,
+                    one per view.  The first view is used as the denoising
+                    input; the original batch data is always the reconstruction
+                    target.
+        loss:       :class:`PretrainLoss` — composable, weighted sum of loss
+                    terms.
+        cfg:        Full Hydra config (used for eval / optimiser settings).
     """
 
     def __init__(
         self,
         encoders: torch.nn.ModuleDict,
+        aggregator: JetAggregator,
         views: list[Compose],
+        loss: PretrainLoss,
         cfg: DictConfig,
     ) -> None:
         super().__init__(encoders, cfg)
@@ -67,203 +82,158 @@ class ContrastiveDenoisingModule(BasePretrainModule):
                 "ContrastiveDenoisingModule requires at least 2 views."
             )
         self.views = nn.ModuleList(views)
-
-        cfg_pt = cfg.pretrain
-        self.contrastive_loss = MultiViewSupConLoss(
-            temperature=cfg_pt.nce_temp,
-            loss_type=cfg_pt.get('loss_type', 'out'),
-            include_pos_in_denom=cfg_pt.get('include_pos_in_denom', True),
-        )
-        self.denoising_loss = DenoisingLoss()
+        self.aggregator = aggregator
+        self.loss = loss
 
     # ------------------------------------------------------------------
-    # Per-view encoding helpers
-    # ------------------------------------------------------------------
-
-    def _encode_global_view(
-        self,
-        x_orig: torch.Tensor,
-        view: Compose,
-        encoder: GlobalEncoder,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Apply one view's augmentations and encode global features.
-
-        Returns:
-            z: ``(B, proj_dim)`` projected embedding (for contrastive loss).
-            X: ``(B, F_g, dim)`` transformer output (for denoising loss).
-        """
-        # RAW stage
-        data = view.apply_raw({'continuous': x_orig})
-        x = data['continuous']
-
-        # Encode
-        X = encoder(x)   # (B, F_g, dim)
-
-        # EMBEDDING stage
-        data_emb = view.apply_embedding({'continuous': X})
-        X_emb = data_emb['continuous']
-
-        z = encoder.projector(X_emb.flatten(1))   # (B, proj_dim)
-        return z, X_emb
-
-    def _encode_constituent_view(
-        self,
-        const: dict,
-        valids_flat: torch.Tensor,
-        view: Compose,
-        encoder: Encoder,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Apply one view's augmentations and encode constituent features.
-
-        ``valids_flat`` is always the **original** valid mask (flattened to
-        ``(B*C,)``), shared across all views to guarantee consistent N.
-        Pre-flatten augmentations in ``view`` may modify feature values but
-        their valid-mask output is ignored here.
-
-        Returns:
-            z: ``(N, proj_dim)`` projected embedding (for contrastive loss).
-            X: ``(N, F, dim)`` transformer output (for denoising loss).
-        """
-        # PRE_FLATTEN stage — apply to get possibly modified features.
-        # Valid mask from the aug output is intentionally discarded; we always
-        # flatten with the original mask so N is consistent across views.
-        data_pre = view.apply_pre_flatten({
-            'categorical': const['categorical'],
-            'continuous':  const['continuous'],
-            'valid':        const['valid'],
-        })
-
-        x_categ = rearrange(data_pre['categorical'], 'b c f -> (b c) f')[valids_flat]
-        x_cont  = rearrange(data_pre['continuous'],  'b c f -> (b c) f')[valids_flat]
-
-        # RAW stage
-        data_raw = view.apply_raw({'categorical': x_categ, 'continuous': x_cont})
-        x_categ = data_raw['categorical']
-        x_cont  = data_raw['continuous']
-
-        # Embed
-        x_cat_enc, x_con_enc = embed_data(x_categ, x_cont, encoder)
-
-        # EMBEDDING stage
-        data_emb = view.apply_embedding({
-            'categorical': x_cat_enc, 'continuous': x_con_enc
-        })
-        x_cat_enc = data_emb['categorical']
-        x_con_enc = data_emb['continuous']
-
-        # Encode
-        X = encoder(x_cat_enc, x_con_enc)   # (N, F, dim)
-        z = encoder.projector(X.flatten(1, 2))   # (N, proj_dim)
-        return z, X
-
-    # ------------------------------------------------------------------
-    # Loss computation
+    # Per-object loss computation
     # ------------------------------------------------------------------
 
     def _compute_loss_for_global(
         self,
         batch: dict,
         encoder: GlobalEncoder,
-    ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
-        cfg_pt = self.cfg.pretrain
+        needs_denoise: bool,
+    ) -> tuple[torch.Tensor, dict[str, torch.Tensor], list[torch.Tensor]]:
+        """Per-object loss for the global object (POINT A).
+
+        Returns ``(obj_loss, obj_logs, z_views)`` where ``z_views`` is the list
+        of per-view ``(B, d_global)`` projections, reused for jet aggregation.
+        """
         x_orig = batch['global']   # (B, F_g)
 
         zs: list[torch.Tensor] = []
         X_first: torch.Tensor | None = None
-
         for i, view in enumerate(self.views):
-            z, X = self._encode_global_view(x_orig, view, encoder)
+            z, X = encode_global_view(encoder, view, x_orig)
             zs.append(z)
             if i == 0:
                 X_first = X
 
-        total_loss = x_orig.new_zeros(())
-        log_dict: dict[str, torch.Tensor] = {}
-
-        # Contrastive
-        l_cont = self.contrastive_loss(zs)
-        log_dict['loss_contrastive'] = l_cont
-        total_loss = total_loss + cfg_pt.lam_contrastive * l_cont
-
-        # Denoising (first view → reconstruct original)
-        lam_con: float = cfg_pt.get('lam_denoising_con', 0.0)
-        if lam_con > 0.0:
+        kwargs: dict = {'z_list': zs}
+        if needs_denoise:
             assert X_first is not None
-            con_pred = torch.cat(encoder.reconstructor(X_first), dim=1)   # (B, F_g)
-            l_den_con = F.mse_loss(con_pred, x_orig)
-            log_dict['loss_denoising_con'] = l_den_con
-            total_loss = total_loss + lam_con * l_den_con
+            con_outs = encoder.reconstructor(X_first)   # list of (B, 1)
+            # The global object has no categorical features.
+            x_categ_empty = x_orig.new_zeros((x_orig.shape[0], 0), dtype=torch.long)
+            kwargs.update(
+                cat_outs=[], x_categ=x_categ_empty, con_outs=con_outs, x_cont=x_orig
+            )
 
-        log_dict['loss'] = total_loss
-        return total_loss, log_dict
+        obj_loss, obj_logs = self.loss(**kwargs)
+        return obj_loss, obj_logs, zs
 
     def _compute_loss_for_constituent(
         self,
         batch: dict,
         obj_name: str,
         encoder: Encoder,
-    ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
-        cfg_pt = self.cfg.pretrain
+        needs_denoise: bool,
+        needs_jet: bool,
+    ) -> tuple[
+        torch.Tensor,
+        dict[str, torch.Tensor],
+        list[torch.Tensor] | None,
+        torch.Tensor,
+    ]:
+        """Per-object loss for one constituent type (POINT A).
+
+        Returns ``(obj_loss, obj_logs, z_views, valids)`` where ``z_views`` —
+        present only when ``needs_jet`` — is the list of per-view
+        ``(B, C, d_i)`` projections scattered back onto the padded grid (for
+        jet aggregation), and ``valids`` is the ``(B, C)`` mask.
+        """
         const = batch['constituents'][obj_name]
+        valids = const['valid']   # (B, C)
 
         # Original valid mask — shared across all views.
-        valids_flat = rearrange(const['valid'], 'b c -> (b c)')
+        valids_flat = rearrange(valids, 'b c -> (b c)')
         x_categ_orig = rearrange(const['categorical'], 'b c f -> (b c) f')[valids_flat]
         x_cont_orig  = rearrange(const['continuous'],  'b c f -> (b c) f')[valids_flat]
 
         zs: list[torch.Tensor] = []
         X_first: torch.Tensor | None = None
-
         for i, view in enumerate(self.views):
-            z, X = self._encode_constituent_view(const, valids_flat, view, encoder)
+            z, X = encode_constituent_view(encoder, view, const, valids_flat)
             zs.append(z)
             if i == 0:
                 X_first = X
 
-        total_loss = x_categ_orig.new_zeros(())
-        log_dict: dict[str, torch.Tensor] = {}
+        kwargs: dict = {'z_list': zs}
+        if needs_denoise:
+            assert X_first is not None
+            cat_outs = encoder.cat_reconstructor(X_first[:, : encoder.num_categories, :])
+            con_outs = encoder.con_reconstructor(X_first[:, encoder.num_categories :, :])
+            kwargs.update(
+                cat_outs=cat_outs,
+                x_categ=x_categ_orig,
+                con_outs=con_outs,
+                x_cont=x_cont_orig,
+            )
 
-        # Contrastive
-        l_cont = self.contrastive_loss(zs)
-        log_dict['loss_contrastive'] = l_cont
-        total_loss = total_loss + cfg_pt.lam_contrastive * l_cont
+        obj_loss, obj_logs = self.loss(**kwargs)
 
-        # Denoising (first view → reconstruct original)
-        assert X_first is not None
-        lam_cat: float = cfg_pt.get('lam_denoising_cat', 0.0)
-        lam_con: float = cfg_pt.get('lam_denoising_con', 0.0)
+        # Scatter per-view projections back onto the padded grid for the
+        # aggregator (POINT B) — only when a jet-level term needs them.
+        z_views: list[torch.Tensor] | None = None
+        if needs_jet:
+            B, C = valids.shape
+            z_views = [scatter_valid(z, valids_flat, B, C) for z in zs]
 
-        if lam_cat > 0.0 or lam_con > 0.0:
-            cat_outs = encoder.cat_reconstructor(X_first[:, :encoder.num_categories, :])
-            con_outs = encoder.con_reconstructor(X_first[:, encoder.num_categories:, :])
-            l_cat, l_con = self.denoising_loss(cat_outs, x_categ_orig, con_outs, x_cont_orig)
+        return obj_loss, obj_logs, z_views, valids
 
-            if lam_cat > 0.0:
-                log_dict['loss_denoising_cat'] = l_cat
-                total_loss = total_loss + lam_cat * l_cat
-            if lam_con > 0.0:
-                log_dict['loss_denoising_con'] = l_con
-                total_loss = total_loss + lam_con * l_con
-
-        log_dict['loss'] = total_loss
-        return total_loss, log_dict
+    # ------------------------------------------------------------------
+    # Total loss
+    # ------------------------------------------------------------------
 
     def _compute_loss(
         self, batch: dict
     ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
+        needs_denoise = loss_wants(self.loss, 'con_outs')
+        needs_jet = loss_wants(self.loss, 'z_jet_list')
+
         total_loss = batch['global'].new_zeros(())
         log_dict: dict[str, torch.Tensor] = {}
 
+        z_global_views: list[torch.Tensor] | None = None
+        z_consts_per_obj: list[list[torch.Tensor]] = []   # [obj][view] → (B,C,d_i)
+        valids_per_obj: list[torch.Tensor] = []
+
         for obj_name, encoder in self.encoders.items():
             if obj_name == self.global_object:
-                obj_loss, obj_logs = self._compute_loss_for_global(batch, encoder)
-            else:
-                obj_loss, obj_logs = self._compute_loss_for_constituent(
-                    batch, obj_name, encoder
+                obj_loss, obj_logs, z_global_views = self._compute_loss_for_global(
+                    batch, encoder, needs_denoise
                 )
+            else:
+                obj_loss, obj_logs, z_views, valids = (
+                    self._compute_loss_for_constituent(
+                        batch, obj_name, encoder, needs_denoise, needs_jet
+                    )
+                )
+                if needs_jet:
+                    assert z_views is not None
+                    z_consts_per_obj.append(z_views)
+                    valids_per_obj.append(valids)
+
             total_loss = total_loss + obj_loss
             for k, v in obj_logs.items():
                 log_dict[f'{obj_name}/{k}'] = v
+
+        # Jet-level (POINT B) loss — aggregated across all objects, once.
+        if needs_jet:
+            assert z_global_views is not None
+            z_jet_list: list[torch.Tensor] = []
+            for v in range(len(self.views)):
+                z_consts_v = [z_views[v] for z_views in z_consts_per_obj]
+                z_jet = self.aggregator(z_global_views[v], z_consts_v, valids_per_obj)
+                z_jet_list.append(z_jet)
+
+            jet_loss, jet_logs = self.loss(z_jet_list=z_jet_list)
+            total_loss = total_loss + jet_loss
+            for k, v in jet_logs.items():
+                if k == 'loss':
+                    continue
+                log_dict[k] = v   # top-level, e.g. 'jet_embedding/loss_contrastive'
 
         log_dict['loss'] = total_loss
         return total_loss, log_dict

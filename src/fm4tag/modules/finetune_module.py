@@ -1,13 +1,25 @@
 """Supervised fine-tuning Lightning module.
 
 Wraps a :class:`~torch.nn.ModuleDict` of pretrained (or randomly initialised)
-encoders and a :class:`~fm4tag.models.heads.MultiStreamClassifierHead`
-into a full Lightning module that supports:
+encoders, a shared :class:`~fm4tag.models.aggregator.JetAggregator`, and a
+:class:`~fm4tag.models.heads.MultiStreamClassifierHead` into a full Lightning
+module that supports:
 
 * ``fit``     — supervised training (with optional encoder freezing /
                 progressive unfreezing via the ``BackboneFinetuning`` callback)
 * ``test``    — evaluation on a labelled test set
 * ``predict`` — inference returning class probabilities (softmax)
+
+The forward pass is::
+
+    z_global, z_consts, valids = _encode_all(batch)   # POINT A (encoder.projector)
+    z_jet  = aggregator(z_global, z_consts, valids)    # POINT B
+    logits = head(z_jet)                               # POINT C
+
+The loss is a composable :class:`~fm4tag.modules.losses.FinetuneLoss`.  If it
+contains a jet-level contrastive term (one consuming ``z_jet_list``), the module
+re-encodes the batch under each of ``views`` — exactly as in pretraining — to
+build one ``z_jet`` per view and feeds the list to the loss.
 
 The encoders are stored as ``self.backbone`` (an :class:`~torch.nn.ModuleDict`)
 so that Lightning's built-in :class:`~lightning.pytorch.callbacks.BackboneFinetuning`
@@ -21,46 +33,79 @@ from collections import defaultdict
 
 import lightning as L
 import torch
-import torch.nn.functional as F
 from einops import rearrange
 from omegaconf import DictConfig
 from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
 from torchmetrics.classification import MulticlassAUROC
 
+from ..augmentations import Compose
 from ..metrics import effective_rank, uniformity
-from ..models.heads import MultiStreamClassifierHead
 from ..models import embed_data
+from ..models.aggregator import JetAggregator
+from ..models.heads import MultiStreamClassifierHead
 from ..utils.ddp import gather_embeddings_sized
+from .losses import FinetuneLoss, loss_wants
+from .view_encoding import (
+    encode_constituent_view,
+    encode_global_view,
+    scatter_valid,
+)
 
 
 class FinetuneModule(L.LightningModule):
     """Lightning module for supervised fine-tuning of all encoders + classifier.
 
     Args:
-        encoders: :class:`~torch.nn.ModuleDict` mapping each object name to its
-                  encoder — a :class:`GlobalEncoder` for the global object and
-                  an :class:`Encoder` for each constituent type.  Stored as
-                  ``self.backbone`` for ``BackboneFinetuning`` compatibility.
-        head:     :class:`MultiStreamClassifierHead` — the classification head.
-        cfg:      Full Hydra config.  Relevant sub-keys:
-                  ``cfg.optimizer``, ``cfg.freeze_encoder``,
-                  ``cfg.class_dict``, ``cfg.global_object``,
-                  ``cfg.constituent_objects``.
+        encoders:   :class:`~torch.nn.ModuleDict` mapping each object name to its
+                    encoder — a :class:`GlobalEncoder` for the global object and
+                    an :class:`Encoder` for each constituent type.  Stored as
+                    ``self.backbone`` for ``BackboneFinetuning`` compatibility.
+        aggregator: :class:`JetAggregator` mapping per-object projections to a
+                    single jet embedding ``z_jet`` (POINT B).  Shared (same
+                    weights) with pretraining.
+        head:       :class:`MultiStreamClassifierHead` — receives ``z_jet``.
+        loss:       :class:`~fm4tag.modules.losses.FinetuneLoss` — composable,
+                    weighted sum of loss terms (cross-entropy, optional jet
+                    contrastive).
+        views:      List of :class:`~fm4tag.augmentations.Compose` pipelines used
+                    only when the loss contains a jet-contrastive term; one
+                    ``z_jet`` is produced per view.  May be empty otherwise.
+        cfg:        Full Hydra config.  Relevant sub-keys:
+                    ``cfg.optimizer``, ``cfg.freeze_encoder``,
+                    ``cfg.class_dict``, ``cfg.global_object``,
+                    ``cfg.constituent_objects``.
     """
 
     def __init__(
         self,
         encoders: torch.nn.ModuleDict,
+        aggregator: JetAggregator,
         head: MultiStreamClassifierHead,
+        loss: FinetuneLoss,
+        views: list[Compose],
         cfg: DictConfig,
     ) -> None:
         super().__init__()
-        self.save_hyperparameters(ignore=['encoders', 'head'])
+        self.save_hyperparameters(
+            ignore=['encoders', 'aggregator', 'head', 'loss', 'views']
+        )
 
         # Named 'backbone' for BackboneFinetuning callback compatibility.
         self.backbone = encoders
+        self.aggregator = aggregator
         self.head = head
+        self.loss = loss
+        self.views = torch.nn.ModuleList(views)
         self.cfg = cfg
+
+        # Whether the loss needs per-view jet embeddings (jet contrastive).
+        self._needs_jet_views = loss_wants(self.loss, 'z_jet_list')
+        if self._needs_jet_views and len(self.views) < 2:
+            raise ValueError(
+                "FinetuneModule needs at least 2 views when the loss contains a "
+                "jet-contrastive term (z_jet_list); got "
+                f"{len(self.views)}."
+            )
 
         class_weights = None
         if cfg.get('class_dict'):
@@ -99,7 +144,7 @@ class FinetuneModule(L.LightningModule):
         list[torch.Tensor],
         list[torch.Tensor],
     ]:
-        """Run all encoders and apply pt_mlp1 projections.
+        """Run all encoders and apply ``projector`` projections (POINT A).
 
         Returns:
             z_global:      ``(B, g_dim)`` — global projected embedding.
@@ -114,7 +159,7 @@ class FinetuneModule(L.LightningModule):
         global_name = self.cfg.global_object
         enc_global = self.backbone[global_name]
         X_global = enc_global(batch['global'])  # (B, F_g, dim)
-        z_global = enc_global.pt_mlp1(X_global.flatten(1))  # (B, g_dim)
+        z_global = enc_global.projector(X_global.flatten(1))  # (B, g_dim)
 
         # ── Constituents ─────────────────────────────────────────────────────
         z_consts: list[torch.Tensor] = []
@@ -139,13 +184,10 @@ class FinetuneModule(L.LightningModule):
                 x_categ_flat[valids_flat], x_cont_flat[valids_flat], encoder
             )
             X_valid = encoder(x_cat_enc, x_con_enc)  # (N_valid, F, dim)
-            z_valid = encoder.pt_mlp1(X_valid.flatten(1, 2))  # (N_valid, c_dim)
+            z_valid = encoder.projector(X_valid.flatten(1, 2))  # (N_valid, c_dim)
 
             # Scatter projected embeddings back into (B, C, c_dim).
-            c_dim = z_valid.shape[1]
-            z_all = z_valid.new_zeros(B * C, c_dim)
-            z_all[valids_flat] = z_valid
-            z_all = z_all.reshape(B, C, c_dim)
+            z_all = scatter_valid(z_valid, valids_flat, B, C)
 
             z_consts.append(z_all)
             valids_list.append(valids)
@@ -153,12 +195,54 @@ class FinetuneModule(L.LightningModule):
 
         return z_global, z_consts, valids_list, z_valid_flat
 
+    def _encode_jet_views(self, batch: dict) -> list[torch.Tensor]:
+        """Build one ``z_jet`` per view (POINT B) for the jet-contrastive term.
+
+        Re-encodes the batch under each augmentation view exactly as in
+        pretraining, projects (POINT A), aggregates across all objects, and
+        returns the per-view list of ``(B, jet_dim)`` jet embeddings.
+        """
+        global_name = self.cfg.global_object
+        enc_global = self.backbone[global_name]
+        x_orig = batch['global']
+
+        # Per-view global projections.
+        z_global_views = [
+            encode_global_view(enc_global, view, x_orig)[0] for view in self.views
+        ]
+
+        # Per-view constituent projections (scattered) + valids.
+        z_consts_per_obj: list[list[torch.Tensor]] = []
+        valids_per_obj: list[torch.Tensor] = []
+        for obj_name in self.cfg.constituent_objects:
+            encoder = self.backbone[obj_name]
+            const = batch['constituents'][obj_name]
+            valids = const['valid']
+            B, C = valids.shape
+            valids_flat = rearrange(valids, 'b c -> (b c)')
+
+            z_views = []
+            for view in self.views:
+                z, _ = encode_constituent_view(encoder, view, const, valids_flat)
+                z_views.append(scatter_valid(z, valids_flat, B, C))
+            z_consts_per_obj.append(z_views)
+            valids_per_obj.append(valids)
+
+        # Aggregate per view (POINT B).
+        z_jet_list: list[torch.Tensor] = []
+        for v in range(len(self.views)):
+            z_consts_v = [z_views[v] for z_views in z_consts_per_obj]
+            z_jet_list.append(
+                self.aggregator(z_global_views[v], z_consts_v, valids_per_obj)
+            )
+        return z_jet_list
+
     # ------------------------------------------------------------------
     # Forward pass
     # ------------------------------------------------------------------
 
     def forward(self, batch: dict) -> torch.Tensor:
-        """Encode all objects and classify.
+        """Encode all objects, aggregate into a jet embedding, and classify.
 
         Args:
             batch: Dict from the datamodule collate function.
@@ -167,7 +251,41 @@ class FinetuneModule(L.LightningModule):
             ``(B, y_dim)`` class logits.
         """
         z_global, z_consts, valids_list, _ = self._encode_all(batch)
-        return self.head(z_global, z_consts, valids_list)
+        z_jet = self.aggregator(z_global, z_consts, valids_list)  # POINT B
+        return self.head(z_jet)  # POINT C
+
+    # ------------------------------------------------------------------
+    # Loss
+    # ------------------------------------------------------------------
+
+    def _compute_loss(
+        self, batch: dict, logits: torch.Tensor
+    ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
+        """Evaluate the composable finetune loss for a batch.
+
+        Always passes ``logits``/``labels``/``class_weights``; additionally
+        passes per-view ``z_jet_list`` when the loss contains a jet-contrastive
+        term.
+        """
+        kwargs: dict = {
+            'logits': logits,
+            'labels': batch['label'],
+            'class_weights': self.class_weights,
+        }
+        if self._needs_jet_views:
+            kwargs['z_jet_list'] = self._encode_jet_views(batch)
+        return self.loss(**kwargs)
+
+    def _log_loss_components(
+        self, loss_log: dict[str, torch.Tensor], split: str
+    ) -> None:
+        """Log each loss sub-component (everything except the top-level total)."""
+        for k, v in loss_log.items():
+            if k == 'loss':
+                continue
+            self.log(
+                f'{split}_{k}', v, on_step=False, on_epoch=True, sync_dist=True
+            )
 
     # ------------------------------------------------------------------
     # Online embedding metric helpers
@@ -178,7 +296,7 @@ class FinetuneModule(L.LightningModule):
         z_global: torch.Tensor,
         z_valid_flat: list[torch.Tensor],
     ) -> None:
-        """Append pre-computed pt_mlp1 projections to the embedding store.
+        """Append pre-computed ``projector`` projections to the embedding store.
 
         Uses the embeddings already computed during the forward pass —
         no extra encoder run needed.
@@ -232,7 +350,7 @@ class FinetuneModule(L.LightningModule):
             if eval_cfg.get('log_effective_rank', True):
                 self.log(
                     f'val_{obj_name}/effective_rank',
-                    torch.tensor(effective_rank(z)),
+                    torch.as_tensor(effective_rank(z)),
                     on_step=False,
                     on_epoch=True,
                     sync_dist=False,
@@ -245,25 +363,31 @@ class FinetuneModule(L.LightningModule):
 
     def _shared_step(
         self, batch: dict
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        """Run forward + compute loss, accuracy, and class probabilities.
+    ) -> tuple[
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        dict[str, torch.Tensor],
+    ]:
+        """Run forward + compute loss, predictions, and class probabilities.
 
         Returns:
-            ``(loss, preds, probs, labels)``
+            ``(loss, preds, probs, labels, loss_log)``
         """
         logits = self(batch)
+        loss, loss_log = self._compute_loss(batch, logits)
         labels = batch['label']
-        loss = F.cross_entropy(logits, labels, weight=self.class_weights)
         preds = logits.argmax(dim=-1)
         probs = logits.softmax(dim=-1)
-        return loss, preds, probs, labels
+        return loss, preds, probs, labels, loss_log
 
     # ------------------------------------------------------------------
     # LightningModule hooks
     # ------------------------------------------------------------------
 
     def training_step(self, batch: dict, batch_idx: int) -> torch.Tensor:
-        loss, preds, _, labels = self._shared_step(batch)
+        loss, preds, _, labels, loss_log = self._shared_step(batch)
         acc = (preds == labels).float().mean()
         self.log(
             'train_loss',
@@ -274,6 +398,7 @@ class FinetuneModule(L.LightningModule):
             sync_dist=True,
         )
         self.log('train_acc', acc, on_step=False, on_epoch=True, sync_dist=True)
+        self._log_loss_components(loss_log, 'train')
         return loss
 
     def validation_step(self, batch: dict, batch_idx: int) -> None:
@@ -283,15 +408,16 @@ class FinetuneModule(L.LightningModule):
         )
 
         if do_eval:
-            # Run encode_all to get both logits and pt_mlp1 projections.
+            # Run encode_all to get both logits and projector embeddings.
             z_global, z_consts, valids_list, z_valid_flat = self._encode_all(batch)
-            logits = self.head(z_global, z_consts, valids_list)
+            z_jet = self.aggregator(z_global, z_consts, valids_list)
+            logits = self.head(z_jet)
             self._accumulate_embeddings(z_global, z_valid_flat)
         else:
             logits = self(batch)
 
+        loss, loss_log = self._compute_loss(batch, logits)
         labels = batch['label']
-        loss = F.cross_entropy(logits, labels, weight=self.class_weights)
         preds = logits.argmax(dim=-1)
         probs = logits.softmax(dim=-1)
         acc = (preds == labels).float().mean()
@@ -305,6 +431,7 @@ class FinetuneModule(L.LightningModule):
             sync_dist=True,
         )
         self.log('val_acc', acc, on_step=False, on_epoch=True, sync_dist=True)
+        self._log_loss_components(loss_log, 'val')
         self.val_auroc.update(probs, labels)
 
     def on_validation_epoch_end(self) -> None:
@@ -322,7 +449,7 @@ class FinetuneModule(L.LightningModule):
             self._compute_and_log_embedding_metrics()
 
     def test_step(self, batch: dict, batch_idx: int) -> None:
-        loss, preds, probs, labels = self._shared_step(batch)
+        loss, preds, probs, labels, _ = self._shared_step(batch)
         acc = (preds == labels).float().mean()
         self.log('test_loss', loss, sync_dist=True)
         self.log('test_acc', acc, sync_dist=True)
@@ -352,14 +479,14 @@ class FinetuneModule(L.LightningModule):
         Drops stale head projection keys (``head.global_proj.*``,
         ``head.const_proj.*``, ``head.global_agg.*``, ``head.const_phi.*``)
         from checkpoints saved before the projection was moved into the
-        encoder's ``pt_mlp1`` pipeline.  Also handles size mismatches in
-        ``backbone.*.pt_mlp*`` layers.
+        encoder's ``projector`` pipeline.  Also handles size mismatches in
+        ``backbone.*.projector.*`` layers.
         """
         sd = checkpoint['state_dict']
         model_sd = self.state_dict()
 
         # Drop stale head projection keys — the head no longer has its own
-        # projections; the encoder's pt_mlp1 is used directly in forward.
+        # projections; the encoder's projector is used directly in forward.
         _stale_prefixes = (
             'head.global_proj.',
             'head.const_proj.',
@@ -368,7 +495,7 @@ class FinetuneModule(L.LightningModule):
         )
         new_sd = {k: v for k, v in sd.items() if not k.startswith(_stale_prefixes)}
 
-        # For any key whose shape no longer matches (e.g. pt_mlp hidden-dim
+        # For any key whose shape no longer matches (e.g. projector hidden-dim
         # formula changed), fall back to the current model's initialisation.
         for k in list(new_sd):
             if k in model_sd and new_sd[k].shape != model_sd[k].shape:
@@ -384,21 +511,23 @@ class FinetuneModule(L.LightningModule):
         opt_cfg = self.cfg.optimizer
         freeze = self.cfg.get('freeze_encoder', False)
 
+        # The aggregator + head are always trained from epoch 0; only the
+        # backbone may start frozen (the BackboneFinetuning callback adds it
+        # to the optimiser when it unfreezes).
+        head_params = list(self.aggregator.parameters()) + list(self.head.parameters())
+
         if freeze:
-            # Backbone starts frozen; the BackboneFinetuning callback will
-            # add backbone parameters to the optimiser when unfreezing.
             optimizer = torch.optim.AdamW(
-                list(self.head.parameters()),
+                head_params,
                 lr=opt_cfg.lr,
                 weight_decay=opt_cfg.get('weight_decay', 1e-5),
             )
         else:
-            # Both backbone and head are optimised from epoch 0.
             backbone_lr = opt_cfg.get('backbone_lr', opt_cfg.lr)
             optimizer = torch.optim.AdamW(
                 [
                     {'params': list(self.backbone.parameters()), 'lr': backbone_lr},
-                    {'params': list(self.head.parameters()), 'lr': opt_cfg.lr},
+                    {'params': head_params, 'lr': opt_cfg.lr},
                 ],
                 weight_decay=opt_cfg.get('weight_decay', 1e-5),
             )

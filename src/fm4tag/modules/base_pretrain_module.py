@@ -29,7 +29,12 @@ class BasePretrainModule(L.LightningModule):
 
     def __init__(self, encoders: torch.nn.ModuleDict, cfg: DictConfig) -> None:
         super().__init__()
-        self.save_hyperparameters(ignore=['encoders'])
+        # Ignore nn.Module constructor args (already saved via state_dict) so
+        # they are not duplicated into the checkpoint's hyper_parameters.  Names
+        # absent on a given subclass are harmless to list here.
+        self.save_hyperparameters(
+            ignore=['encoders', 'aggregator', 'views', 'loss']
+        )
 
         self.encoders = encoders
         self.cfg = cfg
