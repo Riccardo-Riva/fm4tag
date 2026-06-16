@@ -1,18 +1,17 @@
 # ════════════════════════════════════════════════════════════════════════════
-# fm4tag — GLOBAL-ONLY (no constituents) config — real run
+# fm4tag — GLOBAL-ONLY (no constituents) smoke-test config
 #
-# Same as default.yaml but with an empty constituent_objects list. With no
-# constituents the JetAggregator has no parameters and z_jet == z_global, so the
-# jet-level contrastive term acts on the global embedding directly.
-# A quick smoke variant with batch caps lives in jets_only_test.yaml.
-# trainer.devices is overridden by the SLURM launcher (2-GPU DDP).
+# Same as default.yaml but with an empty constituent_objects list, to exercise
+# the no-constituent code path end-to-end (encoders / aggregator / losses).
+# With no constituents the JetAggregator has no parameters and z_jet == z_global.
+# trainer.limit_*_batches keep the 10-epoch run fast.
 # ════════════════════════════════════════════════════════════════════════════
 
 # ── Run control ─────────────────────────────────────────────────────────────
 phase:  pretrain   # pretrain | finetune
 action: fit        # fit | test | predict
 seed:   42
-experiment_name: jets_only
+experiment_name: jets_only_test
 output_dir: outputs
 
 # ── Data — objects ──────────────────────────────────────────────────────────
@@ -41,7 +40,7 @@ class_dict_path: ${base_path}/pretrain/output/class_dict.yaml
 # ── Data — loader settings ───────────────────────────────────────────────────
 dataloader:
   batch_size:      512
-  num_workers:     8
+  num_workers:     4
   prefetch_factor: 2
   pin_memory:      true
 
@@ -61,7 +60,7 @@ backbone:
         ff_mult:      1
         attn_dropout: 0.0
         ff_dropout:   0.0
-        chunk_size:   256
+        chunk_size:   null
 
 # ── Jet aggregator (shared by pretrain + finetune) ────────────────────────────
 # With no constituents this has no parameters and simply passes z_global through.
@@ -156,13 +155,15 @@ optimizer:
 
 # ── PyTorch Lightning Trainer ─────────────────────────────────────────────────
 trainer:
-  max_epochs:         100
+  max_epochs:         10
   accelerator:        gpu
-  devices:            1       # overridden by the SLURM launcher (2-GPU DDP)
-  strategy:           ddp_find_unused_parameters_true
+  devices:            1
+  strategy:           auto
   precision:          "bf16-mixed"
-  log_every_n_steps:  100
+  log_every_n_steps:  10
   gradient_clip_val:  1.0
+  limit_train_batches: 30    # smoke test: keep epochs short
+  limit_val_batches:   10
 
 # ── Profiler ─────────────────────────────────────────────────────────────────
 profiler:
@@ -174,23 +175,17 @@ callbacks:
     max_depth: 2
 
   progress_bar:
-    refresh_rate: 50
+    refresh_rate: 10
 
   model_checkpoint:
     monitor:    val_loss
-    save_top_k: 3
+    save_top_k: 1
     mode:       min
 
   early_stopping:
     monitor:  val_loss
-    patience: 15
+    patience: 20
     mode:     min
-
-  backbone_finetuning:
-    enabled:                    true
-    unfreeze_backbone_at_epoch: 10
-    backbone_initial_ratio_lr:  0.1
-    train_bn:                   false
 
   memory_monitor:
     enabled:           false

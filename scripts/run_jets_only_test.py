@@ -12,7 +12,7 @@ from omegaconf import OmegaConf
 
 from fm4tag.runner import run
 
-CFG = 'configs/jets_only.yaml'
+CFG = 'configs/jets_only_test.yaml'
 
 
 def main() -> None:
