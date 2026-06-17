@@ -4,7 +4,7 @@
 
 # ── Settings ──────────────────────────────────────────────────────────────────
 GPU_NODE=gpu-L40S-open,gpu-A40
-GPU_NUM=4
+GPU_NUM=2
 NUM_WORKERS=8
 REPO=/storage3/DSIP/rriva/research/fm4tag
 VENV=${REPO}/.venv

@@ -5,7 +5,7 @@
 # ── Settings ──────────────────────────────────────────────────────────────────
 # Fine-tune a jets_only pretrained encoder for classification.
 GPU_NODE=gpu-L40S-open,gpu-A40
-GPU_NUM=3
+GPU_NUM=2
 NUM_WORKERS=8
 REPO=/storage3/DSIP/rriva/research/fm4tag
 VENV=${REPO}/.venv

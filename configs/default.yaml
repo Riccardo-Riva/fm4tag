@@ -61,8 +61,8 @@ variables:
         numberOfSCTSharedHits:                    [0,1,2,3]
 
 # ── Data — file paths ────────────────────────────────────────────────────────
-#base_path: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_152051 # 60M
-base_path: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251114_155623 # 6M 
+base_path: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_152051 # 60M
+#base_path: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251114_155623 # 6M 
 
 train_dataset_path: ${base_path}/train/output/pp_output_train.h5
 val_dataset_path:   ${base_path}/val/output/pp_output_val.h5
@@ -106,15 +106,15 @@ backbone:
     dim: 128   # num_features injected at runtime from variables.jets.inputs
     layers:
       - type:         rowcol
-        depth:        2
-        col_heads:    4
+        depth:        3
+        col_heads:    2
         row_heads:    8
         dim_head:     32
         dim_row_head: 32
         ff_mult:      1
         attn_dropout: 0.0
         ff_dropout:   0.0
-        chunk_size:   null
+        chunk_size:   256
 
   constituents:
     tracks:
@@ -126,7 +126,7 @@ backbone:
       # categories and num_continuous are injected at runtime from variables.tracks
       layers:
         - type:          rowcol
-          depth:         6       # stacks 3 col+row steps in a single block
+          depth:         3       # stacks 3 col+row steps in a single block
           col_heads:     2
           row_heads:     8
           dim_head:      32
@@ -134,13 +134,13 @@ backbone:
           ff_mult:       1
           attn_dropout:  0.0
           ff_dropout:    0.0
-          chunk_size:    2048    # null = whole-batch row attention
+          chunk_size:    512    # null = whole-batch row attention
 
 # ── Jet aggregator (shared by pretrain + finetune) ────────────────────────────
 # Cross-constituent transformer + masked mean-pool that builds the jet embedding
 # z_jet from the per-object projections.  Output dims are read from the encoders.
 aggregator:
-  depth:        6
+  depth:        4
   heads:        4
   dim_head:     32
   ff_mult:      4
@@ -150,7 +150,7 @@ aggregator:
 # ── Classifier head (finetune only) ──────────────────────────────────────────
 # jet_dim (= aggregator.out_dim) and y_dim are injected at runtime.
 head:
-  mlp_hidden:  null   # null → auto (max(jet_dim // 2, y_dim))
+  mlp_hidden:  256   # null → auto (max(jet_dim // 2, y_dim))
   mlp_dropout: 0.0
 
 # ── Fine-tuning settings ──────────────────────────────────────────────────────
@@ -190,14 +190,14 @@ pretrain:
     _target_: fm4tag.modules.losses.PretrainLoss
     terms:
       - _target_: fm4tag.modules.losses.ContrastiveTermAdapter
-        temperature:          0.7
+        temperature:          0.1
         loss_type:            out     # 'out' (L_out) or 'in' (L_in) from SupCon paper
         include_pos_in_denom: true    # standard SupCon denominator (includes positives)
       - _target_: fm4tag.modules.losses.DenoisingTermAdapter
         weight_cat: 0.2     # categorical reconstruction (constituents only)
         weight_con: 0.2     # continuous reconstruction
       - _target_: fm4tag.modules.losses.JetContrastiveTermAdapter
-        temperature:          0.7
+        temperature:          0.1
         loss_type:            out
         include_pos_in_denom: true
     weights: [0.6, 1.0, 1.0]   # [per-object contrastive, denoising, jet contrastive]
@@ -221,7 +221,7 @@ finetune:
     terms:
       - _target_: fm4tag.modules.losses.CrossEntropyTerm
       - _target_: fm4tag.modules.losses.JetContrastiveFinetuneTerm
-        temperature:          0.7
+        temperature:          0.1
         loss_type:            out
         include_pos_in_denom: true
     weights: [1.0, 0.3]   # [cross-entropy, jet contrastive]
@@ -295,7 +295,7 @@ hpo:
 
   search_space:
     pretrain:
-      - {param: pretrain.loss.terms.0.temperature, type: float, low: 0.3,   high: 1.0}
+      - {param: pretrain.loss.terms.0.temperature, type: float, low: 0.1,   high: 0.5}
       - {param: optimizer.lr,                   type: float, low: 1e-5,  high: 1e-2, log: true}
       - {param: optimizer.weight_decay,         type: float, low: 1e-7,  high: 1e-3, log: true}
 
