@@ -31,8 +31,7 @@ def _build_layers(layers: list, *, dim: int, nfeats: int) -> nn.ModuleList:
         cls = _LAYER_TYPES.get(layer_type)
         if cls is None:
             raise ValueError(
-                f'Unknown layer type {layer_type!r}. '
-                f'Choose from: {list(_LAYER_TYPES)}'
+                f'Unknown layer type {layer_type!r}. Choose from: {list(_LAYER_TYPES)}'
             )
         if layer_type in ('row', 'rowcol'):
             kwargs['nfeats'] = nfeats
@@ -75,7 +74,10 @@ class GlobalEncoder(nn.Module):
             num_features, num_features * H, kernel_size=1, groups=num_features
         )
         self.fc2 = nn.Conv1d(
-            num_features * H, num_features * self.feature_dim, kernel_size=1, groups=num_features
+            num_features * H,
+            num_features * self.feature_dim,
+            kernel_size=1,
+            groups=num_features,
         )
 
         proj_in = num_features * self.feature_dim
@@ -91,8 +93,8 @@ class GlobalEncoder(nn.Module):
         Returns:
             ``(N, F_g, feature_dim)`` — one embedding token per feature.
         """
-        h = F.relu(self.fc1(x.unsqueeze(-1)))   # (N, F_g*H, 1)
-        out = self.fc2(h).squeeze(-1)            # (N, F_g*feature_dim)
+        h = F.relu(self.fc1(x.unsqueeze(-1)))  # (N, F_g*H, 1)
+        out = self.fc2(h).squeeze(-1)  # (N, F_g*feature_dim)
         return out.view(x.size(0), self.num_features, self.feature_dim)
 
 
@@ -271,7 +273,7 @@ def embed_data(
     applied to the embedded tokens before passing them to ``encoder.forward``.
     """
     x_categ = x_categ + encoder.categories_offset.type_as(x_categ)
-    x_categ_enc = encoder.embeds(x_categ)   # (N, F_cat, dim)
+    x_categ_enc = encoder.embeds(x_categ)  # (N, F_cat, dim)
 
     x_cont_enc: torch.Tensor | None = None
     if encoder.num_continuous > 0:

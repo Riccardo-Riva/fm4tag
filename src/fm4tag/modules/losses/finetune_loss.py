@@ -36,9 +36,9 @@ class CrossEntropyTerm(nn.Module):
         class_weights: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
         """Args:
-            logits:        ``(B, n_classes)`` class logits.
-            labels:        ``(B,)`` integer class labels.
-            class_weights: Optional per-class weights for the loss.
+        logits:        ``(B, n_classes)`` class logits.
+        labels:        ``(B,)`` integer class labels.
+        class_weights: Optional per-class weights for the loss.
         """
         loss_val = F.cross_entropy(logits, labels, weight=class_weights)
         return loss_val, {'loss_ce': loss_val}
@@ -75,6 +75,6 @@ class JetContrastiveFinetuneTerm(nn.Module):
         self, z_jet_list: list[torch.Tensor]
     ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
         """Args:
-            z_jet_list: One ``(B, jet_dim)`` jet embedding per view.
+        z_jet_list: One ``(B, jet_dim)`` jet embedding per view.
         """
         return self.adapter(z_jet_list)

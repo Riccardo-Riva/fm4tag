@@ -53,6 +53,7 @@ def embedding_data():
 # Identity
 # ---------------------------------------------------------------------------
 
+
 def test_identity_pre_flatten(pre_flatten_data):
     out = Identity()(pre_flatten_data)
     assert torch.equal(out['categorical'], pre_flatten_data['categorical'])
@@ -70,6 +71,7 @@ def test_identity_stage_override():
 # ---------------------------------------------------------------------------
 # TrackDropout
 # ---------------------------------------------------------------------------
+
 
 def test_track_dropout_reduces_valid(pre_flatten_data):
     aug = TrackDropout(drop_prob=0.9, min_valid=1)
@@ -102,6 +104,7 @@ def test_track_dropout_no_valid_key():
 # CutMix
 # ---------------------------------------------------------------------------
 
+
 def test_cutmix_output_shape(raw_data):
     aug = CutMix(lam=0.5)
     out = aug(raw_data)
@@ -115,7 +118,7 @@ def test_cutmix_stage():
 
 def test_cutmix_values_are_mix(raw_data):
     torch.manual_seed(0)
-    aug = CutMix(lam=0.0)   # all values replaced → output ≠ input
+    aug = CutMix(lam=0.0)  # all values replaced → output ≠ input
     out = aug(raw_data)
     # lam=0 means keep-mask is all False, so all values come from a permuted copy.
     # They can coincidentally equal input, but on average they should differ.
@@ -125,6 +128,7 @@ def test_cutmix_values_are_mix(raw_data):
 # ---------------------------------------------------------------------------
 # FeatureDropout
 # ---------------------------------------------------------------------------
+
 
 def test_feature_dropout_shape(raw_data):
     aug = FeatureDropout(corrupt_frac=0.5)
@@ -139,6 +143,7 @@ def test_feature_dropout_stage():
 # ---------------------------------------------------------------------------
 # GaussianNoise
 # ---------------------------------------------------------------------------
+
 
 def test_gaussian_noise_embedding_shape(embedding_data):
     aug = GaussianNoise(sigma=0.1, space='embedding')
@@ -161,6 +166,7 @@ def test_gaussian_noise_raw_shape(raw_data):
 # Mixup
 # ---------------------------------------------------------------------------
 
+
 def test_mixup_shape(embedding_data):
     aug = Mixup(lam=0.5)
     out = aug(embedding_data)
@@ -176,12 +182,15 @@ def test_mixup_stage():
 # Compose
 # ---------------------------------------------------------------------------
 
+
 def test_compose_stages_are_separated():
-    compose = Compose([
-        TrackDropout(drop_prob=0.1),
-        CutMix(lam=0.7),
-        GaussianNoise(sigma=0.05, space='embedding'),
-    ])
+    compose = Compose(
+        [
+            TrackDropout(drop_prob=0.1),
+            CutMix(lam=0.7),
+            GaussianNoise(sigma=0.05, space='embedding'),
+        ]
+    )
     assert len(compose.pre_flatten) == 1
     assert len(compose.raw) == 1
     assert len(compose.embedding) == 1

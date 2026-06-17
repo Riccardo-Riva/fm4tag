@@ -75,9 +75,7 @@ def _call_term(
     sig = inspect.signature(term.forward)
     params = sig.parameters
 
-    has_var_kw = any(
-        p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values()
-    )
+    has_var_kw = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values())
     if has_var_kw:
         return term(**kwargs)
 
@@ -110,11 +108,11 @@ class PretrainLoss(nn.Module):
     def __init__(self, terms: list[nn.Module], weights: list[float]) -> None:
         super().__init__()
         if len(terms) == 0:
-            raise ValueError(f"{type(self).__name__} requires at least one term.")
+            raise ValueError(f'{type(self).__name__} requires at least one term.')
         if len(terms) != len(weights):
             raise ValueError(
-                f"terms and weights must have the same length, got "
-                f"{len(terms)} terms and {len(weights)} weights."
+                f'terms and weights must have the same length, got '
+                f'{len(terms)} terms and {len(weights)} weights.'
             )
         self.terms = nn.ModuleList(terms)
         self.weights = list(weights)
@@ -184,7 +182,7 @@ class ContrastiveTermAdapter(nn.Module):
         self, z_list: list[torch.Tensor]
     ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
         """Args:
-            z_list: One ``(N, D)`` projection tensor per view.
+        z_list: One ``(N, D)`` projection tensor per view.
         """
         loss_val = self.loss(z_list)
         return loss_val, {'loss_contrastive': loss_val}
@@ -257,10 +255,10 @@ class DenoisingTermAdapter(nn.Module):
         x_cont: torch.Tensor,
     ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
         """Args:
-            cat_outs: Per-feature categorical reconstruction logits.
-            x_categ:  Original categorical indices.
-            con_outs: Per-feature continuous reconstruction predictions.
-            x_cont:   Original continuous values.
+        cat_outs: Per-feature categorical reconstruction logits.
+        x_categ:  Original categorical indices.
+        con_outs: Per-feature continuous reconstruction predictions.
+        x_cont:   Original continuous values.
         """
         l_cat, l_con = self.loss(cat_outs, x_categ, con_outs, x_cont)
         total = self.weight_cat * l_cat + self.weight_con * l_con

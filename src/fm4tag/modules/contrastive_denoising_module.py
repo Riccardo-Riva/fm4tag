@@ -78,9 +78,7 @@ class ContrastiveDenoisingModule(BasePretrainModule):
         super().__init__(encoders, cfg)
 
         if len(views) < 2:
-            raise ValueError(
-                "ContrastiveDenoisingModule requires at least 2 views."
-            )
+            raise ValueError('ContrastiveDenoisingModule requires at least 2 views.')
         self.views = nn.ModuleList(views)
         self.aggregator = aggregator
         self.loss = loss
@@ -100,7 +98,7 @@ class ContrastiveDenoisingModule(BasePretrainModule):
         Returns ``(obj_loss, obj_logs, z_views)`` where ``z_views`` is the list
         of per-view ``(B, d_global)`` projections, reused for jet aggregation.
         """
-        x_orig = batch['global']   # (B, F_g)
+        x_orig = batch['global']  # (B, F_g)
 
         zs: list[torch.Tensor] = []
         X_first: torch.Tensor | None = None
@@ -113,7 +111,7 @@ class ContrastiveDenoisingModule(BasePretrainModule):
         kwargs: dict = {'z_list': zs}
         if needs_denoise:
             assert X_first is not None
-            con_outs = encoder.reconstructor(X_first)   # list of (B, 1)
+            con_outs = encoder.reconstructor(X_first)  # list of (B, 1)
             # The global object has no categorical features.
             x_categ_empty = x_orig.new_zeros((x_orig.shape[0], 0), dtype=torch.long)
             kwargs.update(
@@ -144,12 +142,12 @@ class ContrastiveDenoisingModule(BasePretrainModule):
         jet aggregation), and ``valids`` is the ``(B, C)`` mask.
         """
         const = batch['constituents'][obj_name]
-        valids = const['valid']   # (B, C)
+        valids = const['valid']  # (B, C)
 
         # Original valid mask — shared across all views.
         valids_flat = rearrange(valids, 'b c -> (b c)')
         x_categ_orig = rearrange(const['categorical'], 'b c f -> (b c) f')[valids_flat]
-        x_cont_orig  = rearrange(const['continuous'],  'b c f -> (b c) f')[valids_flat]
+        x_cont_orig = rearrange(const['continuous'], 'b c f -> (b c) f')[valids_flat]
 
         zs: list[torch.Tensor] = []
         X_first: torch.Tensor | None = None
@@ -162,8 +160,12 @@ class ContrastiveDenoisingModule(BasePretrainModule):
         kwargs: dict = {'z_list': zs}
         if needs_denoise:
             assert X_first is not None
-            cat_outs = encoder.cat_reconstructor(X_first[:, : encoder.num_categories, :])
-            con_outs = encoder.con_reconstructor(X_first[:, encoder.num_categories :, :])
+            cat_outs = encoder.cat_reconstructor(
+                X_first[:, : encoder.num_categories, :]
+            )
+            con_outs = encoder.con_reconstructor(
+                X_first[:, encoder.num_categories :, :]
+            )
             kwargs.update(
                 cat_outs=cat_outs,
                 x_categ=x_categ_orig,
@@ -196,7 +198,7 @@ class ContrastiveDenoisingModule(BasePretrainModule):
         log_dict: dict[str, torch.Tensor] = {}
 
         z_global_views: list[torch.Tensor] | None = None
-        z_consts_per_obj: list[list[torch.Tensor]] = []   # [obj][view] → (B,C,d_i)
+        z_consts_per_obj: list[list[torch.Tensor]] = []  # [obj][view] → (B,C,d_i)
         valids_per_obj: list[torch.Tensor] = []
 
         for obj_name, encoder in self.encoders.items():
@@ -233,7 +235,7 @@ class ContrastiveDenoisingModule(BasePretrainModule):
             for k, v in jet_logs.items():
                 if k == 'loss':
                     continue
-                log_dict[k] = v   # top-level, e.g. 'jet_embedding/loss_contrastive'
+                log_dict[k] = v  # top-level, e.g. 'jet_embedding/loss_contrastive'
 
         log_dict['loss'] = total_loss
         return total_loss, log_dict
@@ -243,14 +245,12 @@ class ContrastiveDenoisingModule(BasePretrainModule):
     # ------------------------------------------------------------------
 
     @torch.no_grad()
-    def _project_for_eval(
-        self, batch: dict, obj_name: str
-    ) -> torch.Tensor | None:
+    def _project_for_eval(self, batch: dict, obj_name: str) -> torch.Tensor | None:
         """Project clean (no augmentation) embeddings for eval metrics."""
         encoder = self.encoders[obj_name]
 
         if obj_name == self.global_object:
-            X = encoder(batch['global'])            # (B, F_g, dim)
+            X = encoder(batch['global'])  # (B, F_g, dim)
             return encoder.projector(X.flatten(1))  # (B, proj_dim)
 
         const = batch['constituents'][obj_name]
@@ -259,10 +259,10 @@ class ContrastiveDenoisingModule(BasePretrainModule):
             return None
 
         x_categ = rearrange(const['categorical'], 'b c f -> (b c) f')[valids_flat]
-        x_cont  = rearrange(const['continuous'],  'b c f -> (b c) f')[valids_flat]
+        x_cont = rearrange(const['continuous'], 'b c f -> (b c) f')[valids_flat]
         x_cat_enc, x_con_enc = embed_data(x_categ, x_cont, encoder)
-        X = encoder(x_cat_enc, x_con_enc)           # (N, F, dim)
-        return encoder.projector(X.flatten(1, 2))   # (N, proj_dim)
+        X = encoder(x_cat_enc, x_con_enc)  # (N, F, dim)
+        return encoder.projector(X.flatten(1, 2))  # (N, proj_dim)
 
     # ------------------------------------------------------------------
     # Predict step — returns per-view augmented data for visualisation
@@ -329,40 +329,54 @@ class ContrastiveDenoisingModule(BasePretrainModule):
 
             # Original flattened using the unaugmented valid mask.
             valids_orig = rearrange(const['valid'], 'b c -> (b c)')
-            x_categ_orig = rearrange(const['categorical'], 'b c f -> (b c) f')[valids_orig]
-            x_cont_orig  = rearrange(const['continuous'],  'b c f -> (b c) f')[valids_orig]
+            x_categ_orig = rearrange(const['categorical'], 'b c f -> (b c) f')[
+                valids_orig
+            ]
+            x_cont_orig = rearrange(const['continuous'], 'b c f -> (b c) f')[
+                valids_orig
+            ]
 
             view_results = []
             for view in self.views:
                 # PRE_FLATTEN — use the view's own valid mask here.
-                data_pre = view.apply_pre_flatten({
-                    'categorical': const['categorical'].clone(),
-                    'continuous':  const['continuous'].clone(),
-                    'valid':        const['valid'].clone(),
-                })
+                data_pre = view.apply_pre_flatten(
+                    {
+                        'categorical': const['categorical'].clone(),
+                        'continuous': const['continuous'].clone(),
+                        'valid': const['valid'].clone(),
+                    }
+                )
                 valids_v = rearrange(data_pre['valid'], 'b c -> (b c)')
-                x_cat_v  = rearrange(data_pre['categorical'], 'b c f -> (b c) f')[valids_v]
-                x_con_v  = rearrange(data_pre['continuous'],  'b c f -> (b c) f')[valids_v]
+                x_cat_v = rearrange(data_pre['categorical'], 'b c f -> (b c) f')[
+                    valids_v
+                ]
+                x_con_v = rearrange(data_pre['continuous'], 'b c f -> (b c) f')[
+                    valids_v
+                ]
 
                 # RAW stage
-                data_raw = view.apply_raw({'categorical': x_cat_v, 'continuous': x_con_v})
+                data_raw = view.apply_raw(
+                    {'categorical': x_cat_v, 'continuous': x_con_v}
+                )
 
-                view_results.append({
-                    'pre_flatten': {
-                        'categorical': x_cat_v.cpu(),
-                        'continuous':  x_con_v.cpu(),
-                        'valid':        data_pre['valid'].cpu(),
-                    },
-                    'raw': {
-                        'categorical': data_raw['categorical'].cpu(),
-                        'continuous':  data_raw['continuous'].cpu(),
-                    },
-                })
+                view_results.append(
+                    {
+                        'pre_flatten': {
+                            'categorical': x_cat_v.cpu(),
+                            'continuous': x_con_v.cpu(),
+                            'valid': data_pre['valid'].cpu(),
+                        },
+                        'raw': {
+                            'categorical': data_raw['categorical'].cpu(),
+                            'continuous': data_raw['continuous'].cpu(),
+                        },
+                    }
+                )
 
             result['constituents'][obj_name] = {
                 'original': {
                     'categorical': x_categ_orig.cpu(),
-                    'continuous':  x_cont_orig.cpu(),
+                    'continuous': x_cont_orig.cpu(),
                 },
                 'views': view_results,
             }

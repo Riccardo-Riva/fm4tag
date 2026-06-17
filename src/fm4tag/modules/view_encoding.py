@@ -34,13 +34,13 @@ def encode_global_view(
     x = data['continuous']
 
     # Encode
-    X = encoder(x)   # (B, F_g, dim)
+    X = encoder(x)  # (B, F_g, dim)
 
     # EMBEDDING stage
     data_emb = view.apply_embedding({'continuous': X})
     X_emb = data_emb['continuous']
 
-    z = encoder.projector(X_emb.flatten(1))   # (B, proj_dim)
+    z = encoder.projector(X_emb.flatten(1))  # (B, proj_dim)
     return z, X_emb
 
 
@@ -62,33 +62,33 @@ def encode_constituent_view(
         X: ``(N, F, dim)`` encoder output (for denoising).
     """
     # PRE_FLATTEN stage — apply to get possibly modified features.
-    data_pre = view.apply_pre_flatten({
-        'categorical': const['categorical'],
-        'continuous':  const['continuous'],
-        'valid':        const['valid'],
-    })
+    data_pre = view.apply_pre_flatten(
+        {
+            'categorical': const['categorical'],
+            'continuous': const['continuous'],
+            'valid': const['valid'],
+        }
+    )
 
     x_categ = rearrange(data_pre['categorical'], 'b c f -> (b c) f')[valids_flat]
-    x_cont  = rearrange(data_pre['continuous'],  'b c f -> (b c) f')[valids_flat]
+    x_cont = rearrange(data_pre['continuous'], 'b c f -> (b c) f')[valids_flat]
 
     # RAW stage
     data_raw = view.apply_raw({'categorical': x_categ, 'continuous': x_cont})
     x_categ = data_raw['categorical']
-    x_cont  = data_raw['continuous']
+    x_cont = data_raw['continuous']
 
     # Embed
     x_cat_enc, x_con_enc = embed_data(x_categ, x_cont, encoder)
 
     # EMBEDDING stage
-    data_emb = view.apply_embedding({
-        'categorical': x_cat_enc, 'continuous': x_con_enc
-    })
+    data_emb = view.apply_embedding({'categorical': x_cat_enc, 'continuous': x_con_enc})
     x_cat_enc = data_emb['categorical']
     x_con_enc = data_emb['continuous']
 
     # Encode
-    X = encoder(x_cat_enc, x_con_enc)   # (N, F, dim)
-    z = encoder.projector(X.flatten(1, 2))   # (N, proj_dim)
+    X = encoder(x_cat_enc, x_con_enc)  # (N, F, dim)
+    z = encoder.projector(X.flatten(1, 2))  # (N, proj_dim)
     return z, X
 
 

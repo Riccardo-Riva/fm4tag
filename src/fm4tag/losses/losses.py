@@ -165,7 +165,7 @@ class MultiViewSupConLoss(nn.Module):
         """
         V = len(z_list)
         if V < 2:
-            raise ValueError("MultiViewSupConLoss requires at least 2 views.")
+            raise ValueError('MultiViewSupConLoss requires at least 2 views.')
 
         N = z_list[0].size(0)
         # Stack to (N, V, D) then flatten to (N*V, D).
@@ -174,7 +174,7 @@ class MultiViewSupConLoss(nn.Module):
         z = F.normalize(z, dim=-1)
 
         z_all, local_start, local_end = all_gather_with_grad(z)
-        total = z_all.size(0)   # world_size * N * V
+        total = z_all.size(0)  # world_size * N * V
         total_N = total // V
 
         # Label for index i: which sample it belongs to.
@@ -182,7 +182,7 @@ class MultiViewSupConLoss(nn.Module):
         # interleaved as sample0_view0, sample0_view1, … so label[i] = i // V.
         labels = torch.arange(total_N, device=z_all.device).repeat_interleave(V)
 
-        sim = (z_all @ z_all.T) / self.temperature   # (total, total)
+        sim = (z_all @ z_all.T) / self.temperature  # (total, total)
 
         mask_self = torch.eye(total, dtype=torch.bool, device=z_all.device)
         mask_pos = (labels.unsqueeze(0) == labels.unsqueeze(1)) & ~mask_self
@@ -194,8 +194,8 @@ class MultiViewSupConLoss(nn.Module):
         if self.loss_type == 'out':
             # L_out = mean_i [ mean_{p in P(i)} (log_Z[i] - sim[i,p]) ]
             n_pos = mask_pos.float().sum(1)
-            loss_per_anchor = (
-                log_Z - (sim * mask_pos.float()).sum(1) / n_pos.clamp(min=1)
+            loss_per_anchor = log_Z - (sim * mask_pos.float()).sum(1) / n_pos.clamp(
+                min=1
             )
         else:
             # L_in = mean_i [ log_Z[i] - log(sum_{p in P(i)} exp(sim[i,p])) ]

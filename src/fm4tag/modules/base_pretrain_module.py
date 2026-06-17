@@ -32,9 +32,7 @@ class BasePretrainModule(L.LightningModule):
         # Ignore nn.Module constructor args (already saved via state_dict) so
         # they are not duplicated into the checkpoint's hyper_parameters.  Names
         # absent on a given subclass are harmless to list here.
-        self.save_hyperparameters(
-            ignore=['encoders', 'aggregator', 'views', 'loss']
-        )
+        self.save_hyperparameters(ignore=['encoders', 'aggregator', 'views', 'loss'])
 
         self.encoders = encoders
         self.cfg = cfg
@@ -66,9 +64,7 @@ class BasePretrainModule(L.LightningModule):
         """
 
     @abstractmethod
-    def _project_for_eval(
-        self, batch: dict, obj_name: str
-    ) -> torch.Tensor | None:
+    def _project_for_eval(self, batch: dict, obj_name: str) -> torch.Tensor | None:
         """Return ``(N, D)`` projected embeddings for *obj_name* without grad.
 
         Used to accumulate embeddings for online representation-quality metrics
@@ -144,9 +140,7 @@ class BasePretrainModule(L.LightningModule):
     # Logging helpers
     # ------------------------------------------------------------------
 
-    def _log_metrics(
-        self, log_dict: dict[str, torch.Tensor], split: str
-    ) -> None:
+    def _log_metrics(self, log_dict: dict[str, torch.Tensor], split: str) -> None:
         on_step = split == 'train'
         self.log(
             f'{split}_loss',
@@ -180,11 +174,13 @@ class BasePretrainModule(L.LightningModule):
         objects = [self.global_object] + self.constituent_objects
 
         # Discover sub-metric columns from available keys (everything after '/').
-        all_subkeys = sorted({
-            k.split('/', 1)[1]
-            for k in avgs
-            if '/' in k and k.split('/', 1)[1] != 'loss'
-        })
+        all_subkeys = sorted(
+            {
+                k.split('/', 1)[1]
+                for k in avgs
+                if '/' in k and k.split('/', 1)[1] != 'loss'
+            }
+        )
 
         obj_w = max(len('TOTAL'), *(len(o) for o in objects)) + 2
         num_w = 12
@@ -247,7 +243,7 @@ class BasePretrainModule(L.LightningModule):
 
     def predict_step(self, batch: dict, batch_idx: int):
         raise NotImplementedError(
-            f"{type(self).__name__} does not implement predict_step."
+            f'{type(self).__name__} does not implement predict_step.'
         )
 
     def on_train_epoch_end(self) -> None:

@@ -43,7 +43,7 @@ def _supcon_reference(
     # View-major layout + matching labels (SupCon is permutation-invariant, so
     # the ordering need not match the framework's interleaving).
     feats = F.normalize(torch.cat(z_list, dim=0), dim=-1)  # (V*N, D)
-    labels = torch.arange(N).repeat(V)                     # (V*N,)
+    labels = torch.arange(N).repeat(V)  # (V*N,)
     b = feats.size(0)
 
     sim = (feats @ feats.t()) / temperature
@@ -87,8 +87,8 @@ def _embed(encoder: torch.nn.Module, x: torch.Tensor) -> list[torch.Tensor]:
     """
     n = x.size(0)
     x_views = torch.cat([x * s for s in _VIEW_SCALES], dim=0)  # (V*n, F)
-    h = encoder(x_views)                                       # (V*n, D)
-    return list(h.split(n, dim=0))                             # V x (n, D)
+    h = encoder(x_views)  # (V*n, D)
+    return list(h.split(n, dim=0))  # V x (n, D)
 
 
 # ===========================================================================

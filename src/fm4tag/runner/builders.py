@@ -149,14 +149,12 @@ def _load_pretrained_aggregator(
     state = ckpt.get('state_dict', ckpt)
 
     prefix = 'aggregator.'
-    agg_state = {
-        k[len(prefix) :]: v for k, v in state.items() if k.startswith(prefix)
-    }
+    agg_state = {k[len(prefix) :]: v for k, v in state.items() if k.startswith(prefix)}
 
     if not agg_state:
         warnings.warn(
             f"No pretrained aggregator weights found in '{ckpt_path}'. "
-            "Using random initialisation.",
+            'Using random initialisation.',
             stacklevel=2,
         )
         return aggregator
@@ -166,8 +164,8 @@ def _load_pretrained_aggregator(
     except RuntimeError as exc:
         warnings.warn(
             f"Pretrained aggregator weights in '{ckpt_path}' do not match the "
-            f"current aggregator architecture ({exc}). Using random "
-            "initialisation.",
+            f'current aggregator architecture ({exc}). Using random '
+            'initialisation.',
             stacklevel=2,
         )
 

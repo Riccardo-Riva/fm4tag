@@ -102,9 +102,9 @@ class FinetuneModule(L.LightningModule):
         self._needs_jet_views = loss_wants(self.loss, 'z_jet_list')
         if self._needs_jet_views and len(self.views) < 2:
             raise ValueError(
-                "FinetuneModule needs at least 2 views when the loss contains a "
-                "jet-contrastive term (z_jet_list); got "
-                f"{len(self.views)}."
+                'FinetuneModule needs at least 2 views when the loss contains a '
+                'jet-contrastive term (z_jet_list); got '
+                f'{len(self.views)}.'
             )
 
         class_weights = None
@@ -283,9 +283,7 @@ class FinetuneModule(L.LightningModule):
         for k, v in loss_log.items():
             if k == 'loss':
                 continue
-            self.log(
-                f'{split}_{k}', v, on_step=False, on_epoch=True, sync_dist=True
-            )
+            self.log(f'{split}_{k}', v, on_step=False, on_epoch=True, sync_dist=True)
 
     # ------------------------------------------------------------------
     # Online embedding metric helpers

@@ -20,33 +20,35 @@ from fm4tag.modules import (
 # Minimal config fixture
 # ---------------------------------------------------------------------------
 
-_CATEGORIES = [3, 5, 2]   # three categorical features, cardinalities 3/5/2
+_CATEGORIES = [3, 5, 2]  # three categorical features, cardinalities 3/5/2
 _NUM_CONTINUOUS = 4
 _DIM = 16
 
 
 @pytest.fixture()
 def minimal_cfg():
-    return OmegaConf.create({
-        'global_object': 'jets',
-        'constituent_objects': ['tracks'],
-        'pretrain': {
-            '_target_': 'fm4tag.modules.ContrastiveDenoisingModule',
-            'nce_temp': 0.1,
-            'loss_type': 'out',
-            'include_pos_in_denom': True,
-            'lam_contrastive': 0.6,
-            'lam_denoising_cat': 0.2,
-            'lam_denoising_con': 0.2,
-        },
-        'eval': {
-            'enabled': False,
-            'splits': ['val'],
-            'n_samples': 32,
-            'metrics': ['uniformity'],
-        },
-        'optimizer': {'lr': 1e-3, 'weight_decay': 1e-5},
-    })
+    return OmegaConf.create(
+        {
+            'global_object': 'jets',
+            'constituent_objects': ['tracks'],
+            'pretrain': {
+                '_target_': 'fm4tag.modules.ContrastiveDenoisingModule',
+                'nce_temp': 0.1,
+                'loss_type': 'out',
+                'include_pos_in_denom': True,
+                'lam_contrastive': 0.6,
+                'lam_denoising_cat': 0.2,
+                'lam_denoising_con': 0.2,
+            },
+            'eval': {
+                'enabled': False,
+                'splits': ['val'],
+                'n_samples': 32,
+                'metrics': ['uniformity'],
+            },
+            'optimizer': {'lr': 1e-3, 'weight_decay': 1e-5},
+        }
+    )
 
 
 @pytest.fixture()
@@ -56,8 +58,17 @@ def encoders():
         categories=_CATEGORIES,
         num_continuous=_NUM_CONTINUOUS,
         dim=_DIM,
-        layers=[{'type': 'col', 'depth': 1, 'heads': 2, 'dim_head': 8,
-                 'ff_mult': 1, 'attn_dropout': 0.0, 'ff_dropout': 0.0}],
+        layers=[
+            {
+                'type': 'col',
+                'depth': 1,
+                'heads': 2,
+                'dim_head': 8,
+                'ff_mult': 1,
+                'attn_dropout': 0.0,
+                'ff_dropout': 0.0,
+            }
+        ],
     )
     return torch.nn.ModuleDict({'jets': global_enc, 'tracks': track_enc})
 
@@ -113,8 +124,8 @@ def _make_batch(B: int = 4, C: int = 8) -> dict:
         'constituents': {
             'tracks': {
                 'categorical': torch.randint(0, 2, (B, C, len(_CATEGORIES))),
-                'continuous':  torch.randn(B, C, _NUM_CONTINUOUS),
-                'valid':        torch.ones(B, C, dtype=torch.bool),
+                'continuous': torch.randn(B, C, _NUM_CONTINUOUS),
+                'valid': torch.ones(B, C, dtype=torch.bool),
             }
         },
     }
@@ -123,6 +134,7 @@ def _make_batch(B: int = 4, C: int = 8) -> dict:
 # ---------------------------------------------------------------------------
 # Construction
 # ---------------------------------------------------------------------------
+
 
 def test_construction(encoders, aggregator, two_views, loss, minimal_cfg):
     module = ContrastiveDenoisingModule(
@@ -150,7 +162,10 @@ def test_requires_two_views(encoders, aggregator, loss, minimal_cfg):
 # compute_loss
 # ---------------------------------------------------------------------------
 
-def test_compute_loss_returns_scalar(encoders, aggregator, two_views, loss, minimal_cfg):
+
+def test_compute_loss_returns_scalar(
+    encoders, aggregator, two_views, loss, minimal_cfg
+):
     module = ContrastiveDenoisingModule(
         encoders=encoders,
         aggregator=aggregator,
@@ -164,7 +179,9 @@ def test_compute_loss_returns_scalar(encoders, aggregator, two_views, loss, mini
     assert torch.isfinite(loss)
 
 
-def test_compute_loss_log_dict_has_expected_keys(encoders, aggregator, two_views, loss, minimal_cfg):
+def test_compute_loss_log_dict_has_expected_keys(
+    encoders, aggregator, two_views, loss, minimal_cfg
+):
     module = ContrastiveDenoisingModule(
         encoders=encoders,
         aggregator=aggregator,
@@ -179,7 +196,9 @@ def test_compute_loss_log_dict_has_expected_keys(encoders, aggregator, two_views
     assert 'tracks/loss_contrastive' in log_dict
 
 
-def test_compute_loss_denoising_keys_present(encoders, aggregator, two_views, loss, minimal_cfg):
+def test_compute_loss_denoising_keys_present(
+    encoders, aggregator, two_views, loss, minimal_cfg
+):
     module = ContrastiveDenoisingModule(
         encoders=encoders,
         aggregator=aggregator,
@@ -195,22 +214,28 @@ def test_compute_loss_denoising_keys_present(encoders, aggregator, two_views, lo
 
 
 def test_compute_loss_no_denoising_when_lam_zero(encoders, aggregator, two_views):
-    cfg = OmegaConf.create({
-        'global_object': 'jets',
-        'constituent_objects': ['tracks'],
-        'pretrain': {
-            '_target_': 'fm4tag.modules.ContrastiveDenoisingModule',
-            'nce_temp': 0.1,
-            'loss_type': 'out',
-            'include_pos_in_denom': True,
-            'lam_contrastive': 1.0,
-            'lam_denoising_cat': 0.0,
-            'lam_denoising_con': 0.0,
-        },
-        'eval': {'enabled': False, 'splits': ['val'], 'n_samples': 32,
-                 'metrics': []},
-        'optimizer': {'lr': 1e-3, 'weight_decay': 1e-5},
-    })
+    cfg = OmegaConf.create(
+        {
+            'global_object': 'jets',
+            'constituent_objects': ['tracks'],
+            'pretrain': {
+                '_target_': 'fm4tag.modules.ContrastiveDenoisingModule',
+                'nce_temp': 0.1,
+                'loss_type': 'out',
+                'include_pos_in_denom': True,
+                'lam_contrastive': 1.0,
+                'lam_denoising_cat': 0.0,
+                'lam_denoising_con': 0.0,
+            },
+            'eval': {
+                'enabled': False,
+                'splits': ['val'],
+                'n_samples': 32,
+                'metrics': [],
+            },
+            'optimizer': {'lr': 1e-3, 'weight_decay': 1e-5},
+        }
+    )
     loss = PretrainLoss(
         terms=[
             ContrastiveTermAdapter(
@@ -245,6 +270,7 @@ def test_three_views_loss(encoders, aggregator, three_views, loss, minimal_cfg):
 # Gradient flow through the full loss
 # ---------------------------------------------------------------------------
 
+
 def test_gradients_flow_to_encoder(encoders, aggregator, two_views, loss, minimal_cfg):
     module = ContrastiveDenoisingModule(
         encoders=encoders,
@@ -267,6 +293,7 @@ def test_gradients_flow_to_encoder(encoders, aggregator, two_views, loss, minima
 # _project_for_eval
 # ---------------------------------------------------------------------------
 
+
 def test_project_for_eval_global(encoders, aggregator, two_views, loss, minimal_cfg):
     module = ContrastiveDenoisingModule(
         encoders=encoders,
@@ -281,7 +308,9 @@ def test_project_for_eval_global(encoders, aggregator, two_views, loss, minimal_
     assert z.shape[0] == batch['global'].shape[0]
 
 
-def test_project_for_eval_constituent(encoders, aggregator, two_views, loss, minimal_cfg):
+def test_project_for_eval_constituent(
+    encoders, aggregator, two_views, loss, minimal_cfg
+):
     module = ContrastiveDenoisingModule(
         encoders=encoders,
         aggregator=aggregator,
@@ -292,10 +321,12 @@ def test_project_for_eval_constituent(encoders, aggregator, two_views, loss, min
     batch = _make_batch(B=4, C=8)
     z = module._project_for_eval(batch, 'tracks')
     assert z is not None
-    assert z.ndim == 2   # (N_valid, proj_dim)
+    assert z.ndim == 2  # (N_valid, proj_dim)
 
 
-def test_project_for_eval_empty_valid(encoders, aggregator, two_views, loss, minimal_cfg):
+def test_project_for_eval_empty_valid(
+    encoders, aggregator, two_views, loss, minimal_cfg
+):
     module = ContrastiveDenoisingModule(
         encoders=encoders,
         aggregator=aggregator,
@@ -312,6 +343,7 @@ def test_project_for_eval_empty_valid(encoders, aggregator, two_views, loss, min
 # ---------------------------------------------------------------------------
 # predict_step
 # ---------------------------------------------------------------------------
+
 
 def test_predict_step_structure(encoders, aggregator, two_views, loss, minimal_cfg):
     module = ContrastiveDenoisingModule(
@@ -336,7 +368,9 @@ def test_predict_step_structure(encoders, aggregator, two_views, loss, minimal_c
     assert len(out['constituents']['tracks']['views']) == 2
 
 
-def test_predict_step_view_has_pre_flatten_and_raw(encoders, aggregator, two_views, loss, minimal_cfg):
+def test_predict_step_view_has_pre_flatten_and_raw(
+    encoders, aggregator, two_views, loss, minimal_cfg
+):
     module = ContrastiveDenoisingModule(
         encoders=encoders,
         aggregator=aggregator,

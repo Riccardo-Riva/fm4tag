@@ -33,7 +33,5 @@ def compute_metric(name: str, z: torch.Tensor) -> torch.Tensor:
         ValueError: if ``name`` is not in the registry.
     """
     if name not in _REGISTRY:
-        raise ValueError(
-            f"Unknown metric {name!r}. Available: {sorted(_REGISTRY)}"
-        )
+        raise ValueError(f'Unknown metric {name!r}. Available: {sorted(_REGISTRY)}')
     return _REGISTRY[name](z)

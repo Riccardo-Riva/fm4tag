@@ -13,6 +13,7 @@ from fm4tag.losses import MultiViewSupConLoss
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_views(N: int, D: int, V: int, seed: int = 0) -> list[torch.Tensor]:
     torch.manual_seed(seed)
     return [torch.randn(N, D) for _ in range(V)]
@@ -21,6 +22,7 @@ def _make_views(N: int, D: int, V: int, seed: int = 0) -> list[torch.Tensor]:
 # ---------------------------------------------------------------------------
 # Basic shape / value tests
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.parametrize('V', [2, 3, 4])
 def test_output_is_scalar(V):
@@ -54,15 +56,16 @@ def test_loss_is_non_negative():
 # Loss type: L_out vs L_in
 # ---------------------------------------------------------------------------
 
+
 def test_loss_out_and_in_differ_on_random_input():
     zs = _make_views(8, 32, 3, seed=42)
     l_out = MultiViewSupConLoss(loss_type='out')(zs)
-    l_in  = MultiViewSupConLoss(loss_type='in')(zs)
+    l_in = MultiViewSupConLoss(loss_type='in')(zs)
     assert not torch.isclose(l_out, l_in)
 
 
 def test_invalid_loss_type():
-    with pytest.raises(ValueError, match="loss_type must be"):
+    with pytest.raises(ValueError, match='loss_type must be'):
         MultiViewSupConLoss(loss_type='bad')
 
 
@@ -70,9 +73,10 @@ def test_invalid_loss_type():
 # include_pos_in_denom flag
 # ---------------------------------------------------------------------------
 
+
 def test_include_pos_in_denom_changes_loss():
     zs = _make_views(8, 32, 3, seed=0)
-    l_with  = MultiViewSupConLoss(include_pos_in_denom=True)(zs)
+    l_with = MultiViewSupConLoss(include_pos_in_denom=True)(zs)
     l_without = MultiViewSupConLoss(include_pos_in_denom=False)(zs)
     assert not torch.isclose(l_with, l_without)
 
@@ -82,15 +86,16 @@ def test_include_pos_in_denom_changes_loss():
 # (perfectly aligned views still produce a valid but low loss)
 # ---------------------------------------------------------------------------
 
+
 def test_perfectly_aligned_views_low_loss():
     # All views are identical → all positives are perfectly aligned.
     # The loss should be lower than with random misaligned views.
     z = F.normalize(torch.randn(16, 64), dim=-1)
     zs_aligned = [z] * 3
-    zs_random  = _make_views(16, 64, 3, seed=7)
+    zs_random = _make_views(16, 64, 3, seed=7)
 
     loss_aligned = MultiViewSupConLoss(temperature=0.1)(zs_aligned).item()
-    loss_random  = MultiViewSupConLoss(temperature=0.1)(zs_random).item()
+    loss_random = MultiViewSupConLoss(temperature=0.1)(zs_random).item()
     assert loss_aligned < loss_random
 
 
@@ -98,18 +103,20 @@ def test_perfectly_aligned_views_low_loss():
 # Gradient flow
 # ---------------------------------------------------------------------------
 
+
 def test_gradients_flow_to_all_views():
     zs = [torch.randn(8, 32, requires_grad=True) for _ in range(3)]
     loss = MultiViewSupConLoss()(zs)
     loss.backward()
     for i, z in enumerate(zs):
-        assert z.grad is not None, f"No gradient for view {i}"
-        assert z.grad.abs().sum() > 0, f"Zero gradient for view {i}"
+        assert z.grad is not None, f'No gradient for view {i}'
+        assert z.grad.abs().sum() > 0, f'Zero gradient for view {i}'
 
 
 # ---------------------------------------------------------------------------
 # DDP-fallback path (variable N across ranks)
 # ---------------------------------------------------------------------------
+
 
 def test_no_gather_when_single_process():
     # Without DDP, all_gather_with_grad should return (z, 0, N).
@@ -125,6 +132,7 @@ def test_no_gather_when_single_process():
 # ---------------------------------------------------------------------------
 # Symmetry: loss should not depend on view ordering for L_out
 # ---------------------------------------------------------------------------
+
 
 def test_loss_out_invariant_to_view_order():
     torch.manual_seed(1)

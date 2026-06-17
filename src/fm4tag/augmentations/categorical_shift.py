@@ -39,9 +39,7 @@ class CategoricalShift(Augmentation):
                 column order.
         """
         if n_classes:
-            self._max_vals = torch.tensor(
-                [n - 1 for n in n_classes], dtype=torch.long
-            )
+            self._max_vals = torch.tensor([n - 1 for n in n_classes], dtype=torch.long)
 
     def forward(
         self, data: dict[str, torch.Tensor | None]
