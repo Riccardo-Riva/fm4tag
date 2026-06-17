@@ -2,8 +2,56 @@ from __future__ import annotations
 
 import torch
 import torch.distributed
+import torch.distributed.nn.functional as dist_nn_functional
 import torch.nn.functional as F
 from torch import nn
+
+
+def all_gather_with_grad(z: torch.Tensor) -> tuple[torch.Tensor, int, int]:
+    """Differentiably gather ``z`` from all DDP ranks.
+
+    Returns ``(z_all, local_start, local_end)`` where ``z_all`` is the
+    concatenation of every rank's tensor in rank order, and
+    ``z_all[local_start:local_end]`` is this rank's shard.
+
+    Unlike a plain ``torch.distributed.all_gather`` (which detaches every
+    rank's contribution), this uses ``torch.distributed.nn.functional.
+    all_gather``, whose backward **reduce-scatters** the gradient: each rank
+    receives the summed gradient for its own shard from *all* anchors on
+    *all* ranks.  Combined with DDP's gradient averaging, this reproduces the
+    exact full-(global-)batch gradient, even when the loss is computed only
+    over the local-anchor slice.  See ``tests/ddp/test_supcon_gradient.py``.
+
+    Falls back to ``(z, 0, N)`` on a single GPU, when the process group is not
+    initialised, or when ranks have different leading dimensions (e.g.
+    variable-length constituents) — in which case each rank computes a local
+    loss over its own rows.
+    """
+    if (
+        not torch.distributed.is_available()
+        or not torch.distributed.is_initialized()
+        or torch.distributed.get_world_size() == 1
+    ):
+        return z, 0, z.size(0)
+
+    world_size = torch.distributed.get_world_size()
+    rank = torch.distributed.get_rank()
+
+    # Verify all ranks have the same leading dimension; otherwise the collective
+    # would deadlock / mis-shape, so fall back to a per-rank local loss.
+    local_n = torch.tensor([z.size(0)], device=z.device)
+    all_n = [torch.zeros_like(local_n) for _ in range(world_size)]
+    torch.distributed.all_gather(all_n, local_n)
+    if not all(n.item() == local_n.item() for n in all_n):
+        return z, 0, z.size(0)
+
+    # Differentiable gather: backward reduce-scatters grads to each rank's shard.
+    gathered = dist_nn_functional.all_gather(z.contiguous())
+    z_all = torch.cat(gathered, dim=0)
+
+    local_start = rank * z.size(0)
+    local_end = local_start + z.size(0)
+    return z_all, local_start, local_end
 
 
 class InfoNCELoss(nn.Module):
@@ -14,11 +62,12 @@ class InfoNCELoss(nn.Module):
     of the same sample to be similar and those of different samples to be
     dissimilar.
 
-    In DDP training, embeddings are gathered from all ranks before computing
-    the similarity matrix, so each rank sees the full batch as negatives.
-    Gradients only flow through the local rank's shard.  When constituent-level
-    embeddings are used (variable ``N_valid`` across ranks), gathering is
-    skipped and each rank computes a local InfoNCE instead.
+    In DDP training, embeddings are gathered from all ranks (with a
+    differentiable all-gather) before computing the similarity matrix, so each
+    rank sees the full batch as negatives and gradients flow back to every
+    rank's rows.  When constituent-level embeddings are used (variable
+    ``N_valid`` across ranks), gathering is skipped and each rank computes a
+    local InfoNCE instead.  See :func:`all_gather_with_grad`.
 
     Reference: Chen et al., "A Simple Framework for Contrastive Learning
     of Visual Representations" (SimCLR), ICML 2020.
@@ -27,44 +76,6 @@ class InfoNCELoss(nn.Module):
     def __init__(self, temperature: float = 0.7) -> None:
         super().__init__()
         self.temperature = temperature
-
-    @staticmethod
-    def _all_gather_with_grad(z: torch.Tensor) -> tuple[torch.Tensor, int, int]:
-        """Gather ``z`` from all ranks, preserving gradients for the local shard.
-
-        Returns:
-            ``(z_all, local_start, local_end)`` where ``z_all[local_start:local_end]``
-            corresponds to the local rank's entries and retains a gradient path.
-            Falls back to ``(z, 0, N)`` on single GPU or when ranks have
-            different leading-dimension sizes (e.g. variable-length constituents).
-        """
-        if (
-            not torch.distributed.is_available()
-            or not torch.distributed.is_initialized()
-            or torch.distributed.get_world_size() == 1
-        ):
-            return z, 0, z.size(0)
-
-        world_size = torch.distributed.get_world_size()
-        rank = torch.distributed.get_rank()
-
-        # Verify all ranks have the same leading dimension.
-        local_n = torch.tensor([z.size(0)], device=z.device)
-        all_n = [torch.zeros_like(local_n) for _ in range(world_size)]
-        torch.distributed.all_gather(all_n, local_n)
-        if not all(n.item() == local_n.item() for n in all_n):
-            # Variable sizes across ranks (e.g. constituent-level) — local fallback.
-            return z, 0, z.size(0)
-
-        # All-gather; replace the local shard with the original to preserve gradients.
-        gathered = [torch.zeros_like(z) for _ in range(world_size)]
-        torch.distributed.all_gather(gathered, z.contiguous())
-        gathered[rank] = z
-        z_all = torch.cat(gathered, dim=0)
-
-        local_start = rank * z.size(0)
-        local_end = local_start + z.size(0)
-        return z_all, local_start, local_end
 
     def forward(self, z1: torch.Tensor, z2: torch.Tensor) -> torch.Tensor:
         """Compute the symmetric InfoNCE loss.
@@ -79,8 +90,8 @@ class InfoNCELoss(nn.Module):
         z1 = F.normalize(z1, dim=-1)
         z2 = F.normalize(z2, dim=-1)
 
-        z1_all, local_start, local_end = self._all_gather_with_grad(z1)
-        z2_all, _, _ = self._all_gather_with_grad(z2)
+        z1_all, local_start, local_end = all_gather_with_grad(z1)
+        z2_all, _, _ = all_gather_with_grad(z2)
 
         N = z1_all.size(0)
         logits = (z1_all @ z2_all.t()) / self.temperature  # (N, N)
@@ -106,9 +117,12 @@ class MultiViewSupConLoss(nn.Module):
 
     In DDP training, embeddings are gathered from all ranks (when all ranks
     have the same leading dimension) so the full cross-device batch acts as
-    negatives.  Gradients flow only through the local shard.  When constituent
-    embeddings have variable N across ranks, gathering is skipped and each rank
-    computes a local loss.
+    negatives.  The gather is differentiable (see :func:`all_gather_with_grad`),
+    so although the loss is reduced over the local-anchor slice, gradients flow
+    back to every rank's rows and — combined with DDP gradient averaging —
+    reproduce the exact full-batch gradient.  When constituent embeddings have
+    variable N across ranks, gathering is skipped and each rank computes a
+    local loss.
 
     Reference: Khosla et al., "Supervised Contrastive Learning",
     NeurIPS 2020. https://arxiv.org/abs/2004.11362
@@ -139,37 +153,6 @@ class MultiViewSupConLoss(nn.Module):
         self.loss_type = loss_type
         self.include_pos_in_denom = include_pos_in_denom
 
-    @staticmethod
-    def _all_gather_with_grad(z: torch.Tensor) -> tuple[torch.Tensor, int, int]:
-        """Gather ``z`` from all ranks, preserving gradients for the local shard.
-
-        Returns ``(z_all, local_start, local_end)``.  Falls back to
-        ``(z, 0, N)`` on a single GPU or when ranks have different sizes.
-        """
-        if (
-            not torch.distributed.is_available()
-            or not torch.distributed.is_initialized()
-            or torch.distributed.get_world_size() == 1
-        ):
-            return z, 0, z.size(0)
-
-        world_size = torch.distributed.get_world_size()
-        rank = torch.distributed.get_rank()
-
-        local_n = torch.tensor([z.size(0)], device=z.device)
-        all_n = [torch.zeros_like(local_n) for _ in range(world_size)]
-        torch.distributed.all_gather(all_n, local_n)
-        if not all(n.item() == local_n.item() for n in all_n):
-            return z, 0, z.size(0)
-
-        gathered = [torch.zeros_like(z) for _ in range(world_size)]
-        torch.distributed.all_gather(gathered, z.contiguous())
-        gathered[rank] = z
-        z_all = torch.cat(gathered, dim=0)
-        local_start = rank * z.size(0)
-        local_end = local_start + z.size(0)
-        return z_all, local_start, local_end
-
     def forward(self, z_list: list[torch.Tensor]) -> torch.Tensor:
         """Compute multi-view SupCon loss.
 
@@ -190,7 +173,7 @@ class MultiViewSupConLoss(nn.Module):
         z = torch.stack(z_list, dim=1).reshape(N * V, -1)
         z = F.normalize(z, dim=-1)
 
-        z_all, local_start, local_end = self._all_gather_with_grad(z)
+        z_all, local_start, local_end = all_gather_with_grad(z)
         total = z_all.size(0)   # world_size * N * V
         total_N = total // V
 

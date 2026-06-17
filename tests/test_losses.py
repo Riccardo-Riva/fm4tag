@@ -112,9 +112,11 @@ def test_gradients_flow_to_all_views():
 # ---------------------------------------------------------------------------
 
 def test_no_gather_when_single_process():
-    # Without DDP, _all_gather_with_grad should return (z, 0, N).
+    # Without DDP, all_gather_with_grad should return (z, 0, N).
+    from fm4tag.losses.losses import all_gather_with_grad
+
     z = torch.randn(12, 32)
-    z_out, start, end = MultiViewSupConLoss._all_gather_with_grad(z)
+    z_out, start, end = all_gather_with_grad(z)
     assert torch.equal(z_out, z)
     assert start == 0
     assert end == 12
