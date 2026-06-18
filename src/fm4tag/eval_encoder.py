@@ -81,10 +81,13 @@ def _collect_embeddings(
 
 def _encode_global(batch: dict, encoder, device: torch.device) -> torch.Tensor:
     """Encode the global object; returns ``(B, proj_dim)`` projected embeddings."""
-    x = batch['global'].to(device)
+    g = batch['global']
+    x_categ = g['categorical'].to(device)
+    x_cont = g['continuous'].to(device)
     with torch.no_grad():
-        X = encoder(x)  # (B, F_g, dim)
-        z = encoder.projector(X.flatten(1))  # (B, proj_dim)
+        x_cat_enc, x_con_enc = encoder.embed(x_categ, x_cont)
+        X = encoder(x_cat_enc, x_con_enc)  # (B, F_g, dim)
+        z = encoder.projector(X.flatten(1, 2))  # (B, proj_dim)
     return z
 
 

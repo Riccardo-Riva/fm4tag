@@ -21,27 +21,42 @@ from ..models.backbones import Encoder, GlobalEncoder
 def encode_global_view(
     encoder: GlobalEncoder,
     view: Compose,
-    x_orig: torch.Tensor,
+    g: dict,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Apply one view's augmentations and encode global features.
 
+    Mirrors :func:`encode_constituent_view`: features are embedded first
+    (:meth:`GlobalEncoder.embed`), EMBEDDING-stage augmentations (e.g. Mixup)
+    are applied to the embedded tokens **before** the transformer, then the
+    attention stack runs.  The global object has no valid mask (all jets valid),
+    so there is no PRE_FLATTEN stage.
+
+    Args:
+        g: Global batch dict ``{'categorical': (B, F_gcat), 'continuous': (B, F_gcon)}``.
+
     Returns:
         z: ``(B, proj_dim)`` projected embedding (POINT A).
-        X: ``(B, F_g, dim)`` encoder output (for denoising).
+        X: ``(B, F_g, dim)`` encoder output (for denoising), token order ``[cat; con]``.
     """
     # RAW stage
-    data = view.apply_raw({'continuous': x_orig})
-    x = data['continuous']
+    data_raw = view.apply_raw(
+        {'categorical': g['categorical'], 'continuous': g['continuous']}
+    )
 
-    # Encode
-    X = encoder(x)  # (B, F_g, dim)
+    # Embed
+    x_cat_enc, x_con_enc = encoder.embed(
+        data_raw['categorical'], data_raw['continuous']
+    )
 
     # EMBEDDING stage
-    data_emb = view.apply_embedding({'continuous': X})
-    X_emb = data_emb['continuous']
+    data_emb = view.apply_embedding(
+        {'categorical': x_cat_enc, 'continuous': x_con_enc}
+    )
 
-    z = encoder.projector(X_emb.flatten(1))  # (B, proj_dim)
-    return z, X_emb
+    # Encode (attention)
+    X = encoder(data_emb['categorical'], data_emb['continuous'])  # (B, F_g, dim)
+    z = encoder.projector(X.flatten(1, 2))  # (B, proj_dim)
+    return z, X
 
 
 def encode_constituent_view(

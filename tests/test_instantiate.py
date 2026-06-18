@@ -119,16 +119,52 @@ def test_global_transformer_encoder_builds_and_runs():
     )
     assert isinstance(model.layers[0], ColTransformer)
 
-    x = torch.randn(_B, _N_GLOBAL)
-    out = model(x)
+    # Continuous-only: embed splits embedding from the attention forward.
+    x_cont = torch.randn(_B, _N_GLOBAL)
+    x_cat_enc, x_con_enc = model.embed(torch.zeros(_B, 0, dtype=torch.long), x_cont)
+    assert x_cat_enc is None
+    out = model(x_cat_enc, x_con_enc)
     assert out.shape == (_B, _N_GLOBAL, _FEATURE_DIM)
     assert not out.isnan().any()
 
     # Same heads as GlobalEncoder, used identically by the pretrain module.
-    z = model.projector(out.flatten(1))
+    z = model.projector(out.flatten(1, 2))
     assert z.shape == (_B, _DIM)
     rec = torch.cat(model.reconstructor(out), dim=1)
     assert rec.shape == (_B, _N_GLOBAL)
+
+
+def test_global_encoder_with_categorical_features():
+    """GlobalEncoder embeds + reconstructs categorical jet features like Encoder."""
+    categories = [3, 5]
+    model = GlobalTransformerEncoder(
+        num_features=_N_GLOBAL,
+        feature_dim=_FEATURE_DIM,
+        dim=_DIM,
+        layers=[{'type': 'col', 'depth': 1, 'heads': 2, 'dim_head': 8}],
+        categories=categories,
+    )
+
+    x_categ = torch.stack([torch.randint(0, n, (_B,)) for n in categories], dim=1)
+    x_cont = torch.randn(_B, _N_GLOBAL)
+    x_cat_enc, x_con_enc = model.embed(x_categ, x_cont)
+    assert x_cat_enc.shape == (_B, len(categories), _FEATURE_DIM)
+    assert x_con_enc.shape == (_B, _N_GLOBAL, _FEATURE_DIM)
+
+    # Tokens are ordered [categorical; continuous].
+    out = model(x_cat_enc, x_con_enc)
+    n_tokens = len(categories) + _N_GLOBAL
+    assert out.shape == (_B, n_tokens, _FEATURE_DIM)
+
+    z = model.projector(out.flatten(1, 2))
+    assert z.shape == (_B, _DIM)
+
+    cat_outs = model.cat_reconstructor(out[:, : len(categories), :])
+    assert len(cat_outs) == len(categories)
+    for logits, n in zip(cat_outs, categories):
+        assert logits.shape == (_B, n)
+    con_outs = model.reconstructor(out[:, len(categories):, :])
+    assert torch.cat(con_outs, dim=1).shape == (_B, _N_GLOBAL)
 
 
 def test_global_encoder_selected_via_hydra_target():
@@ -157,5 +193,12 @@ def test_global_encoder_selected_via_hydra_target():
     assert type(ff_enc) is GlobalEncoder
     assert type(tr_enc) is GlobalTransformerEncoder
 
-    x = torch.randn(_B, _N_GLOBAL)
-    assert ff_enc(x).shape == tr_enc(x).shape == (_B, _N_GLOBAL, _FEATURE_DIM)
+    x_cont = torch.randn(_B, _N_GLOBAL)
+    empty_cat = torch.zeros(_B, 0, dtype=torch.long)
+    ff_cat, ff_con = ff_enc.embed(empty_cat, x_cont)
+    tr_cat, tr_con = tr_enc.embed(empty_cat, x_cont)
+    assert (
+        ff_enc(ff_cat, ff_con).shape
+        == tr_enc(tr_cat, tr_con).shape
+        == (_B, _N_GLOBAL, _FEATURE_DIM)
+    )

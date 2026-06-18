@@ -28,7 +28,7 @@ from lightning.pytorch.profilers import (
 
 from fm4tag.callbacks.callbacks import MemoryMonitorCallback, _PrecisionProgressBar
 from fm4tag.models import JetAggregator, MultiStreamClassifierHead
-from fm4tag.utils import instantiate
+from fm4tag.utils import instantiate, resolve_object_inputs
 
 
 def _load_class(dotted_path: str) -> type:
@@ -50,7 +50,9 @@ def _build_encoders(cfg: DictConfig) -> torch.nn.ModuleDict:
 
     * ``cfg.backbone.global_encoder`` → e.g. :class:`~fm4tag.models.GlobalEncoder`
       or :class:`~fm4tag.models.GlobalTransformerEncoder`, with ``num_features``
-      injected from the global object's variable definitions at runtime
+      (continuous count) and ``categories`` injected from the global object's
+      variable definitions at runtime.  A legacy flat ``inputs`` list yields no
+      categorical features, leaving the encoder identical to before.
     * ``cfg.backbone.constituents.<name>`` → e.g. :class:`~fm4tag.models.Encoder`
       (one per constituent type, with ``categories`` and ``num_continuous``
       injected from the variable definitions at runtime)
@@ -58,9 +60,14 @@ def _build_encoders(cfg: DictConfig) -> torch.nn.ModuleDict:
     encoders: dict[str, torch.nn.Module] = {}
 
     global_name = cfg.global_object
-    n_global = len(cfg.variables[global_name].inputs)
+    g_continuous, _, g_cat_classes = resolve_object_inputs(
+        cfg.variables[global_name].inputs
+    )
+    g_categories = [len(classes) for classes in g_cat_classes.values()]
     encoders[global_name] = instantiate(
-        cfg.backbone.global_encoder, num_features=n_global
+        cfg.backbone.global_encoder,
+        num_features=len(g_continuous),
+        categories=g_categories,
     )
 
     for obj_name in cfg.constituent_objects:

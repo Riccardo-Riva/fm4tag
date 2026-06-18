@@ -5,6 +5,8 @@ import os
 import torch
 from torch.utils.data import Dataset
 
+from ..utils import resolve_object_inputs
+
 
 def cat_con_collate_fn(batch: list[dict]) -> dict:
     """Collate a list of samples from DatasetCatCon into a batched dict.
@@ -15,20 +17,28 @@ def cat_con_collate_fn(batch: list[dict]) -> dict:
 
     Expected input shape per sample (from DatasetCatCon.__getitem__):
         label       : ()
-        global      : (F_g,)
+        global      : { categorical: (F_gcat,), continuous: (F_gcon,) }
         constituents: { obj_name: { categorical: (N, F_cat),
                                     continuous:  (N, F_con),
                                     valid:       (N,) } }
 
     Output shapes (batch size B):
         label       : (B,)          long
-        global      : (B, F_g)      float32
+        global      : { categorical: (B, F_gcat)  long
+                        continuous:  (B, F_gcon)  float32 }
         constituents: { obj_name: { categorical: (B, N, F_cat)  long
                                     continuous:  (B, N, F_con)  float32
                                     valid:       (B, N)         bool } }
     """
     labels = torch.stack([s['label'] for s in batch])  # (B,)
-    globals = torch.stack([s['global'] for s in batch]).float()  # (B, F_g)
+    globals = {
+        'categorical': torch.stack(
+            [s['global']['categorical'] for s in batch]
+        ).long(),  # (B, F_gcat)
+        'continuous': torch.stack(
+            [s['global']['continuous'] for s in batch]
+        ).float(),  # (B, F_gcon)
+    }
 
     object_names = batch[0]['constituents'].keys()
     constituents = {}
@@ -70,6 +80,12 @@ class DatasetCatCon(Dataset):
         self.label_name = variables[self.global_object]['label']
         self.class_dict = class_dict
 
+        # Resolve the global object's feature split once (supports both the
+        # legacy flat list — all continuous — and the tracks-style dict schema).
+        self._global_continuous, self._global_categorical, _ = resolve_object_inputs(
+            variables[self.global_object].inputs
+        )
+
         # Pre-build per-object mean/std tensors once so __getitem__ does no
         # dict lookups or tensor allocations for normalization.
         self._build_norm_tensors(norm_dict)
@@ -100,18 +116,16 @@ class DatasetCatCon(Dataset):
         if norm_dict is None:
             return
 
-        # Global object: inputs is a flat list (all continuous, no categorical).
-        # Constituent objects: inputs.continuous is the continuous feature list.
+        # Normalisation applies to continuous features only.  resolve_object_inputs
+        # handles both the global object (flat list or dict) and constituents.
         all_objects = [self.global_object] + list(self.constituent_objects)
         for obj_name in all_objects:
             if obj_name not in norm_dict:
                 continue
             obj_norm = norm_dict[obj_name]
-            features = (
-                self.variables[obj_name].inputs
-                if obj_name == self.global_object
-                else self.variables[obj_name].inputs.continuous
-            )
+            features, _, _ = resolve_object_inputs(self.variables[obj_name].inputs)
+            if not features:
+                continue
             self._norm[obj_name] = {
                 'mean': torch.tensor(
                     [obj_norm[f]['mean'] for f in features], dtype=torch.float32
@@ -143,14 +157,24 @@ class DatasetCatCon(Dataset):
         g_record = self.g_dset[idx]
         label = torch.tensor(g_record[self.label_name], dtype=torch.long)
 
-        # Global features (all numerical, shape: (F_g,))
-        X_g = torch.from_numpy(
-            s2u(g_record[self.variables[self.global_object].inputs], dtype=None)
-        ).float()
+        # Global continuous features (shape: (F_gcon,)); normalised if available.
+        if self._global_continuous:
+            X_g_con = torch.from_numpy(
+                s2u(g_record[self._global_continuous], dtype=None)
+            ).float()
+            if self.global_object in self._norm:
+                norm = self._norm[self.global_object]
+                X_g_con = (X_g_con - norm['mean']) / norm['std']
+        else:
+            X_g_con = torch.zeros((0,), dtype=torch.float32)
 
-        if self.global_object in self._norm:
-            norm = self._norm[self.global_object]
-            X_g = (X_g - norm['mean']) / norm['std']
+        # Global categorical features (shape: (F_gcat,)); empty for legacy configs.
+        if self._global_categorical:
+            X_g_cat = torch.from_numpy(
+                s2u(g_record[self._global_categorical], dtype=None)
+            ).long()
+        else:
+            X_g_cat = torch.zeros((0,), dtype=torch.long)
 
         # Constituent features, one dict entry per object
         constituents = {}
@@ -177,6 +201,9 @@ class DatasetCatCon(Dataset):
 
         return {
             'label': label,
-            'global': X_g,
+            'global': {
+                'categorical': X_g_cat,  # (F_gcat,)
+                'continuous': X_g_con,  # (F_gcon,)
+            },
             'constituents': constituents,
         }

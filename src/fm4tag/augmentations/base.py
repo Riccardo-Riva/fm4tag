@@ -21,9 +21,11 @@ Each :class:`Augmentation` declares its stage via the class attribute
 :attr:`stage`.  The composer :class:`Compose` groups a list of augmentations
 by stage so the pretraining module can apply them at the right point.
 
-For the **global object** (continuous-only, no constituents) the
-:attr:`Stage.PRE_FLATTEN` step is skipped — the global path has no valid
-mask.  Augmentations targeting raw or embedding stages still apply.
+For the **global object** (no constituents, so no valid mask) the
+:attr:`Stage.PRE_FLATTEN` step is skipped.  Its categorical + continuous
+features are otherwise handled like constituents: RAW augmentations run on the
+raw values and EMBEDDING augmentations run on the embedded tokens *before* the
+transformer.
 
 Compose instances are built from config via Hydra's ``instantiate``, which
 handles the nested ``_target_`` list recursively::

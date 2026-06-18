@@ -18,6 +18,20 @@ constituent_objects:
   - tracks
 
 # ── Data — feature definitions ──────────────────────────────────────────────
+# The global (jets) object accepts two `inputs` schemas:
+#   • flat list (legacy)  → all features continuous, no categorical (shown below)
+#   • dict (same as tracks) → mix of continuous + categorical, e.g.
+#       jets:
+#         inputs:
+#           continuous:  [pt_btagJes, eta_btagJes]
+#           categorical: [nConstituents]
+#           cat_classes:
+#             nConstituents: [0,1,2,3,4,5,6,7,8,9,10]
+#         label: flavour_label
+#         unique_labels: [0, 1, 2, 3]
+#   Categorical jet features are embedded + denoised exactly like track
+#   categorical features. The categorical column(s) must exist in the H5 and
+#   each needs a cat_classes entry listing its valid class values.
 variables:
   jets:
     inputs:

@@ -98,12 +98,12 @@ class ContrastiveDenoisingModule(BasePretrainModule):
         Returns ``(obj_loss, obj_logs, z_views)`` where ``z_views`` is the list
         of per-view ``(B, d_global)`` projections, reused for jet aggregation.
         """
-        x_orig = batch['global']  # (B, F_g)
+        g = batch['global']  # {'categorical': (B, F_gcat), 'continuous': (B, F_gcon)}
 
         zs: list[torch.Tensor] = []
         X_first: torch.Tensor | None = None
         for i, view in enumerate(self.views):
-            z, X = encode_global_view(encoder, view, x_orig)
+            z, X = encode_global_view(encoder, view, g)
             zs.append(z)
             if i == 0:
                 X_first = X
@@ -111,11 +111,21 @@ class ContrastiveDenoisingModule(BasePretrainModule):
         kwargs: dict = {'z_list': zs}
         if needs_denoise:
             assert X_first is not None
-            con_outs = encoder.reconstructor(X_first)  # list of (B, 1)
-            # The global object has no categorical features.
-            x_categ_empty = x_orig.new_zeros((x_orig.shape[0], 0), dtype=torch.long)
+            # Token order is [categorical; continuous] (see GlobalEncoder).
+            nc = encoder.num_categories
+            cat_outs = (
+                encoder.cat_reconstructor(X_first[:, :nc, :]) if nc > 0 else []
+            )
+            con_outs = (
+                encoder.reconstructor(X_first[:, nc:, :])
+                if encoder.num_continuous > 0
+                else []
+            )
             kwargs.update(
-                cat_outs=[], x_categ=x_categ_empty, con_outs=con_outs, x_cont=x_orig
+                cat_outs=cat_outs,
+                x_categ=g['categorical'],
+                con_outs=con_outs,
+                x_cont=g['continuous'],
             )
 
         obj_loss, obj_logs = self.loss(**kwargs)
@@ -194,7 +204,7 @@ class ContrastiveDenoisingModule(BasePretrainModule):
         needs_denoise = loss_wants(self.loss, 'con_outs')
         needs_jet = loss_wants(self.loss, 'z_jet_list')
 
-        total_loss = batch['global'].new_zeros(())
+        total_loss = batch['global']['continuous'].new_zeros(())
         log_dict: dict[str, torch.Tensor] = {}
 
         z_global_views: list[torch.Tensor] | None = None
@@ -250,8 +260,10 @@ class ContrastiveDenoisingModule(BasePretrainModule):
         encoder = self.encoders[obj_name]
 
         if obj_name == self.global_object:
-            X = encoder(batch['global'])  # (B, F_g, dim)
-            return encoder.projector(X.flatten(1))  # (B, proj_dim)
+            g = batch['global']
+            x_cat_enc, x_con_enc = encoder.embed(g['categorical'], g['continuous'])
+            X = encoder(x_cat_enc, x_con_enc)  # (B, F_g, dim)
+            return encoder.projector(X.flatten(1, 2))  # (B, proj_dim)
 
         const = batch['constituents'][obj_name]
         valids_flat = rearrange(const['valid'], 'b c -> (b c)')
@@ -281,8 +293,15 @@ class ContrastiveDenoisingModule(BasePretrainModule):
 
             {
                 '<global_obj>': {
-                    'original': Tensor (B, F_g),
-                    'views': [{'raw': Tensor (B, F_g)}, ...],
+                    'original': {
+                        'categorical': Tensor (B, F_gcat),
+                        'continuous':  Tensor (B, F_gcon),
+                    },
+                    'views': [
+                        {'raw': {'categorical': Tensor (B, F_gcat),
+                                 'continuous':  Tensor (B, F_gcon)}},
+                        ...,
+                    ],
                 },
                 'constituents': {
                     '<obj>': {
@@ -312,13 +331,30 @@ class ContrastiveDenoisingModule(BasePretrainModule):
 
         # ── Global object ────────────────────────────────────────────────────
         global_name = self.global_object
-        x_global = batch['global']
+        g = batch['global']
+        x_cat_global = g['categorical']
+        x_con_global = g['continuous']
         view_results = []
         for view in self.views:
-            raw_out = view.apply_raw({'continuous': x_global.clone()})
-            view_results.append({'raw': raw_out['continuous'].cpu()})
+            raw_out = view.apply_raw(
+                {
+                    'categorical': x_cat_global.clone(),
+                    'continuous': x_con_global.clone(),
+                }
+            )
+            view_results.append(
+                {
+                    'raw': {
+                        'categorical': raw_out['categorical'].cpu(),
+                        'continuous': raw_out['continuous'].cpu(),
+                    }
+                }
+            )
         result[global_name] = {
-            'original': x_global.cpu(),
+            'original': {
+                'categorical': x_cat_global.cpu(),
+                'continuous': x_con_global.cpu(),
+            },
             'views': view_results,
         }
 

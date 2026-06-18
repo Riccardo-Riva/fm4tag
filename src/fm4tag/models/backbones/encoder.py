@@ -40,22 +40,34 @@ def _build_layers(layers: list, *, dim: int, nfeats: int) -> nn.ModuleList:
 
 
 class GlobalEncoder(nn.Module):
-    """Per-feature MLP encoder for global flat continuous features.
+    """Per-feature MLP encoder for global flat features (categorical + continuous).
 
-    Each of the ``num_features`` continuous features is independently projected
-    to a ``dim``-dimensional embedding via a 2-layer grouped Conv1d MLP.  No
-    attention is applied — the output is a plain set of token embeddings, one
-    per global feature.
+    Mirrors :class:`Encoder` for the global (jet) object, which has no
+    constituent / valid-mask dimension.  Each continuous feature is projected
+    to a ``feature_dim`` embedding via a 2-layer grouped Conv1d MLP; each
+    categorical feature is embedded via a learned lookup table (offset so all
+    features share one table).  No attention is applied here — the output is a
+    plain set of token embeddings, one per feature, ordered ``[categorical;
+    continuous]`` (matching :class:`Encoder`).
 
     Heads
     -----
-    * ``projector``     — MLP mapping ``(num_features * dim)`` → projection space,
-                          shared across all views for the contrastive loss.
-    * ``reconstructor`` — per-feature sep_MLP for denoising reconstruction (MSE).
+    * ``projector``        — MLP mapping ``(n_tokens * feature_dim)`` → projection
+                             space, shared across all views for the contrastive loss.
+    * ``reconstructor``    — per-feature sep_MLP for continuous denoising (MSE).
+    * ``cat_reconstructor``— per-feature sep_MLP for categorical denoising
+                             (cross-entropy); present only when categorical
+                             features are configured.
 
     Args:
-        num_features: Number of global continuous features ``F_g``.
-        dim:          Embedding dimension.
+        num_features: Number of global **continuous** features.  (Name kept for
+                      backward compatibility; a legacy flat ``inputs`` list maps
+                      to this value with no categorical features.)
+        feature_dim:  Per-feature token embedding dimension.
+        dim:          Output dimension of the contrastive projector.
+        categories:   Cardinality of each categorical global feature
+                      (empty ⇒ continuous-only, identical to the legacy encoder).
+        num_special_tokens: Extra tokens prepended to the embedding table.
     """
 
     def __init__(
@@ -63,48 +75,121 @@ class GlobalEncoder(nn.Module):
         num_features: int,
         feature_dim: int,  # injected at runtime from variables.jets.inputs
         dim: int,
+        categories=(),
+        num_special_tokens: int = 0,
     ) -> None:
         super().__init__()
+        # ``num_features`` is the continuous feature count (back-compat name).
+        self.num_continuous = num_features
         self.num_features = num_features
         self.dim = dim
         self.feature_dim = feature_dim
 
-        H = 2 * self.feature_dim
-        self.fc1 = nn.Conv1d(
-            num_features, num_features * H, kernel_size=1, groups=num_features
-        )
-        self.fc2 = nn.Conv1d(
-            num_features * H,
-            num_features * self.feature_dim,
-            kernel_size=1,
-            groups=num_features,
-        )
+        # ── Categorical embedding (offset lookup table, as in Encoder) ─────────
+        self.categories = tuple(int(c) for c in categories)
+        self.num_categories = len(self.categories)
+        self.num_special_tokens = num_special_tokens
+        if self.num_categories > 0:
+            assert all(c > 0 for c in self.categories), (
+                'number of each category must be positive'
+            )
+            self.total_tokens = sum(self.categories) + num_special_tokens
+            categories_offset = F.pad(
+                torch.tensor(list(self.categories)), (1, 0), value=num_special_tokens
+            )
+            categories_offset = categories_offset.cumsum(dim=-1)[:-1]
+            self.register_buffer('categories_offset', categories_offset)
+            self.embeds = nn.Embedding(self.total_tokens, feature_dim)
+            self.cat_reconstructor = sep_MLP(
+                feature_dim, self.num_categories, self.categories
+            )
 
-        proj_in = num_features * self.feature_dim
+        # ── Continuous per-feature embedding (grouped Conv1d MLP) ──────────────
+        if self.num_continuous > 0:
+            H = 2 * self.feature_dim
+            self.fc1 = nn.Conv1d(
+                self.num_continuous,
+                self.num_continuous * H,
+                kernel_size=1,
+                groups=self.num_continuous,
+            )
+            self.fc2 = nn.Conv1d(
+                self.num_continuous * H,
+                self.num_continuous * self.feature_dim,
+                kernel_size=1,
+                groups=self.num_continuous,
+            )
+            self.reconstructor = sep_MLP(
+                self.feature_dim, self.num_continuous, [1] * self.num_continuous
+            )
+
+        n_tokens = self.num_categories + self.num_continuous
+        proj_in = n_tokens * self.feature_dim
         self.projector = simple_MLP([proj_in, 2 * proj_in, self.dim])
-        self.reconstructor = sep_MLP(self.feature_dim, num_features, [1] * num_features)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Embed global features.
+    def embed(
+        self, x_categ: torch.Tensor, x_cont: torch.Tensor | None = None
+    ) -> tuple[torch.Tensor | None, torch.Tensor | None]:
+        """Embed raw categorical indices and continuous values into tokens.
+
+        Separate from :meth:`forward` so augmentations can be applied to the
+        embedded tokens before the attention stack (mirrors :func:`embed_data`).
 
         Args:
-            x: ``(N, F_g)`` continuous feature values (already normalised).
+            x_categ: ``(N, F_cat)`` long categorical indices (may be empty).
+            x_cont:  ``(N, F_con)`` continuous values (may be ``None``/empty).
 
         Returns:
-            ``(N, F_g, feature_dim)`` — one embedding token per feature.
+            ``(x_cat_enc, x_con_enc)`` — token embeddings of shape
+            ``(N, F_cat, feature_dim)`` and ``(N, F_con, feature_dim)``; either
+            may be ``None`` when that feature type is absent.
         """
-        h = F.relu(self.fc1(x.unsqueeze(-1)))  # (N, F_g*H, 1)
-        out = self.fc2(h).squeeze(-1)  # (N, F_g*feature_dim)
-        return out.view(x.size(0), self.num_features, self.feature_dim)
+        x_cat_enc: torch.Tensor | None = None
+        if self.num_categories > 0:
+            x_categ = x_categ + self.categories_offset.type_as(x_categ)
+            x_cat_enc = self.embeds(x_categ)  # (N, F_cat, feature_dim)
+
+        x_con_enc: torch.Tensor | None = None
+        if self.num_continuous > 0:
+            h = F.relu(self.fc1(x_cont.unsqueeze(-1)))  # (N, F_con*H, 1)
+            out = self.fc2(h).squeeze(-1)  # (N, F_con*feature_dim)
+            x_con_enc = out.view(x_cont.size(0), self.num_continuous, self.feature_dim)
+
+        return x_cat_enc, x_con_enc
+
+    @staticmethod
+    def _concat_tokens(
+        x_cat_enc: torch.Tensor | None, x_con_enc: torch.Tensor | None
+    ) -> torch.Tensor:
+        """Concatenate categorical and continuous tokens as ``[cat; con]``."""
+        if x_cat_enc is None:
+            return x_con_enc
+        if x_con_enc is None:
+            return x_cat_enc
+        return torch.cat((x_cat_enc, x_con_enc), dim=1)
+
+    def forward(
+        self, x_cat_enc: torch.Tensor | None, x_con_enc: torch.Tensor | None = None
+    ) -> torch.Tensor:
+        """Assemble embedded tokens into the feature-token grid.
+
+        Args:
+            x_cat_enc: ``(N, F_cat, feature_dim)`` categorical tokens or ``None``.
+            x_con_enc: ``(N, F_con, feature_dim)`` continuous tokens or ``None``.
+
+        Returns:
+            ``(N, F_cat + F_con, feature_dim)`` — one token per feature.
+        """
+        return self._concat_tokens(x_cat_enc, x_con_enc)
 
 
 class GlobalTransformerEncoder(GlobalEncoder):
-    """Transformer encoder for global flat continuous features.
+    """Transformer encoder for global flat features (categorical + continuous).
 
     Drop-in alternative to :class:`GlobalEncoder` (same constructor arguments
-    plus ``layers``, same heads, same forward signature).  After the
-    per-feature MLP embedding, the ``(N, F_g, feature_dim)`` tokens are
-    refined by a declarative stack of attention blocks using the same
+    plus ``layers``, same heads, same forward signature).  After the per-feature
+    embedding (:meth:`GlobalEncoder.embed`), the ``(N, F, feature_dim)`` tokens
+    are refined by a declarative stack of attention blocks using the same
     ``layers`` syntax as :class:`Encoder`:
 
     * ``type: col``    → :class:`ColTransformer`
@@ -112,13 +197,15 @@ class GlobalTransformerEncoder(GlobalEncoder):
     * ``type: rowcol`` → :class:`RowColTransformer`
 
     The attention ``dim`` is ``feature_dim`` and ``nfeats`` (for row-aware
-    blocks) is ``num_features`` — both injected automatically.
+    blocks) is ``num_categories + num_continuous`` — both injected automatically.
 
     Args:
-        num_features: Number of global continuous features ``F_g``.
+        num_features: Number of global continuous features.
         feature_dim:  Per-feature token embedding dimension.
         dim:          Output dimension of the contrastive projector.
         layers:       List of layer-config dicts (see :class:`Encoder`).
+        categories:   Cardinality of each categorical global feature.
+        num_special_tokens: Extra tokens prepended to the embedding table.
     """
 
     def __init__(
@@ -127,20 +214,32 @@ class GlobalTransformerEncoder(GlobalEncoder):
         feature_dim: int,
         dim: int,
         layers: list,
+        categories=(),
+        num_special_tokens: int = 0,
     ) -> None:
-        super().__init__(num_features=num_features, feature_dim=feature_dim, dim=dim)
-        self.layers = _build_layers(layers, dim=feature_dim, nfeats=num_features)
+        super().__init__(
+            num_features=num_features,
+            feature_dim=feature_dim,
+            dim=dim,
+            categories=categories,
+            num_special_tokens=num_special_tokens,
+        )
+        nfeats = self.num_categories + self.num_continuous
+        self.layers = _build_layers(layers, dim=feature_dim, nfeats=nfeats)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Embed global features and refine them with attention.
+    def forward(
+        self, x_cat_enc: torch.Tensor | None, x_con_enc: torch.Tensor | None = None
+    ) -> torch.Tensor:
+        """Assemble embedded tokens and refine them with attention.
 
         Args:
-            x: ``(N, F_g)`` continuous feature values (already normalised).
+            x_cat_enc: ``(N, F_cat, feature_dim)`` categorical tokens or ``None``.
+            x_con_enc: ``(N, F_con, feature_dim)`` continuous tokens or ``None``.
 
         Returns:
-            ``(N, F_g, feature_dim)`` — one embedding token per feature.
+            ``(N, F_cat + F_con, feature_dim)`` — one token per feature.
         """
-        tokens = super().forward(x)
+        tokens = self._concat_tokens(x_cat_enc, x_con_enc)
         for layer in self.layers:
             tokens = layer(tokens)
         return tokens

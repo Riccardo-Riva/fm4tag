@@ -32,7 +32,12 @@ def build_module(cfg, phase: str):
     if phase == 'finetune':
         head_cfg = cfg.head
         n_classes = len(cfg.variables[cfg.global_object].unique_labels)
-        n_global_features = len(cfg.variables[cfg.global_object].inputs)
+        from fm4tag.utils import resolve_object_inputs
+
+        _g_con, _g_cat, _ = resolve_object_inputs(
+            cfg.variables[cfg.global_object].inputs
+        )
+        n_global_features = len(_g_con) + len(_g_cat)
         n_constituent_features = [
             len(cfg.variables[obj].inputs.continuous)
             + len(cfg.variables[obj].inputs.categorical)

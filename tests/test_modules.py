@@ -120,7 +120,10 @@ def loss():
 def _make_batch(B: int = 4, C: int = 8) -> dict:
     """Build a minimal batch dict matching the expected format."""
     return {
-        'global': torch.randn(B, 2),
+        'global': {
+            'categorical': torch.zeros(B, 0, dtype=torch.long),
+            'continuous': torch.randn(B, 2),
+        },
         'constituents': {
             'tracks': {
                 'categorical': torch.randint(0, 2, (B, C, len(_CATEGORIES))),
@@ -211,6 +214,77 @@ def test_compute_loss_denoising_keys_present(
     assert 'jets/loss_denoising_con' in log_dict
     assert 'tracks/loss_denoising_cat' in log_dict
     assert 'tracks/loss_denoising_con' in log_dict
+
+
+def test_categorical_jets_denoising_and_gradients():
+    """Global object with categorical features: cat denoising fires + grads flow."""
+    g_categories = [3, 4]  # two categorical jet features
+    n_g_cont = 2
+    global_enc = GlobalEncoder(
+        num_features=n_g_cont, feature_dim=_DIM, dim=_DIM, categories=g_categories
+    )
+    track_enc = Encoder(
+        categories=_CATEGORIES,
+        num_continuous=_NUM_CONTINUOUS,
+        dim=_DIM,
+        layers=[{'type': 'col', 'depth': 1, 'heads': 2, 'dim_head': 8, 'ff_mult': 1}],
+    )
+    encoders = torch.nn.ModuleDict({'jets': global_enc, 'tracks': track_enc})
+
+    aggregator = JetAggregator(
+        global_dim=global_enc.projector.layers[-1].out_features,
+        const_dims=[track_enc.projector.layers[-1].out_features],
+        depth=1,
+        heads=2,
+        dim_head=8,
+        ff_mult=1,
+    )
+    views = [Compose([CutMix(lam=0.7)]), Compose([FeatureDropout(corrupt_frac=0.3)])]
+    loss = PretrainLoss(
+        terms=[
+            ContrastiveTermAdapter(temperature=0.1),
+            DenoisingTermAdapter(weight_cat=0.2, weight_con=0.2),
+        ],
+        weights=[0.6, 1.0],
+    )
+    cfg = OmegaConf.create(
+        {
+            'global_object': 'jets',
+            'constituent_objects': ['tracks'],
+            'eval': {'enabled': False, 'splits': ['val'], 'n_samples': 32, 'metrics': []},
+            'optimizer': {'lr': 1e-3, 'weight_decay': 1e-5},
+        }
+    )
+    module = ContrastiveDenoisingModule(
+        encoders=encoders, aggregator=aggregator, views=views, loss=loss, cfg=cfg
+    )
+
+    B, C = 4, 8
+    batch = {
+        'global': {
+            'categorical': torch.stack(
+                [torch.randint(0, n, (B,)) for n in g_categories], dim=1
+            ),  # (B, 2) long, valid class indices
+            'continuous': torch.randn(B, n_g_cont),
+        },
+        'constituents': {
+            'tracks': {
+                'categorical': torch.randint(0, 2, (B, C, len(_CATEGORIES))),
+                'continuous': torch.randn(B, C, _NUM_CONTINUOUS),
+                'valid': torch.ones(B, C, dtype=torch.bool),
+            }
+        },
+    }
+
+    total, log_dict = module._compute_loss(batch)
+    assert torch.isfinite(total)
+    # Categorical denoising now fires for the global object too.
+    assert 'jets/loss_denoising_cat' in log_dict
+    assert 'jets/loss_denoising_con' in log_dict
+
+    total.backward()
+    assert global_enc.embeds.weight.grad is not None
+    assert global_enc.embeds.weight.grad.abs().sum() > 0
 
 
 def test_compute_loss_no_denoising_when_lam_zero(encoders, aggregator, two_views):
@@ -305,7 +379,7 @@ def test_project_for_eval_global(encoders, aggregator, two_views, loss, minimal_
     batch = _make_batch()
     z = module._project_for_eval(batch, 'jets')
     assert z is not None
-    assert z.shape[0] == batch['global'].shape[0]
+    assert z.shape[0] == batch['global']['continuous'].shape[0]
 
 
 def test_project_for_eval_constituent(
@@ -397,6 +471,7 @@ def test_predict_step_output_is_cpu(encoders, aggregator, two_views, loss, minim
     )
     batch = _make_batch()
     out = module.predict_step(batch, 0)
-    assert out['jets']['original'].device.type == 'cpu'
+    assert out['jets']['original']['continuous'].device.type == 'cpu'
+    assert out['jets']['views'][0]['raw']['continuous'].device.type == 'cpu'
     view_raw = out['constituents']['tracks']['views'][0]['raw']
     assert view_raw['continuous'].device.type == 'cpu'

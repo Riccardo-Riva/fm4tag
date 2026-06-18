@@ -158,8 +158,10 @@ class FinetuneModule(L.LightningModule):
         # ── Global ───────────────────────────────────────────────────────────
         global_name = self.cfg.global_object
         enc_global = self.backbone[global_name]
-        X_global = enc_global(batch['global'])  # (B, F_g, dim)
-        z_global = enc_global.projector(X_global.flatten(1))  # (B, g_dim)
+        g = batch['global']
+        x_cat_enc, x_con_enc = enc_global.embed(g['categorical'], g['continuous'])
+        X_global = enc_global(x_cat_enc, x_con_enc)  # (B, F_g, dim)
+        z_global = enc_global.projector(X_global.flatten(1, 2))  # (B, g_dim)
 
         # ── Constituents ─────────────────────────────────────────────────────
         z_consts: list[torch.Tensor] = []
@@ -204,11 +206,11 @@ class FinetuneModule(L.LightningModule):
         """
         global_name = self.cfg.global_object
         enc_global = self.backbone[global_name]
-        x_orig = batch['global']
+        g = batch['global']
 
         # Per-view global projections.
         z_global_views = [
-            encode_global_view(enc_global, view, x_orig)[0] for view in self.views
+            encode_global_view(enc_global, view, g)[0] for view in self.views
         ]
 
         # Per-view constituent projections (scattered) + valids.
