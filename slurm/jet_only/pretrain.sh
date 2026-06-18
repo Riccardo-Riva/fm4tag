@@ -5,7 +5,7 @@
 # ── Settings ──────────────────────────────────────────────────────────────────
 # Global-only (no-constituent) pretraining on configs/jets_only.yaml.
 GPU_NODE=gpu-L40S-open,gpu-A40
-GPU_NUM=2
+GPU_NUM=1
 NUM_WORKERS=8
 REPO=/storage3/DSIP/rriva/research/fm4tag
 VENV=${REPO}/.venv
@@ -29,7 +29,7 @@ cat > "${OUTPUT_DIR}/run.sh" << EOF
 #SBATCH --gres=gpu:${GPU_NUM}
 #SBATCH --ntasks-per-node=${GPU_NUM}
 #SBATCH --cpus-per-task=$((NUM_WORKERS + 2))
-#SBATCH --mem=196G
+#SBATCH --mem=128G
 #SBATCH --output=${OUTPUT_DIR}/out.txt
 #SBATCH --error=${OUTPUT_DIR}/err.txt
 

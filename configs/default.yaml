@@ -75,8 +75,9 @@ class_dict_path: ${base_path}/pretrain/output/class_dict.yaml
 dataloader:
   batch_size:      512
   num_workers:     8
-  prefetch_factor: 2
-  pin_memory:      true
+  prefetch_factor: 1
+  pin_memory:      false
+  persistent_workers: false
 
 # ── Backbone architecture ─────────────────────────────────────────────────────
 # backbone.global_encoder: config for the global-object (continuous-only) encoder.

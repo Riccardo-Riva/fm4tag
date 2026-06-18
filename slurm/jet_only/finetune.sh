@@ -5,7 +5,7 @@
 # ── Settings ──────────────────────────────────────────────────────────────────
 # Fine-tune a jets_only pretrained encoder for classification.
 GPU_NODE=gpu-L40S-open,gpu-A40
-GPU_NUM=2
+GPU_NUM=1
 NUM_WORKERS=8
 REPO=/storage3/DSIP/rriva/research/fm4tag
 VENV=${REPO}/.venv
@@ -19,7 +19,7 @@ MAX_EPOCHS=100
 
 # Path to the jets_only PretrainModule checkpoint whose encoder weights are
 # loaded (set this to your jet_only pretrain run's best/last checkpoint).
-ENCODER_CKPT=${REPO}/slurm/jet_only/pretraining/run_TIMESTAMP/jets_only/version_0/checkpoints/last.ckpt
+ENCODER_CKPT=${REPO}/slurm/jet_only/pretraining/run_20260617_172049/jets_only/version_0/checkpoints/last.ckpt
 
 # ── Timestamped output directory ──────────────────────────────────────────────
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)

@@ -22,6 +22,7 @@ class CatConDataModule(L.LightningDataModule):
         num_workers: int = 4,
         prefetch_factor: int = 2,
         pin_memory: bool = True,
+        persistent_workers: bool = False,
     ) -> None:
         super().__init__()
         self.save_hyperparameters()
@@ -39,6 +40,7 @@ class CatConDataModule(L.LightningDataModule):
         self._num_workers = num_workers
         self._prefetch_factor = prefetch_factor
         self._pin_memory = pin_memory
+        self._persistent_workers = persistent_workers
 
         # Loaded once in the main process; shared across both phases.
         self._norm_dict = self._load_yaml(norm_dict_path)
@@ -71,8 +73,16 @@ class CatConDataModule(L.LightningDataModule):
             collate_fn=cat_con_collate_fn,
             prefetch_factor=self._prefetch_factor if self._num_workers > 0 else None,
             # Keep workers alive between epochs so HDF5 handles are not reopened.
-            persistent_workers=False,  # self._num_workers > 0,
+            persistent_workers=self._persistent_workers if self._num_workers > 0 else None,
             pin_memory=self._pin_memory,
+            # Start workers from a clean process instead of forking the parent.
+            # With the default 'fork', workers inherit the parent's initialized
+            # CUDA context; when an inherited CUDA tensor's destructor later runs
+            # in the worker it aborts with cudaErrorInitializationError (CUDA
+            # cannot be re-initialized in a fork child), killing the worker. The
+            # finetune path hits this reliably because of its GPU-resident
+            # torchmetrics/head state. 'forkserver' avoids inheriting CUDA.
+            multiprocessing_context='forkserver' if self._num_workers > 0 else None,
         )
 
     # ------------------------------------------------------------------

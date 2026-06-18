@@ -5,8 +5,8 @@
 # ── Settings ──────────────────────────────────────────────────────────────────
 # Supervised classification from scratch on configs/jets_only.yaml: phase=finetune
 # with no pretrained encoder (encoder_ckpt=null), so backbone + head train jointly.
-GPU_NODE=gpu-L40S-open,gpu-A40
-GPU_NUM=2
+GPU_NODE=gpu-L40S-open,gpu-A40,cliffjumper
+GPU_NUM=1
 NUM_WORKERS=8
 REPO=/storage3/DSIP/rriva/research/fm4tag
 VENV=${REPO}/.venv

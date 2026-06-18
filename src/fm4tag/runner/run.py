@@ -115,6 +115,7 @@ def run(
         num_workers=dl_cfg.num_workers,
         prefetch_factor=dl_cfg.get('prefetch_factor', 2),
         pin_memory=dl_cfg.get('pin_memory', True),
+        persistent_workers=dl_cfg.get('persistent_workers', False)
     )
 
     if _phase == 'pretrain':
