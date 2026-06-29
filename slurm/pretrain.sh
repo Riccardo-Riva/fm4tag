@@ -8,11 +8,11 @@ GPU_NUM=2
 NUM_WORKERS=8
 REPO=/storage3/DSIP/rriva/research/fm4tag
 VENV=${REPO}/.venv
-CONFIG_DIR=${REPO}/configs
+CONFIG_DIR=${REPO}/src/fm4tag/configs
 OUTPUT_BASE=${REPO}/slurm/pretraining
 
 # Config and overrides
-CONFIG=default          # configs/default.yaml
+CONFIG=default          # src/fm4tag/configs/default.yaml
 BATCH_SIZE=512          # per-GPU batch size (×GPU_NUM effective batch)
 MAX_EPOCHS=100
 

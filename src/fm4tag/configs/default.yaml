@@ -64,6 +64,7 @@ variables:
 base_path: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_152051 # 60M
 #base_path: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251114_155623 # 6M 
 
+pretrain_dataset_path: ${base_path}/pretrain/output/pp_output_pretrain.h5
 train_dataset_path: ${base_path}/train/output/pp_output_train.h5
 val_dataset_path:   ${base_path}/val/output/pp_output_val.h5
 test_dataset_path:  ${base_path}/test/output/pp_output_test.h5

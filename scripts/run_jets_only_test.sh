@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Reproduce the global-only (no-constituent) smoke test:
 #   10-epoch pretrain  ->  checkpoint  ->  10-epoch finetune
-# on configs/jets_only.yaml.
+# on src/fm4tag/configs/jets_only.yaml.
 #
 # Pins to a single GPU.  Resolution order for which GPU to use:
 #   1. first CLI arg            ->  scripts/run_jets_only_test.sh 2
