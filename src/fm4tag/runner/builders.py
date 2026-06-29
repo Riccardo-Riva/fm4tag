@@ -246,8 +246,10 @@ def _build_callbacks(cfg: DictConfig, phase: str) -> list:
     cb_cfg = cfg.get('callbacks', {})
     callbacks = []
 
-    _val_key = 'pretrain_val_file' if phase == 'pretrain' else 'val_file'
-    _has_val = bool(cfg.get(_val_key))
+    # Both pretrain and finetune build the val dataloader from val_dataset_path
+    # (see datamodule.setup); use that same key here so the monitor falls back
+    # to val_loss when a validation set is configured.
+    _has_val = bool(cfg.get('val_dataset_path'))
     _default_monitor = 'val_loss' if _has_val else 'train_loss'
 
     ms = cb_cfg.get('model_summary', {})

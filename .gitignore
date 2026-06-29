@@ -2,7 +2,9 @@
 notebooks/*.png
 
 # slurm
-slurm/**/
+slurm/**/pretraining/
+slurm/**/finetuning/
+slurm/**/classify_from_scratch/
 
 # outputs
 outputs/
