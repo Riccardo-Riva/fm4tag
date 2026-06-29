@@ -82,7 +82,7 @@ class CatConDataModule(L.LightningDataModule):
             # cannot be re-initialized in a fork child), killing the worker. The
             # finetune path hits this reliably because of its GPU-resident
             # torchmetrics/head state. 'forkserver' avoids inheriting CUDA.
-            multiprocessing_context='forkserver' if self._num_workers > 0 else None,
+            multiprocessing_context='forkserver' if self._num_workers > 0 else None, #TODO: check if this is needed (should be mandatory in Linux)
         )
 
     # ------------------------------------------------------------------

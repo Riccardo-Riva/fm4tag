@@ -147,7 +147,7 @@ class GlobalTransformerEncoder(GlobalEncoder):
 
 
 class Encoder(nn.Module):
-    """SAINT-style transformer encoder with a declarative list of backbone layers.
+    """A transformer-based encoder with a declarative list of backbone layers.
 
     The transformer backbone is configured via the ``layers`` list.  Each entry
     is a plain dict (or OmegaConf DictConfig) with a ``type`` key selecting the
