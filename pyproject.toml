@@ -15,6 +15,7 @@ dependencies = [
     "optuna>=4.7.0",
     "puma-hep>=0.5.1",
     "tensorboard>=2.20.0",
+    "wandb>=0.28.0",
 ]
 
 [project.scripts]
