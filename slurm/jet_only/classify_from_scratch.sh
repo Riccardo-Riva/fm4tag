@@ -3,18 +3,18 @@
 #SBATCH --mem=4G
 
 # ── Settings ──────────────────────────────────────────────────────────────────
-# Supervised classification from scratch on configs/jets_only.yaml: phase=finetune
+# Supervised classification from scratch on src/fm4tag/configs/jets_only.yaml: phase=finetune
 # with no pretrained encoder (encoder_ckpt=null), so backbone + head train jointly.
 GPU_NODE=gpu-L40S-open,gpu-A40,cliffjumper
 GPU_NUM=1
 NUM_WORKERS=8
 REPO=/storage3/DSIP/rriva/research/fm4tag
 VENV=${REPO}/.venv
-CONFIG_DIR=${REPO}/configs
+CONFIG_DIR=${REPO}/src/fm4tag/configs
 OUTPUT_BASE=${REPO}/slurm/jet_only/classify_from_scratch
 
 # Config and overrides
-CONFIG=jets_only        # configs/jets_only.yaml
+CONFIG=jets_only        # src/fm4tag/configs/jets_only.yaml
 BATCH_SIZE=512
 MAX_EPOCHS=100
 

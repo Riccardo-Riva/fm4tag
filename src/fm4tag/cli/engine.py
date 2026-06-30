@@ -24,7 +24,7 @@ For notebooks / scripts (Hydra not involved)::
     from omegaconf import OmegaConf
     from fm4tag.runner import run
 
-    cfg = OmegaConf.load('configs/default.yaml')
+    cfg = OmegaConf.load('src/fm4tag/configs/default.yaml')
     run(cfg, phase='pretrain', action='fit')
 """
 
@@ -36,6 +36,6 @@ from omegaconf import DictConfig
 from fm4tag.runner.run import run
 
 
-@hydra.main(version_base=None, config_path='configs', config_name='default')
+@hydra.main(version_base=None, config_path='../configs', config_name='default')
 def main(cfg: DictConfig) -> None:
     run(cfg)

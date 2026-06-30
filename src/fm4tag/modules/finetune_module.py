@@ -277,13 +277,15 @@ class FinetuneModule(L.LightningModule):
         return self.loss(**kwargs)
 
     def _log_loss_components(
-        self, loss_log: dict[str, torch.Tensor], split: str
+        self, loss_log: dict[str, torch.Tensor], split: str, on_step: bool = False
     ) -> None:
         """Log each loss sub-component (everything except the top-level total)."""
         for k, v in loss_log.items():
             if k == 'loss':
                 continue
-            self.log(f'{split}_{k}', v, on_step=False, on_epoch=True, sync_dist=True)
+            self.log(
+                f'{split}_{k}', v, on_step=on_step, on_epoch=True, sync_dist=True
+            )
 
     # ------------------------------------------------------------------
     # Online embedding metric helpers
@@ -396,7 +398,7 @@ class FinetuneModule(L.LightningModule):
             sync_dist=True,
         )
         self.log('train_acc', acc, on_step=False, on_epoch=True, sync_dist=True)
-        self._log_loss_components(loss_log, 'train')
+        self._log_loss_components(loss_log, 'train', on_step=True)
         return loss
 
     def validation_step(self, batch: dict, batch_idx: int) -> None:

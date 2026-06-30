@@ -103,7 +103,7 @@ def run(
 
     dl_cfg = cfg.dataloader
     dm = CatConDataModule(
-        train_dataset_path=cfg.train_dataset_path,
+        train_dataset_path=cfg.train_dataset_path if _phase == 'finetune' else cfg.pretrain_dataset_path,
         val_dataset_path=cfg.val_dataset_path,
         test_dataset_path=cfg.test_dataset_path,
         variables=cfg.variables,

@@ -9,11 +9,11 @@ GPU_NUM=1
 NUM_WORKERS=8
 REPO=/storage3/DSIP/rriva/research/fm4tag
 VENV=${REPO}/.venv
-CONFIG_DIR=${REPO}/configs
+CONFIG_DIR=${REPO}/src/fm4tag/configs
 OUTPUT_BASE=${REPO}/slurm/jet_only/finetuning
 
 # Config and overrides
-CONFIG=jets_only        # configs/jets_only.yaml
+CONFIG=jets_only        # src/fm4tag/configs/jets_only.yaml
 BATCH_SIZE=512
 MAX_EPOCHS=100
 
