@@ -6,7 +6,7 @@
 # Supervised classification from scratch: phase=finetune with no pretrained
 # encoder (encoder_ckpt=null), so the whole backbone + head is trained jointly.
 GPU_NODE=gpu-L40S-open,gpu-A40
-GPU_NUM=4
+GPU_NUM=2
 NUM_WORKERS=8
 REPO=/storage3/DSIP/rriva/research/fm4tag
 VENV=${REPO}/.venv
@@ -24,7 +24,7 @@ OUTPUT_DIR=${OUTPUT_BASE}/run_${TIMESTAMP}
 mkdir -pv "${OUTPUT_DIR}"
 
 # ── Write inner GPU job script ─────────────────────────────────────────────────
-cat > "${OUTPUT_DIR}/run.sh" << EOF
+cat > "${OUTPUT_DIR}/classify_from_scratch_run.sh" << EOF
 #!/bin/bash
 #SBATCH --partition=${GPU_NODE}
 #SBATCH --gres=gpu:${GPU_NUM}
@@ -61,4 +61,4 @@ echo "Elapsed: \$((SECONDS/3600))h \$(((SECONDS/60)%60))m \$((SECONDS%60))s"
 EOF
 
 cd "${OUTPUT_DIR}"
-sbatch run.sh
+sbatch classify_from_scratch_run.sh

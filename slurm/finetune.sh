@@ -26,7 +26,7 @@ OUTPUT_DIR=${OUTPUT_BASE}/run_${TIMESTAMP}
 mkdir -pv "${OUTPUT_DIR}"
 
 # ── Write inner GPU job script ─────────────────────────────────────────────────
-cat > "${OUTPUT_DIR}/run.sh" << EOF
+cat > "${OUTPUT_DIR}/finetune_run.sh" << EOF
 #!/bin/bash
 #SBATCH --partition=${GPU_NODE}
 #SBATCH --gres=gpu:${GPU_NUM}
@@ -63,4 +63,4 @@ echo "Elapsed: \$((SECONDS/3600))h \$(((SECONDS/60)%60))m \$((SECONDS%60))s"
 EOF
 
 cd "${OUTPUT_DIR}"
-sbatch run.sh
+sbatch finetune_run.sh
