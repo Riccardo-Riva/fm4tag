@@ -156,7 +156,7 @@ class BasePretrainModule(L.LightningModule):
             self.log(
                 f'{split}_{k}',
                 v,
-                on_step=False,
+                on_step=on_step,
                 on_epoch=True,
                 prog_bar=False,
                 sync_dist=True,
