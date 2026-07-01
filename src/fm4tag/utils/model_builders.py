@@ -42,7 +42,7 @@ def build_encoders(cfg: DictConfig) -> torch.nn.ModuleDict:
 def build_aggregator(
     cfg: DictConfig,
     encoders: torch.nn.ModuleDict,
-) -> TransformerAggregator:
+) -> torch.nn.Module:
     """Build the jet aggregator from ``cfg.aggregator`` and built encoders.
 
     Mirrors :func:`build_encoders`: the class is selected by
@@ -67,4 +67,24 @@ def build_aggregator(
         cfg.aggregator,
         global_dim=global_dim,
         const_dims=const_dims,
+    )
+
+def build_head(
+    cfg: DictConfig,
+    aggregator: torch.nn.Module,
+) -> torch.nn.Module:
+    """Build the classifier head from ``cfg.head`` and the aggregator.
+
+    ``jet_dim`` is taken from ``aggregator.out_dim`` and ``y_dim`` from the
+    number of unique labels of the global object; all other parameters come
+    from ``cfg.head``.
+    """
+    jet_dim = aggregator.out_dim
+    y_dim = len(cfg.variables[cfg.global_object].unique_labels)
+
+    head_cfg = cfg.get('head', {})
+    return hydra_instantiate(
+        cfg.head,
+        jet_dim=jet_dim,
+        y_dim=y_dim
     )
