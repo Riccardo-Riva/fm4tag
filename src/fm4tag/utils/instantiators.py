@@ -1,6 +1,6 @@
 from typing import List
 
-from hydra import instantiate as hydra_instantiate 
+from hydra.utils import instantiate as hydra_instantiate
 from lightning import Callback
 from lightning.pytorch.loggers import Logger
 from omegaconf import DictConfig

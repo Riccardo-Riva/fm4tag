@@ -40,8 +40,35 @@ import torch
 from einops import rearrange
 from torch import nn
 
-from ..attention import Attention, RowAttention
+from ..attention import Attention, ChunkedRowAttention, RowAttention
 from ..blocks import FeedForward, PreNorm, Residual
+
+
+def _build_row_attention(
+    row_dim: int,
+    *,
+    heads: int,
+    dim_row_head: int,
+    dropout: float,
+    chunk_size: int | None,
+) -> nn.Module:
+    """Select the intersample-attention variant at construction time.
+
+    ``chunk_size=None`` → whole-batch :class:`RowAttention`; otherwise chunked
+    :class:`ChunkedRowAttention`.  Keeping this decision here means neither
+    module needs a structural branch in its ``forward``.
+    """
+    if chunk_size is None:
+        return RowAttention(
+            row_dim, heads=heads, dim_row_head=dim_row_head, dropout=dropout
+        )
+    return ChunkedRowAttention(
+        row_dim,
+        heads=heads,
+        dim_row_head=dim_row_head,
+        dropout=dropout,
+        chunk_size=chunk_size,
+    )
 
 
 class ColTransformer(nn.Module):
@@ -100,8 +127,11 @@ class ColTransformer(nn.Module):
     def forward(
         self, x: torch.Tensor, mask: torch.Tensor | None = None
     ) -> torch.Tensor:
+        # The incoming mask is per-sample ``(b,)``; column Attention expects a
+        # per-token ``(b, n)`` key-padding mask, so broadcast it across tokens.
+        col_mask = mask[:, None].expand(-1, x.size(1)) if mask is not None else None
         for attn, ff in self.blocks:
-            x = attn(x, mask=mask)
+            x = attn(x, mask=col_mask)
             x = ff(x)
         return x
 
@@ -123,8 +153,9 @@ class RowTransformer(nn.Module):
         ff_mult:      Feed-forward hidden-size multiplier.
         attn_dropout: Dropout rate inside attention.
         ff_dropout:   Dropout rate inside feed-forward.
-        chunk_size:   If set and ``< B``, splits the batch into disjoint groups
-                      for attention.  See
+        chunk_size:   If set, splits the batch into disjoint groups for
+                      attention (:class:`~fm4tag.models.attention.ChunkedRowAttention`);
+                      ``None`` uses whole-batch
                       :class:`~fm4tag.models.attention.RowAttention`.
     """
 
@@ -149,7 +180,7 @@ class RowTransformer(nn.Module):
                         PreNorm(
                             row_dim,
                             Residual(
-                                RowAttention(
+                                _build_row_attention(
                                     row_dim,
                                     heads=row_heads,
                                     dim_row_head=dim_row_head,
@@ -242,7 +273,7 @@ class RowColTransformer(nn.Module):
                         PreNorm(
                             row_dim,
                             Residual(
-                                RowAttention(
+                                _build_row_attention(
                                     row_dim,
                                     heads=row_heads,
                                     dim_row_head=dim_row_head,
@@ -267,8 +298,11 @@ class RowColTransformer(nn.Module):
         self, x: torch.Tensor, mask: torch.Tensor | None = None
     ) -> torch.Tensor:
         _, n, _ = x.shape
+        # Column Attention expects a per-token ``(b, n)`` mask; row attention
+        # keeps the per-sample ``(b,)`` mask.
+        col_mask = mask[:, None].expand(-1, n) if mask is not None else None
         for col_attn, col_ff, row_attn, row_ff in self.blocks:
-            x = col_attn(x, mask=mask)
+            x = col_attn(x, mask=col_mask)
             x = col_ff(x)
             x = rearrange(x, 'b n d -> b (n d)')
             x = row_attn(x, mask=mask)

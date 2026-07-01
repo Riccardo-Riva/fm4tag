@@ -140,8 +140,10 @@ encoders:
 
 # ── Jet aggregator (shared by pretrain + finetune) ────────────────────────────
 # Cross-constituent transformer + masked mean-pool that builds the jet embedding
-# z_jet from the per-object projections.  Output dims are read from the encoders.
+# z_jet from the per-object projections.  The class is selected by _target_;
+# global_dim and const_dims are injected at runtime from the encoders.
 aggregator:
+  _target_:     fm4tag.models.TransformerAggregator
   depth:        4
   heads:        4
   dim_head:     32

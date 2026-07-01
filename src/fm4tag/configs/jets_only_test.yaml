@@ -3,7 +3,7 @@
 #
 # Same as default.yaml but with an empty constituent_objects list, to exercise
 # the no-constituent code path end-to-end (encoders / aggregator / losses).
-# With no constituents the JetAggregator has no parameters and z_jet == z_global.
+# With no constituents the TransformerAggregator has no parameters and z_jet == z_global.
 # trainer.limit_*_batches keep the 10-epoch run fast.
 # ════════════════════════════════════════════════════════════════════════════
 
@@ -65,6 +65,7 @@ backbone:
 # ── Jet aggregator (shared by pretrain + finetune) ────────────────────────────
 # With no constituents this has no parameters and simply passes z_global through.
 aggregator:
+  _target_:     fm4tag.models.TransformerAggregator
   depth:        6
   heads:        4
   dim_head:     32

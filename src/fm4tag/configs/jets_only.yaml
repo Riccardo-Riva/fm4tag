@@ -2,7 +2,7 @@
 # fm4tag — GLOBAL-ONLY (no constituents) config — real run
 #
 # Same as default.yaml but with an empty constituent_objects list. With no
-# constituents the JetAggregator has no parameters and z_jet == z_global, so the
+# constituents the TransformerAggregator has no parameters and z_jet == z_global, so the
 # jet-level contrastive term acts on the global embedding directly.
 # A quick smoke variant with batch caps lives in jets_only_test.yaml.
 # trainer.devices is overridden by the SLURM launcher (2-GPU DDP).
@@ -66,6 +66,7 @@ backbone:
 # ── Jet aggregator (shared by pretrain + finetune) ────────────────────────────
 # With no constituents this has no parameters and simply passes z_global through.
 aggregator:
+  _target_:     fm4tag.models.TransformerAggregator
   depth:        6
   heads:        4
   dim_head:     32

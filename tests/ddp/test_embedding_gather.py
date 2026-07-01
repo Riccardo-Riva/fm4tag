@@ -85,11 +85,11 @@ def _make_encoders():
 
 
 def _make_aggregator(encoders):
-    from fm4tag.models import JetAggregator
+    from fm4tag.models import TransformerAggregator
 
     global_dim = encoders['jets'].projector.layers[-1].out_features
     const_dims = [encoders['tracks'].projector.layers[-1].out_features]
-    return JetAggregator(
+    return TransformerAggregator(
         global_dim=global_dim,
         const_dims=const_dims,
         depth=1,
