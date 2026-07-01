@@ -1,11 +1,15 @@
 from torch import nn
 
-from ..attention import Classifier_Attention
+from ..attention import Attention
 from ..blocks import FeedForward, PreNorm, Residual
 
 
 class Classifier_Transformer(nn.Module):
-    """Cross-constituent transformer used in the classification head."""
+    """Cross-constituent transformer used in the classification head.
+
+    Uses the shared :class:`~fm4tag.models.attention.Attention` with a per-token
+    ``(B, C)`` key-padding mask so padded constituents are excluded.
+    """
 
     def __init__(
         self, dim, depth, heads, dim_head, attn_dropout, ff_dropout, ff_mult=1
@@ -18,7 +22,7 @@ class Classifier_Transformer(nn.Module):
                         PreNorm(
                             dim,
                             Residual(
-                                Classifier_Attention(
+                                Attention(
                                     dim,
                                     heads=heads,
                                     dim_head=dim_head,

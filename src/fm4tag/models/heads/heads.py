@@ -8,13 +8,13 @@ class MultiStreamClassifierHead(nn.Module):
     """Classification head for jet flavour tagging.
 
     Receives the **already-aggregated** jet embedding ``z_jet`` (POINT B,
-    produced by :class:`~fm4tag.models.aggregator.JetAggregator`) and produces
+    produced by :class:`~fm4tag.models.aggregator.TransformerAggregator`) and produces
     class logits via a 2-layer feed-forward MLP:
 
         z_jet  (B, jet_dim) → MLP → logits (B, y_dim)
 
     Cross-constituent attention and masked pooling now live in the shared
-    :class:`~fm4tag.models.aggregator.JetAggregator`; this head only owns the
+    :class:`~fm4tag.models.aggregator.TransformerAggregator`; this head only owns the
     final classification MLP.
 
     The expected calling convention (in
@@ -53,7 +53,7 @@ class MultiStreamClassifierHead(nn.Module):
 
         Args:
             z_jet: ``(B, jet_dim)`` — aggregated jet embedding from
-                   :class:`~fm4tag.models.aggregator.JetAggregator`.
+                   :class:`~fm4tag.models.aggregator.TransformerAggregator`.
 
         Returns:
             ``(B, y_dim)`` class logits (unnormalised).

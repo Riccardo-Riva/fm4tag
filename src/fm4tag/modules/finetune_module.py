@@ -1,7 +1,7 @@
 """Supervised fine-tuning Lightning module.
 
 Wraps a :class:`~torch.nn.ModuleDict` of pretrained (or randomly initialised)
-encoders, a shared :class:`~fm4tag.models.aggregator.JetAggregator`, and a
+encoders, a shared :class:`~fm4tag.models.aggregator.TransformerAggregator`, and a
 :class:`~fm4tag.models.heads.MultiStreamClassifierHead` into a full Lightning
 module that supports:
 
@@ -41,7 +41,7 @@ from torchmetrics.classification import MulticlassAUROC
 from ..augmentations import Compose
 from ..metrics import effective_rank, uniformity
 from ..models import embed_data
-from ..models.aggregator import JetAggregator
+from ..models.aggregator import TransformerAggregator
 from ..models.heads import MultiStreamClassifierHead
 from ..utils.ddp import gather_embeddings_sized
 from .losses import FinetuneLoss, loss_wants
@@ -60,7 +60,7 @@ class FinetuneModule(L.LightningModule):
                     encoder — a :class:`GlobalEncoder` for the global object and
                     an :class:`Encoder` for each constituent type.  Stored as
                     ``self.backbone`` for ``BackboneFinetuning`` compatibility.
-        aggregator: :class:`JetAggregator` mapping per-object projections to a
+        aggregator: :class:`TransformerAggregator` mapping per-object projections to a
                     single jet embedding ``z_jet`` (POINT B).  Shared (same
                     weights) with pretraining.
         head:       :class:`MultiStreamClassifierHead` — receives ``z_jet``.
@@ -79,7 +79,7 @@ class FinetuneModule(L.LightningModule):
     def __init__(
         self,
         encoders: torch.nn.ModuleDict,
-        aggregator: JetAggregator,
+        aggregator: TransformerAggregator,
         head: MultiStreamClassifierHead,
         loss: FinetuneLoss,
         views: list[Compose],

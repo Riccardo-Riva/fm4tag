@@ -7,7 +7,7 @@ import torch
 from omegaconf import OmegaConf
 
 from fm4tag.augmentations import Compose, CutMix, FeatureDropout, GaussianNoise
-from fm4tag.models import Encoder, GlobalEncoder, JetAggregator
+from fm4tag.models import Encoder, GlobalEncoder, TransformerAggregator
 from fm4tag.modules import (
     ContrastiveDenoisingModule,
     ContrastiveTermAdapter,
@@ -94,7 +94,7 @@ def three_views():
 def aggregator(encoders):
     global_dim = encoders['jets'].projector.layers[-1].out_features
     const_dims = [encoders['tracks'].projector.layers[-1].out_features]
-    return JetAggregator(
+    return TransformerAggregator(
         global_dim=global_dim,
         const_dims=const_dims,
         depth=1,

@@ -4,7 +4,7 @@ The aggregator turns the per-object ``projector`` projections (POINT A) into a
 single jet embedding ``z_jet`` (POINT B in the pipeline):
 
     z_global  (B, d_global)                ─┐
-    z_consts  [(B, C, d_i), ...]           ─┤→ JetAggregator → z_jet (B, out_dim)
+    z_consts  [(B, C, d_i), ...]           ─┤→ TransformerAggregator → z_jet (B, out_dim)
     valids    [(B, C), ...]                 ─┘
 
 For each constituent type the projected embeddings are refined by a
@@ -24,7 +24,7 @@ from torch import nn
 from .heads.transformers import Classifier_Transformer
 
 
-class JetAggregator(nn.Module):
+class TransformerAggregator(nn.Module):
     """Aggregate per-object projections into a single jet embedding.
 
     For each constituent type ``i``:
