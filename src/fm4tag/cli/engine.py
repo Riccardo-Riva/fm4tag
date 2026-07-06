@@ -1,7 +1,7 @@
 """Hydra entry point for fm4tag.
 
-The actual workflow lives in :func:`fm4tag.runner.run.run`; the ``_build_*``
-factory helpers live in :mod:`fm4tag.runner.builders`.  This module is only the
+The actual workflow lives in :func:`fm4tag.runner.run.run`; the builder and
+instantiation helpers live in :mod:`fm4tag.utils`.  This module is only the
 thin Hydra wrapper that resolves the config and calls ``run``.
 
 Run with Hydra (from the project root)::

@@ -107,10 +107,11 @@ class DatasetCatCon(Dataset):
             if obj_name not in norm_dict:
                 continue
             obj_norm = norm_dict[obj_name]
+            # Bracket access: works for plain dicts and DictConfig alike.
             features = (
-                self.variables[obj_name].inputs
+                self.variables[obj_name]['inputs']
                 if obj_name == self.global_object
-                else self.variables[obj_name].inputs.continuous
+                else self.variables[obj_name]['inputs']['continuous']
             )
             self._norm[obj_name] = {
                 'mean': torch.tensor(
@@ -145,7 +146,7 @@ class DatasetCatCon(Dataset):
 
         # Global features (all numerical, shape: (F_g,))
         X_g = torch.from_numpy(
-            s2u(g_record[self.variables[self.global_object].inputs], dtype=None)
+            s2u(g_record[self.variables[self.global_object]['inputs']], dtype=None)
         ).float()
 
         if self.global_object in self._norm:
@@ -157,10 +158,10 @@ class DatasetCatCon(Dataset):
         for obj_name in self.constituent_objects:
             c_record = self.c_dsets[obj_name][idx]
             X_cat = torch.from_numpy(
-                s2u(c_record[self.variables[obj_name].inputs.categorical], dtype=None)
+                s2u(c_record[self.variables[obj_name]['inputs']['categorical']], dtype=None)
             )
             X_con = torch.from_numpy(
-                s2u(c_record[self.variables[obj_name].inputs.continuous], dtype=None)
+                s2u(c_record[self.variables[obj_name]['inputs']['continuous']], dtype=None)
             ).float()
 
             if obj_name in self._norm:

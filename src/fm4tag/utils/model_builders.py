@@ -4,7 +4,6 @@ import torch
 from omegaconf import DictConfig
 from hydra.utils import instantiate as hydra_instantiate
 
-from fm4tag.models.aggregator import TransformerAggregator
 
 def build_encoders(cfg: DictConfig) -> torch.nn.ModuleDict:
     """Build one encoder per object (global + all constituents).
@@ -82,7 +81,6 @@ def build_head(
     jet_dim = aggregator.out_dim
     y_dim = len(cfg.variables[cfg.global_object].unique_labels)
 
-    head_cfg = cfg.get('head', {})
     return hydra_instantiate(
         cfg.head,
         jet_dim=jet_dim,

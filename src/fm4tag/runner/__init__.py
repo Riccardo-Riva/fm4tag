@@ -1,4 +1,4 @@
-"""Runner package: public ``run()`` entry point and factory builders."""
+"""Runner package: public ``run()`` entry point."""
 
 from .run import run
 

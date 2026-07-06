@@ -52,7 +52,7 @@ from torch.utils.data import DataLoader
 
 from fm4tag.models import embed_data
 from fm4tag.datasets.datasets import DatasetCatCon, cat_con_collate_fn
-from fm4tag.runner.builders import _build_encoders, _load_pretrained_encoders
+from fm4tag.utils import build_encoders, load_pretrained_encoders
 from fm4tag.metrics.metrics import effective_rank, uniformity
 
 
@@ -179,8 +179,8 @@ def evaluate(
     _device = torch.device(device or ('cuda' if torch.cuda.is_available() else 'cpu'))
 
     # ── Build and load encoders ───────────────────────────────────────────────
-    encoders = _build_encoders(cfg)
-    _load_pretrained_encoders(encoders, _ckpt)
+    encoders = build_encoders(cfg)
+    load_pretrained_encoders(encoders, _ckpt)
     encoders = encoders.to(_device).eval()
 
     # ── Dataset / dataloader ─────────────────────────────────────────────────
