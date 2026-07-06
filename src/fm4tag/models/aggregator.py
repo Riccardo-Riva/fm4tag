@@ -105,10 +105,20 @@ class TransformerAggregator(nn.Module):
             # Zero out padding slots before attention.
             z = torch.where(valid.unsqueeze(-1), z, 0.0)
 
-            # Cross-constituent transformer.
+            # Cross-constituent transformer.  The valid mask is applied as a
+            # key-padding mask, so valid constituents never attend to padding.
             z = self.const_transformer[i](z, valid)
 
-            # Masked mean pool over valid constituents → (B, d_i)
+            # Re-mask after the transformer: padded slots come out non-zero
+            # again (LayerNorm beta, padded queries attending to valid keys,
+            # FFN bias, residuals), so without this the pooled "mean over
+            # valid constituents" silently includes padding garbage and the
+            # result depends on how much padding the batch carries.
+            z = torch.where(valid.unsqueeze(-1), z, 0.0)
+
+            # Masked mean pool over valid constituents → (B, d_i).
+            # clamp(min=1) also makes a jet with zero valid constituents pool
+            # to an exact zero vector instead of dividing by zero.
             n_valids = valid.sum(dim=1, keepdim=True).float().clamp(min=1.0)
             z = z.sum(dim=1) / n_valids
 
