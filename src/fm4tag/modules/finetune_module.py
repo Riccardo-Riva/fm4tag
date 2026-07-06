@@ -1,225 +1,200 @@
-"""Supervised fine-tuning Lightning module.
+"""Supervised fine-tuning LightningModule.
 
-Wraps a :class:`~torch.nn.ModuleDict` of pretrained (or randomly initialised)
-encoders, a shared :class:`~fm4tag.models.aggregator.TransformerAggregator`, and a
-:class:`~fm4tag.models.heads.MultiStreamClassifierHead` into a full Lightning
-module that supports:
+The classification pass is::
 
-* ``fit``     — supervised training (with optional encoder freezing /
-                progressive unfreezing via the ``BackboneFinetuning`` callback)
-* ``test``    — evaluation on a labelled test set
-* ``predict`` — inference returning class probabilities (softmax)
+    out    = forward(batch)            # clean embeddings incl. 'aggregator'
+    logits = head(out['aggregator'])   # classifier head
 
-The forward pass is::
+Loss composition is controlled by ``loss_weights`` (normalised to unit sum;
+a weight of 0 disables that component entirely — not computed, not logged):
 
-    z_global, z_consts, valids = _encode_all(batch)   # POINT A (encoder.projector)
-    z_jet  = aggregator(z_global, z_consts, valids)    # POINT B
-    logits = head(z_jet)                               # POINT C
+* ``cross_entropy``   — on the head's class logits.
+* ``jet_contrastive`` — the batch is re-encoded under each augmentation view
+  (exactly as in pretraining) and ``jet_contrastive_loss`` is applied to the
+  per-view aggregator outputs.
 
-The loss is a composable :class:`~fm4tag.modules.losses.FinetuneLoss`.  If it
-contains a jet-level contrastive term (one consuming ``z_jet_list``), the module
-re-encodes the batch under each of ``views`` — exactly as in pretraining — to
-build one ``z_jet`` per view and feeds the list to the loss.
+Logged keys follow ``<split>/<component>/<metric>``:
+``train/head/loss_ce``, ``train/aggregator/loss_contrastive``,
+``val/head/acc``, ``val/head/auroc``; ``<split>/loss`` is the total.
 
-The encoders are stored as ``self.backbone`` (an :class:`~torch.nn.ModuleDict`)
-so that Lightning's built-in :class:`~lightning.pytorch.callbacks.BackboneFinetuning`
-callback can locate and unfreeze them automatically when ``freeze_encoder=True``
-in the config.
+``forward`` returns the same embeddings dict as
+:class:`~fm4tag.modules.PretrainModule` (via
+:func:`~fm4tag.modules.view_encoding.encode_clean`), so the
+:class:`~fm4tag.callbacks.EmbeddingMetrics` callback works during fine-tuning
+unchanged.
+
+Freezing of the pretrained parts (encoders **and** aggregator) is driven
+entirely by the :class:`~fm4tag.callbacks.PretrainedFinetuning` callback (the
+encoders are stored as ``self.backbone`` so it can locate them):
+
+* callback absent   → everything trains from epoch 0; the pretrained parts
+  use ``backbone_lr``, the head uses ``lr``;
+* callback attached → encoders + aggregator start frozen and are excluded
+  from the initial optimiser; the callback unfreezes them (and adds their
+  params to the optimiser) at ``unfreeze_at_epoch`` — set that ≥
+  ``max_epochs`` to keep them frozen for the whole run.
 """
 
 from __future__ import annotations
 
-from collections import defaultdict
+from collections.abc import Mapping, Sequence
 
 import lightning as L
 import torch
-from einops import rearrange
-from omegaconf import DictConfig
+import torch.nn.functional as F
+from torch import nn
 from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
 from torchmetrics.classification import MulticlassAUROC
 
 from ..augmentations import Compose
-from ..metrics import effective_rank, uniformity
-from ..models import embed_data
-from ..models.aggregator import TransformerAggregator
-from ..models.heads import MultiStreamClassifierHead
-from ..utils.ddp import gather_embeddings_sized
-from .losses import FinetuneLoss, loss_wants
+from ..callbacks import PretrainedFinetuning
+from ..losses import normalize_loss_weights
 from .view_encoding import (
+    encode_clean,
     encode_constituent_view,
     encode_global_view,
     scatter_valid,
 )
 
+LOSS_COMPONENTS = ('cross_entropy', 'jet_contrastive')
+
 
 class FinetuneModule(L.LightningModule):
-    """Lightning module for supervised fine-tuning of all encoders + classifier.
+    """Supervised fine-tuning of encoders + aggregator + classifier head.
 
     Args:
-        encoders:   :class:`~torch.nn.ModuleDict` mapping each object name to its
-                    encoder — a :class:`GlobalEncoder` for the global object and
-                    an :class:`Encoder` for each constituent type.  Stored as
-                    ``self.backbone`` for ``BackboneFinetuning`` compatibility.
-        aggregator: :class:`TransformerAggregator` mapping per-object projections to a
-                    single jet embedding ``z_jet`` (POINT B).  Shared (same
-                    weights) with pretraining.
-        head:       :class:`MultiStreamClassifierHead` — receives ``z_jet``.
-        loss:       :class:`~fm4tag.modules.losses.FinetuneLoss` — composable,
-                    weighted sum of loss terms (cross-entropy, optional jet
-                    contrastive).
-        views:      List of :class:`~fm4tag.augmentations.Compose` pipelines used
-                    only when the loss contains a jet-contrastive term; one
-                    ``z_jet`` is produced per view.  May be empty otherwise.
-        cfg:        Full Hydra config.  Relevant sub-keys:
-                    ``cfg.optimizer``, ``cfg.freeze_encoder``,
-                    ``cfg.class_dict``, ``cfg.global_object``,
-                    ``cfg.constituent_objects``.
+        encoders:   :class:`~torch.nn.ModuleDict` mapping object name → encoder.
+                    Stored as ``self.backbone`` for ``BackboneFinetuning``
+                    compatibility.
+        aggregator: Module mapping per-object projections to the collective
+                    embedding.  Shared (same weights) with pretraining.
+        head:       Classifier head — receives the aggregator output.
+        views:      Augmentation pipelines for the jet-contrastive component;
+                    at least 2 are required when its weight is > 0 (may be
+                    empty otherwise).
+        global_object:       Name of the global object (e.g. ``'jets'``).
+        constituent_objects: Names of the constituent objects.
+        loss_weights: Mapping with keys among ``cross_entropy`` and
+                    ``jet_contrastive`` (missing keys default to 0).
+                    Normalised to unit sum; 0 disables the component.
+        jet_contrastive_loss: Loss on aggregator outputs; called with the list
+                    of per-view ``(B, D)`` tensors.
+        n_classes:  Number of classes (for the AUROC metric).
+        class_weights: Optional per-class weights for the cross-entropy.
+        lr:           AdamW learning rate (classifier head).
+        backbone_lr:  Learning rate of the pretrained parts (encoders +
+                      aggregator); ``None`` → same as ``lr``.  Used only when
+                      no :class:`PretrainedFinetuning` callback is attached
+                      (with the callback, they join the optimiser at unfreeze
+                      time with ``initial_ratio_lr``).
+        weight_decay: AdamW weight decay.
+        warmup_frac:  Fraction of total steps for linear LR warmup before
+                      cosine annealing.
     """
 
     def __init__(
         self,
         encoders: torch.nn.ModuleDict,
-        aggregator: TransformerAggregator,
-        head: MultiStreamClassifierHead,
-        loss: FinetuneLoss,
-        views: list[Compose],
-        cfg: DictConfig,
+        aggregator: nn.Module,
+        head: nn.Module,
+        views: Sequence[Compose],
+        global_object: str,
+        constituent_objects: Sequence[str],
+        loss_weights: Mapping[str, float],
+        jet_contrastive_loss: nn.Module,
+        n_classes: int,
+        class_weights: Sequence[float] | None = None,
+        lr: float = 1e-4,
+        backbone_lr: float | None = None,
+        weight_decay: float = 1e-5,
+        warmup_frac: float = 0.1,
     ) -> None:
         super().__init__()
-        self.save_hyperparameters(
-            ignore=['encoders', 'aggregator', 'head', 'loss', 'views']
-        )
+
+        unknown = set(loss_weights) - set(LOSS_COMPONENTS)
+        if unknown:
+            raise ValueError(
+                f'Unknown loss_weights keys {sorted(unknown)}; '
+                f'expected a subset of {LOSS_COMPONENTS}.'
+            )
+        weights = {k: float(loss_weights.get(k, 0.0)) for k in LOSS_COMPONENTS}
+        self.loss_weights = normalize_loss_weights(weights)
+
+        if self.loss_weights['jet_contrastive'] > 0 and len(views) < 2:
+            raise ValueError(
+                'FinetuneModule requires at least 2 views when jet_contrastive '
+                f'is active, got {len(views)}.'
+            )
 
         # Named 'backbone' for BackboneFinetuning callback compatibility.
         self.backbone = encoders
         self.aggregator = aggregator
         self.head = head
-        self.loss = loss
-        self.views = torch.nn.ModuleList(views)
-        self.cfg = cfg
+        self.views = nn.ModuleList(views)
+        self.jet_contrastive_loss = jet_contrastive_loss
 
-        # Whether the loss needs per-view jet embeddings (jet contrastive).
-        self._needs_jet_views = loss_wants(self.loss, 'z_jet_list')
-        if self._needs_jet_views and len(self.views) < 2:
-            raise ValueError(
-                'FinetuneModule needs at least 2 views when the loss contains a '
-                'jet-contrastive term (z_jet_list); got '
-                f'{len(self.views)}.'
-            )
+        self.global_object = global_object
+        self.constituent_objects = list(constituent_objects)
 
-        class_weights = None
-        if cfg.get('class_dict'):
-            from omegaconf import OmegaConf
-
-            cd = OmegaConf.to_container(OmegaConf.load(cfg.class_dict), resolve=True)
-            global_obj = cfg.global_object
-            label_var = cfg.variables[global_obj].label
-            class_weights = cd.get(global_obj, {}).get(label_var)
+        self.lr = lr
+        self.backbone_lr = backbone_lr if backbone_lr is not None else lr
+        self.weight_decay = weight_decay
+        self.warmup_frac = warmup_frac
 
         if class_weights is not None:
             self.register_buffer(
-                'class_weights', torch.tensor(class_weights, dtype=torch.float)
+                'class_weights', torch.tensor(list(class_weights), dtype=torch.float)
             )
         else:
             self.class_weights: torch.Tensor | None = None  # type: ignore[assignment]
 
-        n_classes = len(cfg.variables[cfg.global_object].unique_labels)
         self.val_auroc = MulticlassAUROC(num_classes=n_classes, average='macro')
         self.test_auroc = MulticlassAUROC(num_classes=n_classes, average='macro')
 
-        # Per-epoch embedding buffers for online uniformity / effective-rank.
-        # Keys: object name → list of (N, D) CPU tensors.
-        self._val_emb_acc: dict[str, list[torch.Tensor]] = defaultdict(list)
+        # nn.Module args are excluded: their weights live in the checkpoint's
+        # state_dict and they are rebuilt from config on load.
+        self.save_hyperparameters(
+            ignore=['encoders', 'aggregator', 'head', 'views', 'jet_contrastive_loss']
+        )
 
     # ------------------------------------------------------------------
-    # Encoding pipeline
+    # Forward: clean embeddings (same contract as PretrainModule)
     # ------------------------------------------------------------------
 
-    def _encode_all(
-        self,
-        batch: dict,
-    ) -> tuple[
-        torch.Tensor,
-        list[torch.Tensor],
-        list[torch.Tensor],
-        list[torch.Tensor],
-    ]:
-        """Run all encoders and apply ``projector`` projections (POINT A).
+    def forward(self, batch: dict) -> dict[str, torch.Tensor]:
+        """Clean (no augmentation) embeddings for every object and the aggregator.
 
         Returns:
-            z_global:      ``(B, g_dim)`` — global projected embedding.
-            z_consts:      List of ``(B, C, c_dim_i)`` — constituent projected
-                           embeddings scattered back over the padded grid.
-            valids_list:   List of ``(B, C)`` bool masks.
-            z_valid_flat:  List of ``(N_valid_i, c_dim_i)`` — flat valid
-                           constituent embeddings (before scattering), used for
-                           uniformity / effective-rank monitoring.
+            ``{'<obj>_embedding': (B or N_valid, d), ..., 'aggregator': (B, d)}``
         """
-        # ── Global ───────────────────────────────────────────────────────────
-        global_name = self.cfg.global_object
-        enc_global = self.backbone[global_name]
-        X_global = enc_global(batch['global'])  # (B, F_g, dim)
-        z_global = enc_global.projector(X_global.flatten(1))  # (B, g_dim)
+        return encode_clean(
+            self.backbone,
+            self.aggregator,
+            batch,
+            self.global_object,
+            self.constituent_objects,
+        )
 
-        # ── Constituents ─────────────────────────────────────────────────────
-        z_consts: list[torch.Tensor] = []
-        valids_list: list[torch.Tensor] = []
-        z_valid_flat: list[torch.Tensor] = []
-
-        for obj_name in self.cfg.constituent_objects:
-            encoder = self.backbone[obj_name]
-            const = batch['constituents'][obj_name]
-
-            x_categ = const['categorical']  # (B, C, F_cat)
-            x_cont = const['continuous']  # (B, C, F_con)
-            valids = const['valid']  # (B, C)
-
-            B, C, _ = x_categ.shape
-            valids_flat = rearrange(valids, 'b c -> (b c)')
-            x_categ_flat = rearrange(x_categ, 'b c f -> (b c) f')
-            x_cont_flat = rearrange(x_cont, 'b c f -> (b c) f')
-
-            # Encode only valid constituents for efficiency.
-            x_cat_enc, x_con_enc = embed_data(
-                x_categ_flat[valids_flat], x_cont_flat[valids_flat], encoder
-            )
-            X_valid = encoder(x_cat_enc, x_con_enc)  # (N_valid, F, dim)
-            z_valid = encoder.projector(X_valid.flatten(1, 2))  # (N_valid, c_dim)
-
-            # Scatter projected embeddings back into (B, C, c_dim).
-            z_all = scatter_valid(z_valid, valids_flat, B, C)
-
-            z_consts.append(z_all)
-            valids_list.append(valids)
-            z_valid_flat.append(z_valid)
-
-        return z_global, z_consts, valids_list, z_valid_flat
+    # ------------------------------------------------------------------
+    # Loss
+    # ------------------------------------------------------------------
 
     def _encode_jet_views(self, batch: dict) -> list[torch.Tensor]:
-        """Build one ``z_jet`` per view (POINT B) for the jet-contrastive term.
-
-        Re-encodes the batch under each augmentation view exactly as in
-        pretraining, projects (POINT A), aggregates across all objects, and
-        returns the per-view list of ``(B, jet_dim)`` jet embeddings.
-        """
-        global_name = self.cfg.global_object
-        enc_global = self.backbone[global_name]
-        x_orig = batch['global']
-
-        # Per-view global projections.
+        """One aggregator output per augmentation view (as in pretraining)."""
+        enc_global = self.backbone[self.global_object]
         z_global_views = [
-            encode_global_view(enc_global, view, x_orig)[0] for view in self.views
+            encode_global_view(enc_global, view, batch['global'])[0]
+            for view in self.views
         ]
 
-        # Per-view constituent projections (scattered) + valids.
         z_consts_per_obj: list[list[torch.Tensor]] = []
         valids_per_obj: list[torch.Tensor] = []
-        for obj_name in self.cfg.constituent_objects:
+        for obj_name in self.constituent_objects:
             encoder = self.backbone[obj_name]
             const = batch['constituents'][obj_name]
             valids = const['valid']
             B, C = valids.shape
-            valids_flat = rearrange(valids, 'b c -> (b c)')
+            valids_flat = valids.reshape(-1)
 
             z_views = []
             for view in self.views:
@@ -228,238 +203,95 @@ class FinetuneModule(L.LightningModule):
             z_consts_per_obj.append(z_views)
             valids_per_obj.append(valids)
 
-        # Aggregate per view (POINT B).
-        z_jet_list: list[torch.Tensor] = []
-        for v in range(len(self.views)):
-            z_consts_v = [z_views[v] for z_views in z_consts_per_obj]
-            z_jet_list.append(
-                self.aggregator(z_global_views[v], z_consts_v, valids_per_obj)
+        return [
+            self.aggregator(
+                z_global_views[v],
+                [z_views[v] for z_views in z_consts_per_obj],
+                valids_per_obj,
             )
-        return z_jet_list
-
-    # ------------------------------------------------------------------
-    # Forward pass
-    # ------------------------------------------------------------------
-
-    def forward(self, batch: dict) -> torch.Tensor:
-        """Encode all objects, aggregate into a jet embedding, and classify.
-
-        Args:
-            batch: Dict from the datamodule collate function.
-
-        Returns:
-            ``(B, y_dim)`` class logits.
-        """
-        z_global, z_consts, valids_list, _ = self._encode_all(batch)
-        z_jet = self.aggregator(z_global, z_consts, valids_list)  # POINT B
-        return self.head(z_jet)  # POINT C
-
-    # ------------------------------------------------------------------
-    # Loss
-    # ------------------------------------------------------------------
+            for v in range(len(self.views))
+        ]
 
     def _compute_loss(
-        self, batch: dict, logits: torch.Tensor
-    ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
-        """Evaluate the composable finetune loss for a batch.
-
-        Always passes ``logits``/``labels``/``class_weights``; additionally
-        passes per-view ``z_jet_list`` when the loss contains a jet-contrastive
-        term.
-        """
-        kwargs: dict = {
-            'logits': logits,
-            'labels': batch['label'],
-            'class_weights': self.class_weights,
-        }
-        if self._needs_jet_views:
-            kwargs['z_jet_list'] = self._encode_jet_views(batch)
-        return self.loss(**kwargs)
-
-    def _log_loss_components(
-        self, loss_log: dict[str, torch.Tensor], split: str, on_step: bool = False
-    ) -> None:
-        """Log each loss sub-component (everything except the top-level total)."""
-        for k, v in loss_log.items():
-            if k == 'loss':
-                continue
-            self.log(
-                f'{split}_{k}', v, on_step=on_step, on_epoch=True, sync_dist=True
-            )
-
-    # ------------------------------------------------------------------
-    # Online embedding metric helpers
-    # ------------------------------------------------------------------
-
-    def _accumulate_embeddings(
-        self,
-        z_global: torch.Tensor,
-        z_valid_flat: list[torch.Tensor],
-    ) -> None:
-        """Append pre-computed ``projector`` projections to the embedding store.
-
-        Uses the embeddings already computed during the forward pass —
-        no extra encoder run needed.
-        """
-        eval_cfg = self.cfg.get('eval', {})
-        n_max: int = eval_cfg.get('n_samples', 8192)
-        objects_filter = eval_cfg.get('objects', None)
-
-        global_name = self.cfg.global_object
-        if objects_filter is None or global_name in objects_filter:
-            already = sum(t.size(0) for t in self._val_emb_acc[global_name])
-            remaining = n_max - already
-            if remaining > 0:
-                self._val_emb_acc[global_name].append(
-                    z_global[:remaining].detach().cpu()
-                )
-
-        for obj_name, z_valid in zip(self.cfg.constituent_objects, z_valid_flat):
-            if objects_filter is not None and obj_name not in objects_filter:
-                continue
-            already = sum(t.size(0) for t in self._val_emb_acc[obj_name])
-            remaining = n_max - already
-            if remaining > 0:
-                self._val_emb_acc[obj_name].append(z_valid[:remaining].detach().cpu())
-
-    def _compute_and_log_embedding_metrics(self) -> None:
-        """Concatenate accumulated embeddings, gather (DDP), compute and log metrics."""
-        eval_cfg = self.cfg.get('eval', {})
-        # Iterate over ALL backbone keys so every DDP rank participates in the
-        # same collectives in the same order.  Skipping objects based on a local
-        # condition (e.g. empty chunks) would cause other ranks to block forever
-        # on the collective, producing an NCCL watchdog hang.
-        for obj_name in list(self.backbone.keys()):
-            chunks = self._val_emb_acc.get(obj_name, [])
-            z_local = torch.cat(chunks, dim=0) if chunks else None  # (N_local, D) CPU
-
-            z = gather_embeddings_sized(
-                z_local, self.trainer.world_size, self.all_gather, self.device
-            )
-            if z is None:
-                continue
-
-            if eval_cfg.get('log_uniformity', True):
-                self.log(
-                    f'val_{obj_name}/uniformity',
-                    uniformity(z),
-                    on_step=False,
-                    on_epoch=True,
-                    sync_dist=False,
-                )
-            if eval_cfg.get('log_effective_rank', True):
-                self.log(
-                    f'val_{obj_name}/effective_rank',
-                    torch.as_tensor(effective_rank(z)),
-                    on_step=False,
-                    on_epoch=True,
-                    sync_dist=False,
-                )
-        self._val_emb_acc.clear()
-
-    # ------------------------------------------------------------------
-    # Shared step
-    # ------------------------------------------------------------------
-
-    def _shared_step(
         self, batch: dict
-    ) -> tuple[
-        torch.Tensor,
-        torch.Tensor,
-        torch.Tensor,
-        torch.Tensor,
-        dict[str, torch.Tensor],
-    ]:
-        """Run forward + compute loss, predictions, and class probabilities.
+    ) -> tuple[torch.Tensor, torch.Tensor, dict[str, torch.Tensor]]:
+        """Returns ``(total_loss, logits, log_dict)``."""
+        w = self.loss_weights
 
-        Returns:
-            ``(loss, preds, probs, labels, loss_log)``
-        """
-        logits = self(batch)
-        loss, loss_log = self._compute_loss(batch, logits)
-        labels = batch['label']
-        preds = logits.argmax(dim=-1)
-        probs = logits.softmax(dim=-1)
-        return loss, preds, probs, labels, loss_log
+        out = self(batch)
+        logits = self.head(out['aggregator'])
+
+        total = logits.new_zeros(())
+        log_dict: dict[str, torch.Tensor] = {}
+
+        if w['cross_entropy'] > 0:
+            l_ce = F.cross_entropy(logits, batch['label'], weight=self.class_weights)
+            total = total + w['cross_entropy'] * l_ce
+            log_dict['head/loss_ce'] = l_ce
+
+        if w['jet_contrastive'] > 0:
+            z_jet_list = self._encode_jet_views(batch)
+            l_jet = self.jet_contrastive_loss(z_jet_list)
+            total = total + w['jet_contrastive'] * l_jet
+            log_dict['aggregator/loss_contrastive'] = l_jet
+
+        log_dict['loss'] = total
+        return total, logits, log_dict
 
     # ------------------------------------------------------------------
     # LightningModule hooks
     # ------------------------------------------------------------------
 
-    def training_step(self, batch: dict, batch_idx: int) -> torch.Tensor:
-        loss, preds, _, labels, loss_log = self._shared_step(batch)
-        acc = (preds == labels).float().mean()
+    def _step(self, batch: dict, split: str) -> torch.Tensor:
+        loss, logits, log_dict = self._compute_loss(batch)
+        labels = batch['label']
+        on_step = split == 'train'
+
+        for name, value in log_dict.items():
+            self.log(
+                f'{split}/{name}',
+                value,
+                on_step=on_step,
+                on_epoch=True,
+                prog_bar=(name == 'loss'),
+                sync_dist=True,
+            )
+
+        acc = (logits.argmax(dim=-1) == labels).float().mean()
         self.log(
-            'train_loss',
-            loss,
-            on_step=True,
-            on_epoch=True,
-            prog_bar=True,
-            sync_dist=True,
+            f'{split}/head/acc', acc, on_step=False, on_epoch=True, sync_dist=True
         )
-        self.log('train_acc', acc, on_step=False, on_epoch=True, sync_dist=True)
-        self._log_loss_components(loss_log, 'train', on_step=True)
+
+        if split == 'val':
+            self.val_auroc.update(logits.softmax(dim=-1), labels)
+        elif split == 'test':
+            self.test_auroc.update(logits.softmax(dim=-1), labels)
+
         return loss
 
-    def validation_step(self, batch: dict, batch_idx: int) -> None:
-        eval_cfg = self.cfg.get('eval', {})
-        do_eval = eval_cfg.get('enabled', False) and 'val' in eval_cfg.get(
-            'splits', ['val']
-        )
+    def training_step(self, batch: dict, batch_idx: int) -> torch.Tensor:
+        return self._step(batch, 'train')
 
-        if do_eval:
-            # Run encode_all to get both logits and projector embeddings.
-            z_global, z_consts, valids_list, z_valid_flat = self._encode_all(batch)
-            z_jet = self.aggregator(z_global, z_consts, valids_list)
-            logits = self.head(z_jet)
-            self._accumulate_embeddings(z_global, z_valid_flat)
-        else:
-            logits = self(batch)
+    def validation_step(self, batch: dict, batch_idx: int) -> torch.Tensor:
+        return self._step(batch, 'val')
 
-        loss, loss_log = self._compute_loss(batch, logits)
-        labels = batch['label']
-        preds = logits.argmax(dim=-1)
-        probs = logits.softmax(dim=-1)
-        acc = (preds == labels).float().mean()
-
-        self.log(
-            'val_loss',
-            loss,
-            on_step=False,
-            on_epoch=True,
-            prog_bar=True,
-            sync_dist=True,
-        )
-        self.log('val_acc', acc, on_step=False, on_epoch=True, sync_dist=True)
-        self._log_loss_components(loss_log, 'val')
-        self.val_auroc.update(probs, labels)
+    def test_step(self, batch: dict, batch_idx: int) -> torch.Tensor:
+        return self._step(batch, 'test')
 
     def on_validation_epoch_end(self) -> None:
         self.log(
-            'val_auroc',
+            'val/head/auroc',
             self.val_auroc.compute(),
             prog_bar=True,
-            on_step=False,
             on_epoch=True,
             sync_dist=True,
         )
         self.val_auroc.reset()
-        eval_cfg = self.cfg.get('eval', {})
-        if eval_cfg.get('enabled', False) and 'val' in eval_cfg.get('splits', ['val']):
-            self._compute_and_log_embedding_metrics()
-
-    def test_step(self, batch: dict, batch_idx: int) -> None:
-        loss, preds, probs, labels, _ = self._shared_step(batch)
-        acc = (preds == labels).float().mean()
-        self.log('test_loss', loss, sync_dist=True)
-        self.log('test_acc', acc, sync_dist=True)
-        self.test_auroc.update(probs, labels)
 
     def on_test_epoch_end(self) -> None:
         self.log(
-            'test_auroc',
+            'test/head/auroc',
             self.test_auroc.compute(),
-            on_step=False,
             on_epoch=True,
             sync_dist=True,
         )
@@ -467,7 +299,7 @@ class FinetuneModule(L.LightningModule):
 
     def predict_step(self, batch: dict, batch_idx: int) -> torch.Tensor:
         """Return class probabilities (softmax of logits)."""
-        return self(batch).softmax(dim=-1)
+        return self.head(self(batch)['aggregator']).softmax(dim=-1)
 
     # ------------------------------------------------------------------
     # Checkpoint compatibility
@@ -485,8 +317,6 @@ class FinetuneModule(L.LightningModule):
         sd = checkpoint['state_dict']
         model_sd = self.state_dict()
 
-        # Drop stale head projection keys — the head no longer has its own
-        # projections; the encoder's projector is used directly in forward.
         _stale_prefixes = (
             'head.global_proj.',
             'head.const_proj.',
@@ -508,32 +338,33 @@ class FinetuneModule(L.LightningModule):
     # ------------------------------------------------------------------
 
     def configure_optimizers(self):  # type: ignore[override]
-        opt_cfg = self.cfg.optimizer
-        freeze = self.cfg.get('freeze_encoder', False)
+        # The head always trains from epoch 0.  When a PretrainedFinetuning
+        # callback is attached, the pretrained parts (encoders + aggregator)
+        # start frozen and the callback adds their params to the optimiser at
+        # unfreeze time — so they must NOT be in the initial optimiser
+        # (PyTorch rejects parameters appearing in more than one group).
+        pretrained_managed = any(
+            isinstance(cb, PretrainedFinetuning) for cb in self.trainer.callbacks
+        )
 
-        # The aggregator + head are always trained from epoch 0; only the
-        # backbone may start frozen (the BackboneFinetuning callback adds it
-        # to the optimiser when it unfreezes).
-        head_params = list(self.aggregator.parameters()) + list(self.head.parameters())
-
-        if freeze:
+        if pretrained_managed:
             optimizer = torch.optim.AdamW(
-                head_params,
-                lr=opt_cfg.lr,
-                weight_decay=opt_cfg.get('weight_decay', 1e-5),
+                self.head.parameters(), lr=self.lr, weight_decay=self.weight_decay
             )
         else:
-            backbone_lr = opt_cfg.get('backbone_lr', opt_cfg.lr)
+            pretrained_params = list(self.backbone.parameters()) + list(
+                self.aggregator.parameters()
+            )
             optimizer = torch.optim.AdamW(
                 [
-                    {'params': list(self.backbone.parameters()), 'lr': backbone_lr},
-                    {'params': head_params, 'lr': opt_cfg.lr},
+                    {'params': pretrained_params, 'lr': self.backbone_lr},
+                    {'params': list(self.head.parameters()), 'lr': self.lr},
                 ],
-                weight_decay=opt_cfg.get('weight_decay', 1e-5),
+                weight_decay=self.weight_decay,
             )
 
         total_steps = self.trainer.estimated_stepping_batches
-        warmup_steps = max(1, int(0.1 * total_steps))
+        warmup_steps = max(1, int(self.warmup_frac * total_steps))
 
         warmup_sched = LinearLR(
             optimizer, start_factor=0.01, end_factor=1.0, total_iters=warmup_steps

@@ -1,10 +1,6 @@
-"""Composable, config-driven loss modules for pretraining and fine-tuning."""
+"""Legacy composable loss machinery — used only by the legacy
+``ContrastiveDenoisingModule``; goes away together with it."""
 
-from .finetune_loss import (
-    CrossEntropyTerm,
-    FinetuneLoss,
-    JetContrastiveFinetuneTerm,
-)
 from .pretrain_loss import (
     ContrastiveTermAdapter,
     DenoisingTermAdapter,
@@ -18,8 +14,5 @@ __all__ = [
     'ContrastiveTermAdapter',
     'JetContrastiveTermAdapter',
     'DenoisingTermAdapter',
-    'FinetuneLoss',
-    'CrossEntropyTerm',
-    'JetContrastiveFinetuneTerm',
     'loss_wants',
 ]
