@@ -1,4 +1,4 @@
-"""Tests for fm4tag.losses.MultiViewSupConLoss."""
+"""Tests for fm4tag.losses.MultiViewSupConLoss and loss-weight handling."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from fm4tag.losses import MultiViewSupConLoss
+from fm4tag.losses import MultiViewSupConLoss, normalize_loss_weights
 
 
 # ---------------------------------------------------------------------------
@@ -82,6 +82,75 @@ def test_include_pos_in_denom_changes_loss():
 
 
 # ---------------------------------------------------------------------------
+# include_same_view_negatives flag
+# ---------------------------------------------------------------------------
+
+
+def test_same_view_negatives_flag_changes_loss():
+    zs = _make_views(8, 32, 3, seed=0)
+    l_with = MultiViewSupConLoss(include_same_view_negatives=True)(zs)
+    l_without = MultiViewSupConLoss(include_same_view_negatives=False)(zs)
+    assert not torch.isclose(l_with, l_without)
+
+
+def _reference_supcon(
+    zs: list[torch.Tensor],
+    temperature: float,
+    loss_type: str,
+    include_pos_in_denom: bool,
+    include_same_view_negatives: bool,
+) -> torch.Tensor:
+    """Brute-force per-anchor loops mirroring the MultiViewSupConLoss docs."""
+    V = len(zs)
+    N = zs[0].shape[0]
+    z = F.normalize(torch.stack(zs, dim=1).reshape(N * V, -1), dim=-1)
+    sim = (z @ z.T) / temperature
+    total = N * V
+
+    losses = []
+    for i in range(total):
+        sample_i, view_i = divmod(i, V)
+        pos = [j for j in range(total) if j != i and j // V == sample_i]
+        denom = []
+        for j in range(total):
+            if j == i:
+                continue
+            same_sample = j // V == sample_i
+            if same_sample and not include_pos_in_denom:
+                continue
+            if not same_sample and not include_same_view_negatives and j % V == view_i:
+                continue
+            denom.append(j)
+        log_Z = torch.logsumexp(sim[i, denom], dim=0)
+        if loss_type == 'out':
+            losses.append(torch.stack([log_Z - sim[i, p] for p in pos]).mean())
+        else:
+            losses.append(log_Z - torch.logsumexp(sim[i, pos], dim=0))
+    return torch.stack(losses).mean()
+
+
+@pytest.mark.parametrize('loss_type', ['out', 'in'])
+@pytest.mark.parametrize('include_pos', [True, False])
+@pytest.mark.parametrize('include_same_view', [True, False])
+def test_matches_bruteforce_reference(loss_type, include_pos, include_same_view):
+    zs = _make_views(6, 16, 3, seed=3)
+    loss_fn = MultiViewSupConLoss(
+        temperature=0.1,
+        loss_type=loss_type,
+        include_pos_in_denom=include_pos,
+        include_same_view_negatives=include_same_view,
+    )
+    expected = _reference_supcon(
+        zs,
+        temperature=0.1,
+        loss_type=loss_type,
+        include_pos_in_denom=include_pos,
+        include_same_view_negatives=include_same_view,
+    )
+    assert torch.isclose(loss_fn(zs), expected, atol=1e-5)
+
+
+# ---------------------------------------------------------------------------
 # Collapse sensitivity: identical views should give near-zero gradients
 # (perfectly aligned views still produce a valid but low loss)
 # ---------------------------------------------------------------------------
@@ -120,13 +189,46 @@ def test_gradients_flow_to_all_views():
 
 def test_no_gather_when_single_process():
     # Without DDP, all_gather_with_grad should return (z, 0, N).
-    from fm4tag.losses.losses import all_gather_with_grad
+    from fm4tag.utils.ddp import all_gather_with_grad
 
     z = torch.randn(12, 32)
     z_out, start, end = all_gather_with_grad(z)
     assert torch.equal(z_out, z)
     assert start == 0
     assert end == 12
+
+
+# ---------------------------------------------------------------------------
+# normalize_loss_weights
+# ---------------------------------------------------------------------------
+
+
+def test_weights_normalised_to_unit_sum():
+    w = normalize_loss_weights({'a': 2.0, 'b': 1.0, 'c': 1.0})
+    assert sum(w.values()) == pytest.approx(1.0)
+    assert w['a'] == pytest.approx(0.5)
+
+
+def test_proportional_weightings_are_equivalent():
+    # [2, 1] must be equivalent to [1, 0.5].
+    assert normalize_loss_weights({'a': 2.0, 'b': 1.0}) == pytest.approx(
+        normalize_loss_weights({'a': 1.0, 'b': 0.5})
+    )
+
+
+def test_zero_weights_stay_zero():
+    w = normalize_loss_weights({'a': 1.0, 'b': 0.0})
+    assert w == {'a': 1.0, 'b': 0.0}
+
+
+def test_all_zero_weights_raise():
+    with pytest.raises(ValueError, match='At least one'):
+        normalize_loss_weights({'a': 0.0, 'b': 0.0})
+
+
+def test_negative_weights_raise():
+    with pytest.raises(ValueError, match='non-negative'):
+        normalize_loss_weights({'a': 1.0, 'b': -0.5})
 
 
 # ---------------------------------------------------------------------------

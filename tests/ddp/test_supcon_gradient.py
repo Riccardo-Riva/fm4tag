@@ -15,6 +15,11 @@ Test summary
 1. value_matches_independent_ref – framework loss == independent SupCon impl
 2. ddp_gradient_matches_full_batch – DDP-averaged grad == single-process
    full-batch grad (the core differentiable-gather guarantee)
+3. variable_n_gather_layout – unequal per-rank sizes: padding is stripped and
+   offsets are correct
+4. ddp_variable_n_value_and_grad – unequal per-rank sizes: every anchor still
+   sees the full global pool; loss and gradient match the single-process
+   mean-of-per-rank-means reference
 """
 
 from __future__ import annotations
@@ -25,6 +30,7 @@ import torch.nn.functional as F
 
 from tests.conftest import run_ddp_test
 from fm4tag.losses import MultiViewSupConLoss
+from fm4tag.utils.ddp import all_gather_with_grad
 
 
 # ---------------------------------------------------------------------------
@@ -150,3 +156,106 @@ def _worker_grad_equiv(rank: int, world_size: int) -> None:
 def test_ddp_gradient_matches_full_batch():
     """Differentiable gather ⇒ DDP grad == single-device full-batch grad."""
     run_ddp_test(_worker_grad_equiv)
+
+
+# ===========================================================================
+# Test 3 – variable-N gather: padding stripped, rank order and offsets kept
+# ===========================================================================
+
+
+def _worker_variable_n_gather(rank: int, world_size: int) -> None:
+    """Rank 0 has 7 rows, rank 1 has 5 → z_all is (12, D) with no padding."""
+    D = 4
+    n_local = 7 if rank == 0 else 5
+    z = torch.full((n_local, D), float(rank + 1))
+
+    z_all, start, end = all_gather_with_grad(z)
+
+    assert z_all.shape == (12, D), f'unexpected shape {z_all.shape}'
+    assert torch.all(z_all[:7] == 1.0), 'rank-0 rows must come first'
+    assert torch.all(z_all[7:] == 2.0), 'rank-1 rows must follow'
+
+    expected_start = 0 if rank == 0 else 7
+    assert (start, end) == (expected_start, expected_start + n_local)
+    assert torch.equal(z_all[start:end], z), 'local slice must be own data'
+
+
+@pytest.mark.ddp
+def test_variable_n_gather_layout():
+    """Unequal per-rank sizes: padded gather strips padding, offsets correct."""
+    run_ddp_test(_worker_variable_n_gather)
+
+
+# ===========================================================================
+# Test 4 – variable-N loss: full global pool per anchor, value + grad match
+# ===========================================================================
+
+_N_SPLIT = (6, 4)  # unequal per-rank sample counts
+
+
+def _per_anchor_supcon(z_list: list[torch.Tensor], temperature: float) -> torch.Tensor:
+    """Per-anchor L_out values over the full pool, shape ``(N, V)``.
+
+    Per-anchor values are ordering-independent (each depends only on the set
+    of instances), so this single-process computation is a valid reference for
+    any sharding of the same data.
+    """
+    V = len(z_list)
+    N = z_list[0].size(0)
+    z = F.normalize(torch.stack(z_list, dim=1).reshape(N * V, -1), dim=-1)
+    sim = (z @ z.t()) / temperature
+    labels = torch.arange(N).repeat_interleave(V)
+    self_mask = torch.eye(N * V, dtype=torch.bool)
+    pos_mask = (labels.unsqueeze(0) == labels.unsqueeze(1)) & ~self_mask
+    log_Z = torch.logsumexp(sim.masked_fill(self_mask, float('-inf')), dim=-1)
+    n_pos = pos_mask.float().sum(1)
+    per_anchor = log_Z - (sim * pos_mask.float()).sum(1) / n_pos.clamp(min=1)
+    return per_anchor.reshape(N, V)
+
+
+def _worker_variable_n_value_and_grad(rank: int, world_size: int) -> None:
+    assert world_size == 2
+    torch.manual_seed(7)
+    x_full = torch.randn(sum(_N_SPLIT), _F)
+    bounds = (0, _N_SPLIT[0], sum(_N_SPLIT))
+
+    # ---- DDP path with unequal per-rank batch ------------------------------
+    enc = _make_encoder()
+    ddp = torch.nn.parallel.DistributedDataParallel(enc)
+    x_local = x_full[bounds[rank] : bounds[rank + 1]]
+    zs_local = _embed(ddp, x_local)
+    loss = MultiViewSupConLoss(
+        temperature=_TEMP, loss_type='out', include_pos_in_denom=True
+    )(zs_local)
+    loss.backward()
+    ddp_grad = enc.weight.grad.detach().clone()
+
+    # ---- Single-process reference ------------------------------------------
+    # Each rank reduces over its own anchors, but every anchor must see the
+    # full global pool; DDP then averages ranks equally (mean of means).
+    enc_ref = _make_encoder()
+    zs_full = _embed(enc_ref, x_full)
+    per_anchor = _per_anchor_supcon(zs_full, _TEMP)  # (N_total, V)
+    rank_means = [
+        per_anchor[bounds[r] : bounds[r + 1]].mean() for r in range(world_size)
+    ]
+
+    assert torch.allclose(loss.detach(), rank_means[rank].detach(), atol=1e-5), (
+        f'rank {rank}: local loss {loss.item():.8f} != full-pool reference '
+        f'{rank_means[rank].item():.8f} — anchors did not see the global pool'
+    )
+
+    ref_loss = torch.stack(rank_means).mean()
+    ref_loss.backward()
+    ref_grad = enc_ref.weight.grad.detach().clone()
+
+    assert torch.allclose(ddp_grad, ref_grad, atol=1e-5, rtol=1e-4), (
+        f'rank {rank}: DDP gradient disagrees with mean-of-rank-means reference\n'
+        f'  max abs diff = {(ddp_grad - ref_grad).abs().max().item():.3e}'
+    )
+
+
+@pytest.mark.ddp
+def test_ddp_variable_n_value_and_grad():
+    """Unequal per-rank N: anchors see the global pool; grads match reference."""
+    run_ddp_test(_worker_variable_n_value_and_grad)
