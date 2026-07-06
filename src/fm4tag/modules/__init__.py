@@ -1,23 +1,23 @@
-from .contrastive_denoising_module import ContrastiveDenoisingModule
 from .finetune_module import FinetuneModule
+from .pretrain_module import PretrainModule
+
+# Legacy pretraining module + loss-term machinery — superseded by
+# PretrainModule; kept importable until removed for good.
+from .contrastive_denoising_module import ContrastiveDenoisingModule
 from .losses import (
     ContrastiveTermAdapter,
-    CrossEntropyTerm,
     DenoisingTermAdapter,
-    FinetuneLoss,
-    JetContrastiveFinetuneTerm,
     JetContrastiveTermAdapter,
     PretrainLoss,
 )
 
 __all__ = [
-    'ContrastiveDenoisingModule',
+    'PretrainModule',
     'FinetuneModule',
+    # legacy
+    'ContrastiveDenoisingModule',
     'PretrainLoss',
-    'FinetuneLoss',
     'ContrastiveTermAdapter',
     'JetContrastiveTermAdapter',
     'DenoisingTermAdapter',
-    'CrossEntropyTerm',
-    'JetContrastiveFinetuneTerm',
 ]
