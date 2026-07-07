@@ -10,6 +10,8 @@ that the clamp bounds are correct.  Before setup (or when ``x_categ`` is
 
 from __future__ import annotations
 
+import warnings
+
 import torch
 
 from .base import Augmentation, Stage
@@ -30,6 +32,7 @@ class CategoricalShift(Augmentation):
             raise ValueError(f'p must be in [0, 1], got {p}')
         self.p = p
         self._max_vals: torch.Tensor | None = None
+        self._warned_no_setup = False
 
     def setup(self, n_classes: list[int], **kwargs) -> None:
         """Store max valid class index per feature.
@@ -45,7 +48,18 @@ class CategoricalShift(Augmentation):
         self, data: dict[str, torch.Tensor | None]
     ) -> dict[str, torch.Tensor | None]:
         x_categ = data.get('categorical')
-        if x_categ is None or self._max_vals is None:
+        if x_categ is None:
+            return dict(data)
+        if self._max_vals is None:
+            # Nothing in the framework calls setup() yet — warn, don't
+            # silently no-op.
+            if not self._warned_no_setup:
+                warnings.warn(
+                    'CategoricalShift.setup() was never called; '
+                    'this augmentation is a no-op.',
+                    stacklevel=2,
+                )
+                self._warned_no_setup = True
             return dict(data)
 
         max_vals = self._max_vals.to(x_categ.device)

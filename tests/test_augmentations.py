@@ -226,3 +226,49 @@ def test_compose_repr_contains_stage_names():
     r = repr(compose)
     assert 'pre_flatten' in r
     assert 'raw' in r
+
+
+# ---------------------------------------------------------------------------
+# setup()-not-called warnings
+# ---------------------------------------------------------------------------
+
+
+def test_categorical_shift_warns_without_setup():
+    import warnings as _warnings
+
+    from fm4tag.augmentations import CategoricalShift
+
+    aug = CategoricalShift(p=1.0)
+    data = {'categorical': torch.randint(0, 3, (4, 2))}
+    with pytest.warns(UserWarning, match='setup'):
+        out = aug(data)
+    assert torch.equal(out['categorical'], data['categorical'])  # no-op
+    with _warnings.catch_warnings():
+        _warnings.simplefilter('error')  # warns only once
+        aug(data)
+
+
+def test_continuous_feature_dilation_warns_without_setup():
+    import warnings as _warnings
+
+    from fm4tag.augmentations import ContinuousFeatureDilation
+
+    aug = ContinuousFeatureDilation(features=['d0'], alpha=2.0)
+    data = {'continuous': torch.randn(4, 3)}
+    with pytest.warns(UserWarning, match='setup'):
+        out = aug(data)
+    assert torch.equal(out['continuous'], data['continuous'])  # no-op
+    with _warnings.catch_warnings():
+        _warnings.simplefilter('error')
+        aug(data)
+
+
+def test_continuous_feature_dilation_applies_after_setup():
+    from fm4tag.augmentations import ContinuousFeatureDilation
+
+    aug = ContinuousFeatureDilation(features=['d0'], alpha=2.0)
+    aug.setup(['d0', 'z0'])
+    data = {'continuous': torch.ones(4, 2)}
+    out = aug(data)
+    assert torch.equal(out['continuous'][:, 0], torch.full((4,), 2.0))
+    assert torch.equal(out['continuous'][:, 1], torch.ones(4))
