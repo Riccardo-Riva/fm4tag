@@ -357,11 +357,15 @@ loggers:
 # ── Hyperparameter optimisation (fm4tag-hpo) ──────────────────────────────────
 hpo:
   study_name:   fm4tag_hpo
-  storage:      null
+  storage:      null            # e.g. sqlite:///hpo.db for parallel workers
   n_trials:     100
   timeout:      null
-  phases:       [finetune]
-  pretrain_encoder_ckpt: null
+  phases:       [finetune]      # [pretrain] | [finetune] | [pretrain, finetune]
+  pretrain_encoder_ckpt: null   # fixed pretrain ckpt for finetune-only HPO
+
+  metric:       val/head/auroc  # objective: any logged metric key
+  direction:    maximize        # minimize | maximize
+  disable_wandb: true           # drop the wandb logger per trial (keep CSV)
 
   sampler:  TPE
   pruner:   median

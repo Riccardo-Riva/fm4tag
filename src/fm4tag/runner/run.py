@@ -39,8 +39,12 @@ def run(
     encoder_ckpt: str | None = None,
     ckpt_path: str | None = None,
     extra_callbacks: list | None = None,
-) -> None:
+) -> L.Trainer:
     """Run the training / evaluation / prediction workflow.
+
+    Returns the :class:`~lightning.Trainer` (e.g. for
+    ``trainer.checkpoint_callback.best_model_path`` or
+    ``trainer.callback_metrics``).
 
     Args:
         cfg:          Fully resolved OmegaConf DictConfig (from a YAML config
@@ -163,3 +167,5 @@ def run(
 
     else:
         raise ValueError(f"action must be 'fit', 'test', or 'predict', got {_action!r}")
+
+    return trainer
