@@ -124,4 +124,9 @@ class MultiViewSupConLoss(nn.Module):
             )
             loss_per_anchor = log_Z - log_sum_pos
 
-        return loss_per_anchor[local_start:local_end].mean()
+        loss_local = loss_per_anchor[local_start:local_end]
+        if loss_local.numel() == 0:
+            # Rank with no local anchors: mean() would be NaN; return a
+            # graph-connected zero instead.
+            return sim.sum() * 0.0
+        return loss_local.mean()

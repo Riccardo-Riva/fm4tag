@@ -34,6 +34,11 @@ def denoising_cat_loss(
         Scalar loss tensor (zero if there are no categorical features).
     """
     loss = x_categ.new_zeros((), dtype=torch.float32)
+    if x_categ.shape[0] == 0:
+        # Empty batch: cross_entropy would be NaN; graph-connected zero.
+        for out in cat_outs:
+            loss = loss + out.sum() * 0.0
+        return loss
     for j in range(x_categ.shape[-1]):
         loss = loss + F.cross_entropy(cat_outs[j], x_categ[:, j])
     return loss
@@ -57,6 +62,9 @@ def denoising_con_loss(
     if not con_outs:
         return x_cont.new_zeros(())
     con_pred = torch.cat(con_outs, dim=1)  # (N, F_con)
+    if con_pred.shape[0] == 0:
+        # Empty batch: mse_loss would be NaN; graph-connected zero.
+        return con_pred.sum() * 0.0
     return F.mse_loss(con_pred, x_cont)
 
 

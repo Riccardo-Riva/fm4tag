@@ -244,3 +244,38 @@ def test_loss_out_invariant_to_view_order():
     l_01 = loss_fn([z0, z1])
     l_10 = loss_fn([z1, z0])
     assert torch.isclose(l_01, l_10, atol=1e-5)
+
+
+# ---------------------------------------------------------------------------
+# Empty-input guards (NaN prevention)
+# ---------------------------------------------------------------------------
+
+
+def test_empty_local_anchor_slice_returns_zero(monkeypatch):
+    """A rank whose local shard is empty must not produce NaN (DDP edge case)."""
+    import fm4tag.losses.contrastive as contrastive_mod
+
+    def _fake_gather(z):
+        return z, 0, 0  # gathered pool non-empty, local slice empty
+
+    monkeypatch.setattr(contrastive_mod, 'all_gather_with_grad', _fake_gather)
+    loss_fn = MultiViewSupConLoss(temperature=0.1)
+    zs = [torch.randn(4, 8, requires_grad=True) for _ in range(2)]
+    loss = loss_fn(zs)
+    assert torch.isfinite(loss)
+    assert loss.item() == 0.0
+    loss.backward()  # graph stays connected
+
+
+def test_denoising_losses_empty_batch_return_zero():
+    from fm4tag.losses import denoising_cat_loss, denoising_con_loss
+
+    cat_outs = [torch.zeros(0, 5, requires_grad=True) for _ in range(2)]
+    x_categ = torch.zeros(0, 2, dtype=torch.long)
+    l_cat = denoising_cat_loss(cat_outs, x_categ)
+    assert torch.isfinite(l_cat) and l_cat.item() == 0.0
+
+    con_outs = [torch.zeros(0, 1, requires_grad=True) for _ in range(3)]
+    x_cont = torch.zeros(0, 3)
+    l_con = denoising_con_loss(con_outs, x_cont)
+    assert torch.isfinite(l_con) and l_con.item() == 0.0
