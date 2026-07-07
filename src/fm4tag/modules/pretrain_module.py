@@ -344,6 +344,7 @@ class PretrainModule(L.LightningModule):
         loss, log_dict = self._compute_loss(batch)
         on_step = split == 'train'
         for name, value in log_dict.items():
+            # sync_dist=True costs one cross-rank reduce per metric per log.
             self.log(
                 f'{split}/{name}',
                 value,

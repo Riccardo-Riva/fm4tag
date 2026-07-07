@@ -237,6 +237,7 @@ class FinetuneModule(L.LightningModule):
             log_dict['head/loss_ce'] = l_ce
 
         if w['jet_contrastive'] > 0:
+            # Costs V extra full encoder passes on top of the clean one above.
             z_jet_list = self._encode_jet_views(batch)
             l_jet = self.jet_contrastive_loss(z_jet_list)
             total = total + w['jet_contrastive'] * l_jet
@@ -255,6 +256,7 @@ class FinetuneModule(L.LightningModule):
         on_step = split == 'train'
 
         for name, value in log_dict.items():
+            # sync_dist=True costs one cross-rank reduce per metric per log.
             self.log(
                 f'{split}/{name}',
                 value,

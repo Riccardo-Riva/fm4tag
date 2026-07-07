@@ -40,7 +40,8 @@ def encode_global_view(
     # Encode
     X = encoder(x)  # (B, F_g, dim)
 
-    # EMBEDDING stage
+    # EMBEDDING stage — note: applied to the encoder OUTPUT here, whereas for
+    # constituents it is applied to the embedded tokens BEFORE the transformer.
     data_emb = view.apply_embedding({'continuous': X})
     X_emb = data_emb['continuous']
 

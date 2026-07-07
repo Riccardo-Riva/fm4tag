@@ -54,6 +54,7 @@ class RowAttention(nn.Module):
 
     Every sample attends to every other sample in the batch.  For chunked
     (grouped) intersample attention see :class:`ChunkedRowAttention`.
+    Consequence: outputs (also at inference) depend on batch composition.
 
     Args:
         x:    ``(B, dim)`` — one flattened feature vector per sample.
