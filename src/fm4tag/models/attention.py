@@ -78,8 +78,8 @@ class RowAttention(nn.Module):
 
         attn_mask = None
         if mask is not None:
-            attn_mask = mask[:, None, None]
-            attn_mask = torch.where(attn_mask, 0.0, float('-inf'))
+            # Key-padding mask: (B,) → (1, 1, B), broadcast over heads/queries.
+            attn_mask = torch.where(mask[None, None, :], 0.0, float('-inf'))
 
         out = F.scaled_dot_product_attention(
             q,
