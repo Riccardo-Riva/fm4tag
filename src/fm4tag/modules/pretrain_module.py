@@ -122,6 +122,23 @@ class PretrainModule(L.LightningModule):
         self.contrastive_loss = contrastive_loss
         self.jet_contrastive_loss = jet_contrastive_loss
 
+        # Freeze heads that can never receive gradients under these
+        # loss_weights — otherwise DDP needs find_unused_parameters.
+        w = self.loss_weights
+        heads_off = []
+        if w['denoising_cat'] == 0:
+            heads_off.append('cat_reconstructor')
+        if w['denoising_con'] == 0:
+            heads_off += ['con_reconstructor', 'reconstructor']
+        for enc in encoders.values():
+            for name in heads_off:
+                if hasattr(enc, name):
+                    getattr(enc, name).requires_grad_(False)
+            if w['contrastive'] == 0 and w['jet_contrastive'] == 0:
+                enc.projector.requires_grad_(False)
+        if w['jet_contrastive'] == 0:
+            aggregator.requires_grad_(False)
+
         self.global_object = global_object
         self.constituent_objects = list(constituent_objects)
 
@@ -352,8 +369,10 @@ class PretrainModule(L.LightningModule):
         return self._step(batch, 'test')
 
     def configure_optimizers(self):  # type: ignore[override]
+        # Skip frozen (zero-weight) heads.
+        params = [p for p in self.parameters() if p.requires_grad]
         optimizer = torch.optim.AdamW(
-            self.parameters(), lr=self.lr, weight_decay=self.weight_decay
+            params, lr=self.lr, weight_decay=self.weight_decay
         )
 
         total_steps = self.trainer.estimated_stepping_batches

@@ -133,6 +133,13 @@ class FinetuneModule(L.LightningModule):
         self.views = nn.ModuleList(views)
         self.jet_contrastive_loss = jet_contrastive_loss
 
+        # Reconstruction heads are pretrain-only: freeze them so DDP does
+        # not need find_unused_parameters.
+        for enc in encoders.values():
+            for name in ('reconstructor', 'cat_reconstructor', 'con_reconstructor'):
+                if hasattr(enc, name):
+                    getattr(enc, name).requires_grad_(False)
+
         self.global_object = global_object
         self.constituent_objects = list(constituent_objects)
 
@@ -352,9 +359,13 @@ class FinetuneModule(L.LightningModule):
                 self.head.parameters(), lr=self.lr, weight_decay=self.weight_decay
             )
         else:
-            pretrained_params = list(self.backbone.parameters()) + list(
-                self.aggregator.parameters()
-            )
+            # Skip frozen reconstructor heads.
+            pretrained_params = [
+                p
+                for m in (self.backbone, self.aggregator)
+                for p in m.parameters()
+                if p.requires_grad
+            ]
             optimizer = torch.optim.AdamW(
                 [
                     {'params': pretrained_params, 'lr': self.backbone_lr},

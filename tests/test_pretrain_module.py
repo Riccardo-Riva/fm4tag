@@ -259,3 +259,43 @@ def test_forward_returns_all_embeddings(encoders, aggregator, two_views):
     assert out['jets_embedding'].shape[0] == B
     assert out['tracks_embedding'].shape[0] == B * C  # all valid in this batch
     assert out['aggregator'].shape[0] == B
+
+
+# ---------------------------------------------------------------------------
+# DDP safety: zero-weight heads are frozen at construction
+# ---------------------------------------------------------------------------
+
+
+def test_contrastive_only_freezes_unused_heads(encoders, aggregator, two_views):
+    module = _make_module(
+        encoders, aggregator, two_views, loss_weights={'contrastive': 1.0}
+    )
+    tracks = module.encoders['tracks']
+    jets = module.encoders['jets']
+    assert not any(p.requires_grad for p in tracks.cat_reconstructor.parameters())
+    assert not any(p.requires_grad for p in tracks.con_reconstructor.parameters())
+    assert not any(p.requires_grad for p in jets.reconstructor.parameters())
+    assert not any(p.requires_grad for p in module.aggregator.parameters())
+    # Projectors feed the active contrastive loss.
+    assert all(p.requires_grad for p in tracks.projector.parameters())
+
+
+def test_denoising_only_freezes_projectors_and_aggregator(
+    encoders, aggregator, two_views
+):
+    module = _make_module(
+        encoders,
+        aggregator,
+        two_views,
+        loss_weights={'denoising_cat': 1.0, 'denoising_con': 1.0},
+    )
+    tracks = module.encoders['tracks']
+    assert not any(p.requires_grad for p in tracks.projector.parameters())
+    assert not any(p.requires_grad for p in module.aggregator.parameters())
+    assert all(p.requires_grad for p in tracks.cat_reconstructor.parameters())
+    assert all(p.requires_grad for p in tracks.con_reconstructor.parameters())
+
+
+def test_all_weights_active_freezes_nothing(encoders, aggregator, two_views):
+    module = _make_module(encoders, aggregator, two_views)
+    assert all(p.requires_grad for p in module.parameters())

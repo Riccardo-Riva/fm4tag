@@ -242,9 +242,10 @@ def test_optimizer_includes_pretrained_parts_without_callback(
     _attach_trainer(module, [])
     opt = module.configure_optimizers()['optimizer']
     assert len(opt.param_groups) == 2
-    n_pretrained = _n_params(module.backbone.parameters()) + _n_params(
-        module.aggregator.parameters()
-    )
+    # Frozen reconstructor heads are excluded from the optimizer.
+    n_pretrained = _n_params(
+        p for p in module.backbone.parameters() if p.requires_grad
+    ) + _n_params(p for p in module.aggregator.parameters() if p.requires_grad)
     assert _n_params(opt.param_groups[0]['params']) == n_pretrained
     # 'lr' is already scaled by the warmup scheduler's start factor at
     # construction; the pristine value is kept in 'initial_lr'.
@@ -303,3 +304,19 @@ def test_predict_step_returns_probabilities(encoders, aggregator, head, two_view
     probs = module.predict_step(_make_batch(B=B), 0)
     assert probs.shape == (B, _N_CLASSES)
     assert torch.allclose(probs.sum(dim=-1), torch.ones(B), atol=1e-5)
+
+
+# ---------------------------------------------------------------------------
+# DDP safety: pretrain-only reconstruction heads are frozen
+# ---------------------------------------------------------------------------
+
+
+def test_reconstructor_heads_frozen(encoders, aggregator, head, two_views):
+    module = _make_module(encoders, aggregator, head, two_views)
+    for enc in module.backbone.values():
+        for name in ('reconstructor', 'cat_reconstructor', 'con_reconstructor'):
+            if hasattr(enc, name):
+                heads = getattr(enc, name)
+                assert not any(p.requires_grad for p in heads.parameters())
+    assert all(p.requires_grad for p in module.head.parameters())
+    assert all(p.requires_grad for p in module.aggregator.parameters())

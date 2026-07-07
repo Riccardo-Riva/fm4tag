@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import lightning as L
 from lightning.pytorch.callbacks import BaseFinetuning
+from lightning.pytorch.utilities import rank_zero_warn
 from torch.optim.optimizer import Optimizer
 
 
@@ -41,6 +42,25 @@ class PretrainedFinetuning(BaseFinetuning):
         self.unfreeze_at_epoch = unfreeze_at_epoch
         self.initial_ratio_lr = initial_ratio_lr
         self.train_bn = train_bn
+
+    def setup(
+        self, trainer: L.Trainer, pl_module: L.LightningModule, stage: str
+    ) -> None:
+        super().setup(trainer, pl_module, stage)
+        # Freezing happens BEFORE the DDP wrap, so frozen params get no
+        # gradient-sync hooks; unfreezing them later means their gradients
+        # are never all-reduced and the ranks silently diverge.
+        max_epochs = trainer.max_epochs if trainer.max_epochs is not None else -1
+        if trainer.world_size > 1 and self.unfreeze_at_epoch < max_epochs:
+            rank_zero_warn(
+                'PretrainedFinetuning with multi-GPU (DDP): gradients of '
+                f'parameters unfrozen at epoch {self.unfreeze_at_epoch} will '
+                'NOT be synchronized across ranks (no DDP hooks were '
+                'registered for them) and the model replicas will silently '
+                'diverge. Use a single device, set unfreeze_at_epoch >= '
+                'max_epochs, or remove this callback (backbone_lr then acts '
+                'as a soft freeze).'
+            )
 
     def freeze_before_training(self, pl_module: L.LightningModule) -> None:
         self.freeze(
