@@ -269,6 +269,13 @@ callbacks:
     _target_: lightning.pytorch.callbacks.TQDMProgressBar
     refresh_rate: 500
 
+  # Logs the live per-group learning rate to every logger (csv + wandb).
+  # Finetune groups are labelled -> lr-AdamW/backbone, lr-AdamW/head (so the
+  # staged unfreeze at finetune.unfreeze_at_epoch is visible).
+  lr_monitor:
+    _target_: lightning.pytorch.callbacks.LearningRateMonitor
+    logging_interval: step
+
   # Online representation-quality monitoring on clean embeddings.
   # Logs <split>/<embedding>/<metric>, e.g. val/aggregator/effective_rank.
   embedding_metrics:

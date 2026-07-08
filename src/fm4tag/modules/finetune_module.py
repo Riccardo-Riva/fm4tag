@@ -366,8 +366,10 @@ class FinetuneModule(L.LightningModule):
         ]
         optimizer = torch.optim.AdamW(
             [
-                {'params': pretrained_params, 'lr': self.backbone_lr},  # group 0
-                {'params': list(self.head.parameters()), 'lr': self.lr},  # group 1
+                # 'name' labels the LearningRateMonitor series (lr-AdamW/backbone,
+                # lr-AdamW/head) so the staged unfreeze is visible in the logs.
+                {'params': pretrained_params, 'lr': self.backbone_lr, 'name': 'backbone'},
+                {'params': list(self.head.parameters()), 'lr': self.lr, 'name': 'head'},
             ],
             weight_decay=self.weight_decay,
         )
