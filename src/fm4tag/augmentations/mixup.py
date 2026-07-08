@@ -21,18 +21,18 @@ class Mixup(Augmentation):
 
     For each sample :math:`i`::
 
-        x'_i = lam * x_i + (1 - lam) * x_{perm[i]}
+        x'_i = (1 - lam) * x_i + lam * x_{perm[i]}
 
     where ``perm`` is a random permutation of the batch.  The same
     permutation is used for categorical and continuous embeddings so the
     two streams stay aligned per-sample.
 
     Args:
-        lam: Mixing coefficient on the original sample (i.e. ``lam=1`` is
-            identity, ``lam=0`` fully replaces with the permuted sample).
-            For symmetry with the legacy implementation this is a fixed
-            scalar; if you want a per-batch Beta-distributed lam, set
-            ``random_lam=True`` and pass ``alpha`` instead.
+        lam: Noise level — mixing weight on the permuted sample (i.e.
+            ``lam=0`` is identity, ``lam=1`` fully replaces with the permuted
+            sample).  This is a fixed scalar; if you want a per-batch
+            Beta-distributed lam, set ``random_lam=True`` and pass ``alpha``
+            instead.
         alpha:      Beta-distribution parameter when ``random_lam=True``.
                     Ignored when ``random_lam=False``.
         random_lam: Sample ``lam ~ Beta(alpha, alpha)`` per forward pass.
@@ -42,7 +42,7 @@ class Mixup(Augmentation):
 
     def __init__(
         self,
-        lam: float = 0.8,
+        lam: float = 0.2,
         alpha: float = 0.4,
         random_lam: bool = False,
     ) -> None:
@@ -83,6 +83,6 @@ class Mixup(Augmentation):
         for key, x in (('categorical', x_categ), ('continuous', x_cont)):
             if x is None:
                 continue
-            out[key] = lam * x + (1.0 - lam) * x[perm]
+            out[key] = (1.0 - lam) * x + lam * x[perm]
 
         return out

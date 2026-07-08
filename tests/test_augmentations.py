@@ -118,11 +118,19 @@ def test_cutmix_stage():
 
 def test_cutmix_values_are_mix(raw_data):
     torch.manual_seed(0)
-    aug = CutMix(lam=0.0)  # all values replaced → output ≠ input
+    aug = CutMix(lam=1.0)  # max noise → every feature replaced → output ≠ input
     out = aug(raw_data)
-    # lam=0 means keep-mask is all False, so all values come from a permuted copy.
+    # lam=1 means keep-mask is all False, so all values come from a permuted copy.
     # They can coincidentally equal input, but on average they should differ.
     assert not torch.equal(out['continuous'], raw_data['continuous'])
+
+
+def test_cutmix_lam_zero_is_identity(raw_data):
+    # lam is the noise level, so lam=0 must leave the batch untouched.
+    aug = CutMix(lam=0.0)
+    out = aug(raw_data)
+    assert torch.equal(out['continuous'], raw_data['continuous'])
+    assert torch.equal(out['categorical'], raw_data['categorical'])
 
 
 # ---------------------------------------------------------------------------
@@ -176,6 +184,14 @@ def test_mixup_shape(embedding_data):
 
 def test_mixup_stage():
     assert Mixup.stage == Stage.EMBEDDING
+
+
+def test_mixup_lam_zero_is_identity(embedding_data):
+    # lam is the noise level (weight on the permuted sample); lam=0 = identity.
+    aug = Mixup(lam=0.0)
+    out = aug(embedding_data)
+    assert torch.allclose(out['continuous'], embedding_data['continuous'])
+    assert torch.allclose(out['categorical'], embedding_data['categorical'])
 
 
 # ---------------------------------------------------------------------------

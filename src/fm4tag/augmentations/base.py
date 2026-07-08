@@ -32,7 +32,7 @@ handles the nested ``_target_`` list recursively::
       - _target_: fm4tag.augmentations.Compose
         augmentations:
           - _target_: fm4tag.augmentations.CutMix
-            lam: 0.7
+            lam: 0.3
           - _target_: fm4tag.augmentations.GaussianNoise
             space: embedding
             sigma: 0.05
