@@ -33,8 +33,45 @@ focus on the two LightningModules. Suite: 146 non-DDP + 12 DDP tests pass.
    `run()` now returns the Trainer.
 8. **70a6739 — docs/usage.md** (install, data, configs, workflows, logging
    conventions, HPO, caveats).
+9. **9d35661 — `col`/`row` transformer types crashed; encoder
+   architecture moved to a Hydra config group.** `_build_layers` forwarded the
+   whole layer dict to every block class, but the shared `layers:` block spoke
+   `RowColTransformer`'s vocabulary (`col_heads`/`row_heads`/`dim_row_head`/
+   `chunk_size`), so `type: col`/`row` raised `TypeError` on the first foreign
+   kwarg — only `rowcol` ever ran (every `col` sweep run died in ~7 s). Fix:
+   per-type config group `configs/encoders/{rowcol,col,row}_v0.yaml`, each
+   listing only the kwargs its class accepts; selected via the `defaults:` list
+   / `encoders=<type>_v0`, replacing the `transformer_type=` interpolation.
+   Verified all three build and that group-swap + deep overrides
+   (`encoders.constituents.tracks.layers.0.depth=7`) still apply. Also promoted
+   the working config to `default.yaml`, deleted redundant `default_01.yaml` /
+   `jets_only*.yaml` + the `run_jets_only_test` scripts, and updated the slurm
+   generators + docs. ⚠ `OmegaConf.load` no longer yields a complete config —
+   the `defaults:` list needs Hydra `compose`.
+10. **4fb18ec — contrastive collapse: augmentation views destroyed
+    sample identity.** Every SupCon term sat pinned at its ~log(N) max-entropy
+    floor (pretrain `jets`/`aggregator` ≈ 7.12, `tracks` ≈ 9.60; finetune
+    `jet_contrastive` ≈ 7.62), and enabling `jet_contrastive` at ANY weight
+    collapsed finetune `val/head/auroc` from ~0.89 (ce-only) to ~0.53 (random),
+    jc=0.3 as hard as jc=1.0. Cause: `lam` meant "fraction **kept**" (CutMix) /
+    "weight on the **original**" (Mixup), and the config set both to 0.1, so
+    view 0 kept ~1 % of the anchor and was ~99 % *other* jets — the SupCon
+    "positive" was indistinguishable from a negative (measured
+    `cos(view0,self)` = 0.01 vs `cos(view0,other)` = 0.01, 46 % closer-to-self).
+    Fix: **inverted `lam` to a noise level** (0 = identity, 1 = full corruption)
+    in `CutMix`/`Mixup` (defaults flipped 0.7→0.3, 0.8→0.2); the config's
+    `lam=0.1` now means mild noise → `cos(view0,self)` = 0.89, 99 % closer-to-
+    self. Tests updated (`test_augmentations.py`), 146 non-DDP pass.
 
 ## Open recommendations (not implemented — need owner decision)
+
+- **Contrastive has no projection head.** Both pretrain and finetune apply the
+  SupCon loss directly to the aggregator/encoder embedding the classifier also
+  consumes, so the contrastive objective reshapes the classification embedding
+  itself. Standard SimCLR/SupCon uses a separate projection head. Now that the
+  views are fixed (finding 10) this is a refinement, not a blocker — worth an
+  ablation. (Collapse seen in runs `run_20260707_103027` finetune,
+  `run_20260707_103022` pretrain.)
 
 - **Delete legacy code:** `modules/contrastive_denoising_module.py` (628
   lines) + `modules/losses/` adapters + duplicate `metrics/metrics.py`
