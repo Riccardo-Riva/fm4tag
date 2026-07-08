@@ -52,8 +52,8 @@ OUTPUT_DIR=${OUTPUT_BASE}/${RUN_NAME}_${RUN_ID}
 
 mkdir -pv "${OUTPUT_DIR}"
 
-# callbacks_finetune=null: PretrainedFinetuning freezes encoders + aggregator
-# until unfreeze_at_epoch — pointless (and harmful) with random init.
+# unfreeze_at_epoch=0: train the backbone + aggregator from step 0 — freezing
+# would be pointless (and harmful) with random init.
 # finetune.backbone_lr=null: fall back to the head lr; the reduced backbone_lr
 # is meant for pretrained weights only.
 cat > "${OUTPUT_DIR}/classify_from_scratch_run.sh" << EOF
@@ -84,7 +84,7 @@ srun \\
     --config-name=${CONFIG} \\
     phase=finetune action=fit \\
     encoder_ckpt=null \\
-    callbacks_finetune=null \\
+    finetune.unfreeze_at_epoch=0 \\
     finetune.backbone_lr=null \\
     encoders=${TRANSFORMER_TYPE}_v0 \\
     trainer.devices=${GPU_NUM} \\

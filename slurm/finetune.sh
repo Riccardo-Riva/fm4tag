@@ -4,8 +4,9 @@
 
 # ── Settings ──────────────────────────────────────────────────────────────────
 # Fine-tuning from pretrained encoders: phase=finetune with encoder_ckpt set.
-# PretrainedFinetuning (callbacks_finetune) keeps the pretrained parts frozen
-# until unfreeze_at_epoch; backbone then trains at optimizer.backbone_lr.
+# finetune.unfreeze_at_epoch (default 3) holds the pretrained parts at lr=0 for
+# a short linear-probe phase, then ramps them onto the cosine schedule at
+# optimizer.backbone_lr — DDP-safe (all params in the optimiser from step 0).
 
 GPU_NODE=gpu-L40S-open,gpu-A40
 GPU_NUM=2

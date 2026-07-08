@@ -62,6 +62,21 @@ focus on the two LightningModules. Suite: 146 non-DDP + 12 DDP tests pass.
     in `CutMix`/`Mixup` (defaults flipped 0.7→0.3, 0.8→0.2); the config's
     `lam=0.1` now means mild noise → `cos(view0,self)` = 0.89, 99 % closer-to-
     self. Tests updated (`test_augmentations.py`), 146 non-DDP pass.
+11. **(pending commit) — DDP-safe staged unfreeze; `PretrainedFinetuning`
+    callback removed.** The callback froze the pretrained parts via
+    `requires_grad=False` *before* the DDP wrap, so those params got no
+    gradient-sync hooks; unfreezing them mid-run (any epoch < max_epochs) left
+    their gradients un-all-reduced and the ranks silently diverged — and
+    `finetune.sh` runs on 2 GPUs. Replaced with a schedule-based staged unfreeze
+    in `FinetuneModule.configure_optimizers`: all params are in the optimiser
+    from step 0 (each gets a DDP hook), the pretrained group is held at `lr=0`
+    by a per-group `LambdaLR` multiplier until `finetune.unfreeze_at_epoch`,
+    then ramps onto the head's cosine curve (AdamW at lr=0 is a true freeze).
+    Deleted the callback + `callbacks_finetune` config; `unfreeze_at_epoch` now
+    lives in the finetune block (default 3; classify-from-scratch sets 0),
+    `initial_ratio_lr` dropped (backbone group uses `backbone_lr` directly).
+    Tests rewritten; 145 non-DDP pass. End-to-end: backbone group lr=0 at step 0,
+    live after the unfreeze epoch.
 
 ## Open recommendations (not implemented — need owner decision)
 
@@ -89,9 +104,6 @@ focus on the two LightningModules. Suite: 146 non-DDP + 12 DDP tests pass.
 - **`sync_dist=True` on on_step train logs** costs a cross-rank reduce per
   metric per step (commented in code). Option: log step values unsynced and
   epoch values synced.
-- **Structurally DDP-safe staged unfreezing** (replace requires_grad freeze
-  with lr=0 param group until epoch E) if multi-GPU finetuning with
-  unfreezing is ever needed.
 - **Finetune CE uses a clean pass while jet-contrastive re-encodes V views**
   (V+1 passes). If cost matters, an Identity first view could be reused for CE.
 - **EMBEDDING-stage asymmetry:** for the global object the stage applies to

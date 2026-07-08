@@ -93,9 +93,10 @@ Checkpoint knobs:
   `load_aggregator: true`, aggregator) weights initialise the finetune model.
 - `ckpt_path` — a full Lightning checkpoint of the *current* phase (resume /
   test / predict).
-- `callbacks_finetune.pretrained_finetuning` — freezes encoders + aggregator
-  until `unfreeze_at_epoch`. **Do not use with multiple GPUs if it actually
-  unfreezes** (see caveats).
+- `finetune.unfreeze_at_epoch` — holds the pretrained parts (encoders +
+  aggregator) at `lr=0` for this many epochs, then ramps them onto the cosine
+  schedule. `0` trains everything from step 0 (from-scratch); `>= max_epochs`
+  keeps them frozen. DDP-safe (all params are in the optimiser from step 0).
 
 From a notebook — use Hydra's `compose` API so the `encoders` config group is
 resolved (a plain `OmegaConf.load` does **not** process the `defaults:` list, so
@@ -155,11 +156,11 @@ fm4tag-hpo hpo.n_trials=50
   inference.** A jet's embedding/prediction depends on the other jets in its
   batch (`chunk_size` groups). Keep evaluation batch composition fixed when
   comparing numbers.
-- **`PretrainedFinetuning` + multi-GPU:** parameters frozen before the DDP
-  wrap get no gradient-sync hooks; if the callback unfreezes them mid-run,
-  their gradients are **not** synchronised and the ranks silently diverge
-  (a warning is emitted). Safe: single GPU, `unfreeze_at_epoch >=
-  max_epochs`, or remove the callback (then `backbone_lr` is the soft freeze).
+- **Staged unfreeze is DDP-safe:** `finetune.unfreeze_at_epoch` keeps every
+  parameter in the optimiser from step 0 (so DDP registers a sync hook for
+  each) and holds the pretrained parts at `lr=0` until the unfreeze epoch. The
+  backbone backward + all-reduce still run during the frozen phase — correctness
+  over the small cost of a true `requires_grad` freeze.
 - **Zero-weight loss components freeze their heads** (reconstructors,
   aggregator, projectors) at module construction, so multi-GPU runs work
   with the default DDP strategy — `ddp_find_unused_parameters_true` is no

@@ -8,7 +8,6 @@ import pytest
 import torch
 
 from fm4tag.augmentations import Compose, CutMix, FeatureDropout
-from fm4tag.callbacks import PretrainedFinetuning
 from fm4tag.losses import MultiViewSupConLoss
 from fm4tag.models import (
     Encoder,
@@ -211,7 +210,7 @@ def test_gradients_flow_everywhere(encoders, aggregator, head, two_views):
 
 
 # ---------------------------------------------------------------------------
-# Optimizer / PretrainedFinetuning interplay
+# Optimizer / staged unfreeze
 # ---------------------------------------------------------------------------
 
 
@@ -219,27 +218,17 @@ def _n_params(params) -> int:
     return sum(p.numel() for p in params)
 
 
-def _attach_trainer(module, callbacks):
+def _attach_trainer(module, *, steps=100, max_epochs=10):
     module._trainer = SimpleNamespace(
-        callbacks=callbacks, estimated_stepping_batches=100
+        estimated_stepping_batches=steps, max_epochs=max_epochs
     )
 
 
-def test_optimizer_excludes_pretrained_parts_with_callback(
-    encoders, aggregator, head, two_views
-):
-    module = _make_module(encoders, aggregator, head, two_views)
-    _attach_trainer(module, [PretrainedFinetuning(unfreeze_at_epoch=5)])
-    opt = module.configure_optimizers()['optimizer']
-    n_in_opt = sum(_n_params(g['params']) for g in opt.param_groups)
-    assert n_in_opt == _n_params(module.head.parameters())
-
-
-def test_optimizer_includes_pretrained_parts_without_callback(
+def test_optimizer_has_backbone_and_head_groups(
     encoders, aggregator, head, two_views
 ):
     module = _make_module(encoders, aggregator, head, two_views, backbone_lr=1e-5)
-    _attach_trainer(module, [])
+    _attach_trainer(module)
     opt = module.configure_optimizers()['optimizer']
     assert len(opt.param_groups) == 2
     # Frozen reconstructor heads are excluded from the optimizer.
@@ -247,42 +236,45 @@ def test_optimizer_includes_pretrained_parts_without_callback(
         p for p in module.backbone.parameters() if p.requires_grad
     ) + _n_params(p for p in module.aggregator.parameters() if p.requires_grad)
     assert _n_params(opt.param_groups[0]['params']) == n_pretrained
-    # 'lr' is already scaled by the warmup scheduler's start factor at
-    # construction; the pristine value is kept in 'initial_lr'.
+    assert _n_params(opt.param_groups[1]['params']) == _n_params(
+        module.head.parameters()
+    )
+    # Group 0 = backbone (base backbone_lr), group 1 = head (base lr); the live
+    # 'lr' is scaled by the schedule, the pristine value is kept in 'initial_lr'.
     assert opt.param_groups[0]['initial_lr'] == pytest.approx(1e-5)
     assert opt.param_groups[1]['initial_lr'] == pytest.approx(1e-3)
 
 
-def test_callback_freezes_encoders_and_aggregator(
+def test_staged_unfreeze_holds_backbone_at_zero_lr(
     encoders, aggregator, head, two_views
 ):
-    module = _make_module(encoders, aggregator, head, two_views)
-    cb = PretrainedFinetuning(unfreeze_at_epoch=3)
-    cb.freeze_before_training(module)
-    assert all(not p.requires_grad for p in module.backbone.parameters())
-    assert all(not p.requires_grad for p in module.aggregator.parameters())
-    assert all(p.requires_grad for p in module.head.parameters())
+    # 100 steps over 10 epochs -> unfreeze at epoch 5 == step 50.
+    module = _make_module(
+        encoders, aggregator, head, two_views, backbone_lr=1e-5, unfreeze_at_epoch=5
+    )
+    _attach_trainer(module, steps=100, max_epochs=10)
+    cfg = module.configure_optimizers()
+    opt = cfg['optimizer']
+    scheduler = cfg['lr_scheduler']['scheduler']
+
+    assert opt.param_groups[0]['lr'] == 0.0    # backbone frozen at step 0
+    assert opt.param_groups[1]['lr'] > 0.0     # head warming up
+    for _ in range(49):
+        scheduler.step()
+    assert opt.param_groups[0]['lr'] == 0.0    # still frozen at step 49
+    scheduler.step()                            # step 50 == unfreeze_at_epoch
+    assert opt.param_groups[0]['lr'] > 0.0     # backbone now training
 
 
-def test_callback_unfreezes_and_adds_param_group(
+def test_unfreeze_at_epoch_zero_trains_backbone_from_start(
     encoders, aggregator, head, two_views
 ):
-    module = _make_module(encoders, aggregator, head, two_views)
-    cb = PretrainedFinetuning(unfreeze_at_epoch=3, initial_ratio_lr=0.1)
-    cb.freeze_before_training(module)
-    _attach_trainer(module, [cb])
+    module = _make_module(
+        encoders, aggregator, head, two_views, backbone_lr=1e-3, unfreeze_at_epoch=0
+    )
+    _attach_trainer(module)
     opt = module.configure_optimizers()['optimizer']
-    assert len(opt.param_groups) == 1
-
-    cb.finetune_function(module, 2, opt)  # before the unfreeze epoch: no-op
-    assert len(opt.param_groups) == 1
-
-    cb.finetune_function(module, 3, opt)
-    assert len(opt.param_groups) == 2
-    assert all(p.requires_grad for p in module.backbone.parameters())
-    assert all(p.requires_grad for p in module.aggregator.parameters())
-    # Unfrozen parts join at initial_ratio_lr × the head's current lr.
-    assert opt.param_groups[1]['lr'] == pytest.approx(0.1 * opt.param_groups[0]['lr'])
+    assert opt.param_groups[0]['lr'] > 0.0     # trained from step 0
 
 
 # ---------------------------------------------------------------------------

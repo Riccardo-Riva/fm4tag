@@ -23,31 +23,31 @@ Logged keys follow ``<split>/<component>/<metric>``:
 :class:`~fm4tag.callbacks.EmbeddingMetrics` callback works during fine-tuning
 unchanged.
 
-Freezing of the pretrained parts (encoders **and** aggregator) is driven
-entirely by the :class:`~fm4tag.callbacks.PretrainedFinetuning` callback (the
-encoders are stored as ``self.backbone`` so it can locate them):
-
-* callback absent   → everything trains from epoch 0; the pretrained parts
-  use ``backbone_lr``, the head uses ``lr``;
-* callback attached → encoders + aggregator start frozen and are excluded
-  from the initial optimiser; the callback unfreezes them (and adds their
-  params to the optimiser) at ``unfreeze_at_epoch`` — set that ≥
-  ``max_epochs`` to keep them frozen for the whole run.
+Staged unfreeze of the pretrained parts (encoders **and** aggregator) is
+handled inside :meth:`configure_optimizers` via ``unfreeze_at_epoch``: every
+parameter is in the optimiser from step 0 (so DDP registers a gradient-sync
+hook for each), but the pretrained param group is held at ``lr=0`` until
+``unfreeze_at_epoch`` and then ramps onto the head's cosine schedule.
+``unfreeze_at_epoch=0`` trains everything from step 0; ``>= max_epochs`` keeps
+the pretrained parts frozen for the whole run.  The encoders are stored as
+``self.backbone``.  (This replaces the old ``PretrainedFinetuning`` callback,
+whose ``requires_grad`` freeze happened before the DDP wrap and left the
+unfrozen params without sync hooks → silent rank divergence.)
 """
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping, Sequence
 
 import lightning as L
 import torch
 import torch.nn.functional as F
 from torch import nn
-from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
+from torch.optim.lr_scheduler import LambdaLR
 from torchmetrics.classification import MulticlassAUROC
 
 from ..augmentations import Compose
-from ..callbacks import PretrainedFinetuning
 from ..losses import normalize_loss_weights
 from .view_encoding import (
     encode_clean,
@@ -82,14 +82,16 @@ class FinetuneModule(L.LightningModule):
         n_classes:  Number of classes (for the AUROC metric).
         class_weights: Optional per-class weights for the cross-entropy.
         lr:           AdamW learning rate (classifier head).
-        backbone_lr:  Learning rate of the pretrained parts (encoders +
-                      aggregator); ``None`` → same as ``lr``.  Used only when
-                      no :class:`PretrainedFinetuning` callback is attached
-                      (with the callback, they join the optimiser at unfreeze
-                      time with ``initial_ratio_lr``).
+        backbone_lr:  Base learning rate of the pretrained parts (encoders +
+                      aggregator); ``None`` → same as ``lr``.  Held at 0 until
+                      ``unfreeze_at_epoch``, then follows the cosine schedule.
         weight_decay: AdamW weight decay.
         warmup_frac:  Fraction of total steps for linear LR warmup before
                       cosine annealing.
+        unfreeze_at_epoch: Epochs to hold the pretrained parts at ``lr=0``
+                      before ramping them onto the head's schedule.  ``0``
+                      trains everything from step 0; ``>= max_epochs`` keeps
+                      them frozen for the whole run.
     """
 
     def __init__(
@@ -108,6 +110,7 @@ class FinetuneModule(L.LightningModule):
         backbone_lr: float | None = None,
         weight_decay: float = 1e-5,
         warmup_frac: float = 0.1,
+        unfreeze_at_epoch: int = 0,
     ) -> None:
         super().__init__()
 
@@ -147,6 +150,7 @@ class FinetuneModule(L.LightningModule):
         self.backbone_lr = backbone_lr if backbone_lr is not None else lr
         self.weight_decay = weight_decay
         self.warmup_frac = warmup_frac
+        self.unfreeze_at_epoch = unfreeze_at_epoch
 
         if class_weights is not None:
             self.register_buffer(
@@ -347,48 +351,43 @@ class FinetuneModule(L.LightningModule):
     # ------------------------------------------------------------------
 
     def configure_optimizers(self):  # type: ignore[override]
-        # The head always trains from epoch 0.  When a PretrainedFinetuning
-        # callback is attached, the pretrained parts (encoders + aggregator)
-        # start frozen and the callback adds their params to the optimiser at
-        # unfreeze time — so they must NOT be in the initial optimiser
-        # (PyTorch rejects parameters appearing in more than one group).
-        pretrained_managed = any(
-            isinstance(cb, PretrainedFinetuning) for cb in self.trainer.callbacks
+        # DDP-safe staged unfreeze: every parameter is in the optimiser from
+        # step 0, so DDP registers a gradient-sync hook for each — a
+        # requires_grad freeze skips hooks and the ranks silently diverge when
+        # params later unfreeze.  The pretrained parts sit at lr=0 until
+        # `unfreeze_at_epoch` via a per-group LR multiplier, then ramp onto the
+        # head's cosine schedule.  (AdamW at lr=0 is a true freeze — both the
+        # gradient step and decoupled weight decay scale by lr.)
+        pretrained_params = [
+            p
+            for m in (self.backbone, self.aggregator)
+            for p in m.parameters()
+            if p.requires_grad  # skip frozen reconstructor heads
+        ]
+        optimizer = torch.optim.AdamW(
+            [
+                {'params': pretrained_params, 'lr': self.backbone_lr},  # group 0
+                {'params': list(self.head.parameters()), 'lr': self.lr},  # group 1
+            ],
+            weight_decay=self.weight_decay,
         )
-
-        if pretrained_managed:
-            optimizer = torch.optim.AdamW(
-                self.head.parameters(), lr=self.lr, weight_decay=self.weight_decay
-            )
-        else:
-            # Skip frozen reconstructor heads.
-            pretrained_params = [
-                p
-                for m in (self.backbone, self.aggregator)
-                for p in m.parameters()
-                if p.requires_grad
-            ]
-            optimizer = torch.optim.AdamW(
-                [
-                    {'params': pretrained_params, 'lr': self.backbone_lr},
-                    {'params': list(self.head.parameters()), 'lr': self.lr},
-                ],
-                weight_decay=self.weight_decay,
-            )
 
         total_steps = self.trainer.estimated_stepping_batches
         warmup_steps = max(1, int(self.warmup_frac * total_steps))
+        max_epochs = max(1, self.trainer.max_epochs or 1)
+        unfreeze_step = round(self.unfreeze_at_epoch * total_steps / max_epochs)
 
-        warmup_sched = LinearLR(
-            optimizer, start_factor=0.01, end_factor=1.0, total_iters=warmup_steps
-        )
-        cosine_sched = CosineAnnealingLR(
-            optimizer, T_max=max(1, total_steps - warmup_steps)
-        )
-        scheduler = SequentialLR(
-            optimizer, [warmup_sched, cosine_sched], milestones=[warmup_steps]
-        )
+        def head_factor(step: int) -> float:
+            if step < warmup_steps:
+                return 0.01 + 0.99 * step / warmup_steps
+            progress = (step - warmup_steps) / max(1, total_steps - warmup_steps)
+            return 0.5 * (1.0 + math.cos(math.pi * progress))
 
+        def backbone_factor(step: int) -> float:
+            # Frozen (0 LR) until the unfreeze epoch, then joins the head curve.
+            return 0.0 if step < unfreeze_step else head_factor(step)
+
+        scheduler = LambdaLR(optimizer, lr_lambda=[backbone_factor, head_factor])
         return {
             'optimizer': optimizer,
             'lr_scheduler': {'scheduler': scheduler, 'interval': 'step'},

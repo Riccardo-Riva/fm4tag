@@ -231,6 +231,11 @@ finetune:
   backbone_lr:  ${optimizer.backbone_lr}
   weight_decay: ${optimizer.weight_decay}
   warmup_frac:  0.1
+  # DDP-safe staged unfreeze (all params in the optimiser from step 0; the
+  # pretrained parts held at lr=0 until this epoch, then ramped onto the cosine
+  # schedule). 0 = train everything from step 0 (from-scratch); >= max_epochs =
+  # frozen for the whole run.
+  unfreeze_at_epoch: 3
 
 # ── Optimiser ─────────────────────────────────────────────────────────────────
 optimizer:
@@ -290,18 +295,8 @@ callbacks:
     patience: 10
     mode:     min
 
-# ── Callbacks (finetune phase only) ───────────────────────────────────────────
-# Appended to the shared list by the runner when phase == finetune.
-# PretrainedFinetuning freezes the pretrained parts (encoders + aggregator)
-# and unfreezes them at unfreeze_at_epoch; set it >= trainer.max_epochs to
-# keep them frozen for the whole run, or remove the callback to train
-# everything from epoch 0 (pretrained parts at optimizer.backbone_lr).
-callbacks_finetune:
-  pretrained_finetuning:
-    _target_: fm4tag.callbacks.PretrainedFinetuning
-    unfreeze_at_epoch: 0
-    initial_ratio_lr:  0.1
-    train_bn:          false # Whether to keep Batch Normalization trainable
+# Staged unfreeze of the pretrained parts during finetuning is handled by
+# finetune.unfreeze_at_epoch (see the finetune block), not a callback.
 
 # ── Logger ────────────────────────────────────────────────────────────────────
 
