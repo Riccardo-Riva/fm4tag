@@ -12,7 +12,7 @@ REPO=/storage3/DSIP/rriva/research/fm4tag-review
 VENV=${REPO}/.venv
 CONFIG_DIR=${REPO}/src/fm4tag/configs
 
-CONFIG=pretraining_test_260630.yaml
+CONFIG=default.yaml
 MAX_EPOCHS=100
 
 # Global timestamp for this sweep (seconds precision)
@@ -25,7 +25,7 @@ mkdir -pv "${OUTPUT_BASE}"
 # ── Grid definitions ──────────────────────────────────────────────────────────
 
 TRANSFORMER_TYPES=("rowcol" "col")
-BATCH_SIZES=(2048)
+BATCH_SIZES=(1024)
 
 LOSS_CONFIGS=(
 "1.0 1.0"
@@ -35,8 +35,8 @@ LOSS_CONFIGS=(
 
 # Fixed denoising weights
 
-DENOISING_CAT=0.2
-DENOISING_CON=0.2
+DENOISING_CAT=0.4
+DENOISING_CON=0.4
 
 RUN_ID=0
 
@@ -84,7 +84,7 @@ trainer.devices=${GPU_NUM} \
 trainer.max_epochs=${MAX_EPOCHS} \
 datamodule.num_workers=${NUM_WORKERS} \
 datamodule.batch_size=${BATCH_SIZE} \
-transformer_type=${TRANSFORMER_TYPE} \
+encoders=${TRANSFORMER_TYPE}_v0 \
 pretrain.loss_weights.contrastive=${CONTRASTIVE} \
 pretrain.loss_weights.denoising_cat=${DENOISING_CAT} \
 pretrain.loss_weights.denoising_con=${DENOISING_CON} \

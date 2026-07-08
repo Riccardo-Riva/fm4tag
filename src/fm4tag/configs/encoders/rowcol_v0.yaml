@@ -1,0 +1,48 @@
+# ════════════════════════════════════════════════════════════════════════════
+# Encoder architecture — RowCol (alternating col-then-row attention).
+#
+# Selected via the parent config's defaults list, e.g.
+#   defaults: [{encoders: rowcol_v0}, _self_]
+# or overridden on the CLI:  encoders=rowcol_v0
+#
+# Every `layers` entry lists ONLY the kwargs its block class accepts:
+#   type: rowcol → RowColTransformer(col_heads, row_heads, dim_head,
+#                                    dim_row_head, chunk_size, ...)
+# `dim` and (for row-aware blocks) `nfeats` are injected at runtime.
+# ════════════════════════════════════════════════════════════════════════════
+
+global_encoder:
+  _target_: fm4tag.models.GlobalTransformerEncoder
+  feature_dim: 64
+  dim: 64   # num_features injected at runtime from variables.jets.inputs
+  layers:
+    - type:         rowcol
+      depth:        4
+      col_heads:    2
+      row_heads:    3
+      dim_head:     32
+      dim_row_head: 32
+      ff_mult:      1
+      attn_dropout: 0.0
+      ff_dropout:   0.0
+      chunk_size:   256
+
+constituents:
+  tracks:
+    _target_: fm4tag.models.Encoder
+    dim:              64
+    cont_embeddings:  MLP    # MLP | pos_singleMLP
+    proj_hidden:      128    # null → auto (3/4 × dim × n_tokens)
+    proj_out:         64     # null → auto (1/2 × dim × n_tokens)
+    # categories and num_continuous are injected at runtime from variables.tracks
+    layers:
+      - type:          rowcol
+        depth:         4
+        col_heads:     2
+        row_heads:     4
+        dim_head:      32
+        dim_row_head:  64
+        ff_mult:       1
+        attn_dropout:  0.0
+        ff_dropout:    0.0
+        chunk_size:    512    # null = whole-batch row attention

@@ -47,7 +47,10 @@ Three YAML side-files (paths set in the config):
 ## Configs
 
 One YAML drives everything (see
-[pretraining_test_260630.yaml](../src/fm4tag/configs/pretraining_test_260630.yaml)).
+[default.yaml](../src/fm4tag/configs/default.yaml)).  The encoder architecture is a
+swappable Hydra config group under
+[configs/encoders/](../src/fm4tag/configs/encoders/) — select it with
+`encoders=rowcol_v0` (choices: `rowcol_v0` | `col_v0` | `row_v0`).
 The important sections:
 
 | Section | What it sets |
@@ -55,7 +58,7 @@ The important sections:
 | `phase` / `action` | `pretrain`\|`finetune` × `fit`\|`test`\|`predict` |
 | `variables`, `*_dataset_path` | data definition and file locations |
 | `datamodule` | batch size, workers, paths (interpolated from above) |
-| `encoders` | one encoder per object; `layers:` list of `col`/`row`/`rowcol` blocks |
+| `encoders` | swappable arch group (`encoders=rowcol_v0`\|`col_v0`\|`row_v0`); one encoder per object |
 | `aggregator`, `head` | shared jet aggregator; classifier head (finetune) |
 | `views` | augmentation pipelines (list of `Compose`); shared by both phases |
 | `pretrain` / `finetune` | the two LightningModules incl. `loss_weights` |
@@ -67,15 +70,16 @@ Anything can be overridden on the command line with Hydra dot-notation.
 ## Running
 
 ```bash
-# Pretrain
-fm4tag --config-name=pretraining_test_260630 phase=pretrain action=fit
+# Pretrain  (default.yaml is the default config, so --config-name is optional;
+#            swap the encoder architecture with encoders=col_v0 | row_v0)
+fm4tag phase=pretrain action=fit
 
 # Finetune from a pretraining checkpoint (encoders + aggregator weights)
-fm4tag --config-name=pretraining_test_260630 phase=finetune action=fit \
+fm4tag phase=finetune action=fit \
     encoder_ckpt=outputs/fm4tag-pretrain-test/version_0/checkpoints/epoch010-step5000.ckpt
 
 # Finetune from scratch
-fm4tag --config-name=pretraining_test_260630 phase=finetune action=fit
+fm4tag phase=finetune action=fit
 
 # Resume an interrupted fit / evaluate / predict
 fm4tag ... action=fit    ckpt_path=/path/to/last.ckpt
@@ -93,13 +97,17 @@ Checkpoint knobs:
   until `unfreeze_at_epoch`. **Do not use with multiple GPUs if it actually
   unfreezes** (see caveats).
 
-From a notebook (no Hydra):
+From a notebook — use Hydra's `compose` API so the `encoders` config group is
+resolved (a plain `OmegaConf.load` does **not** process the `defaults:` list, so
+`cfg.encoders` would be missing):
 
 ```python
-from omegaconf import OmegaConf
+from hydra import compose, initialize_config_dir
 from fm4tag.runner import run
 
-cfg = OmegaConf.load('src/fm4tag/configs/pretraining_test_260630.yaml')
+with initialize_config_dir(version_base=None,
+                           config_dir='/abs/path/to/src/fm4tag/configs'):
+    cfg = compose(config_name='default', overrides=['encoders=rowcol_v0'])
 trainer = run(cfg, phase='pretrain', action='fit')
 ```
 
@@ -125,7 +133,7 @@ All keys follow `<split>/<component>/<metric>`:
 Configured by the `hpo:` section; run with:
 
 ```bash
-fm4tag-hpo --config-name=pretraining_test_260630 hpo.n_trials=50
+fm4tag-hpo hpo.n_trials=50
 ```
 
 - `search_space.<phase>` is a list of

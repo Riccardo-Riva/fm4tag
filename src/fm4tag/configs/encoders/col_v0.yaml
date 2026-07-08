@@ -1,0 +1,42 @@
+# ════════════════════════════════════════════════════════════════════════════
+# Encoder architecture — Col (column / within-sample attention only).
+#
+# Selected via the parent config's defaults list, e.g.
+#   defaults: [{encoders: col_v0}, _self_]
+# or overridden on the CLI:  encoders=col_v0
+#
+# ColTransformer's head arg is `heads` (not `col_heads`), and it has no row
+# attention — so no `row_heads`, `dim_row_head`, or `chunk_size`.
+#   type: col → ColTransformer(heads, dim_head, ...)
+# `dim` is injected at runtime.
+# ════════════════════════════════════════════════════════════════════════════
+
+global_encoder:
+  _target_: fm4tag.models.GlobalTransformerEncoder
+  feature_dim: 64
+  dim: 64   # num_features injected at runtime from variables.jets.inputs
+  layers:
+    - type:         col
+      depth:        4
+      heads:        2
+      dim_head:     32
+      ff_mult:      1
+      attn_dropout: 0.0
+      ff_dropout:   0.0
+
+constituents:
+  tracks:
+    _target_: fm4tag.models.Encoder
+    dim:              64
+    cont_embeddings:  MLP    # MLP | pos_singleMLP
+    proj_hidden:      128    # null → auto (3/4 × dim × n_tokens)
+    proj_out:         64     # null → auto (1/2 × dim × n_tokens)
+    # categories and num_continuous are injected at runtime from variables.tracks
+    layers:
+      - type:          col
+        depth:         4
+        heads:         2
+        dim_head:      32
+        ff_mult:       1
+        attn_dropout:  0.0
+        ff_dropout:    0.0

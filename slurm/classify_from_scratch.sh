@@ -14,7 +14,7 @@ REPO=/storage3/DSIP/rriva/research/fm4tag-review
 VENV=${REPO}/.venv
 CONFIG_DIR=${REPO}/src/fm4tag/configs
 
-CONFIG=pretraining_test_260630.yaml
+CONFIG=default.yaml
 MAX_EPOCHS=100
 
 # Global timestamp for this sweep (seconds precision)
@@ -86,7 +86,7 @@ srun \\
     encoder_ckpt=null \\
     callbacks_finetune=null \\
     finetune.backbone_lr=null \\
-    transformer_type=${TRANSFORMER_TYPE} \\
+    encoders=${TRANSFORMER_TYPE}_v0 \\
     trainer.devices=${GPU_NUM} \\
     trainer.max_epochs=${MAX_EPOCHS} \\
     datamodule.num_workers=${NUM_WORKERS} \\

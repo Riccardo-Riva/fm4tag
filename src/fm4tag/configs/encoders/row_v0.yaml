@@ -1,0 +1,45 @@
+# ════════════════════════════════════════════════════════════════════════════
+# Encoder architecture — Row (row / intersample attention only).
+#
+# Selected via the parent config's defaults list, e.g.
+#   defaults: [{encoders: row_v0}, _self_]
+# or overridden on the CLI:  encoders=row_v0
+#
+# RowTransformer's head arg is `row_heads` and its head dim `dim_row_head`; it
+# has no column attention — so no `col_heads` or `dim_head`.  It supports
+# `chunk_size` for chunked row attention.
+#   type: row → RowTransformer(row_heads, dim_row_head, chunk_size, ...)
+# `dim` and `nfeats` are injected at runtime.
+# ════════════════════════════════════════════════════════════════════════════
+
+global_encoder:
+  _target_: fm4tag.models.GlobalTransformerEncoder
+  feature_dim: 64
+  dim: 64   # num_features injected at runtime from variables.jets.inputs
+  layers:
+    - type:         row
+      depth:        4
+      row_heads:    3
+      dim_row_head: 32
+      ff_mult:      1
+      attn_dropout: 0.0
+      ff_dropout:   0.0
+      chunk_size:   256
+
+constituents:
+  tracks:
+    _target_: fm4tag.models.Encoder
+    dim:              64
+    cont_embeddings:  MLP    # MLP | pos_singleMLP
+    proj_hidden:      128    # null → auto (3/4 × dim × n_tokens)
+    proj_out:         64     # null → auto (1/2 × dim × n_tokens)
+    # categories and num_continuous are injected at runtime from variables.tracks
+    layers:
+      - type:          row
+        depth:         4
+        row_heads:     4
+        dim_row_head:  64
+        ff_mult:       1
+        attn_dropout:  0.0
+        ff_dropout:    0.0
+        chunk_size:    512    # null = whole-batch row attention
