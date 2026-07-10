@@ -7,7 +7,7 @@
 #
 # Every `layers` entry lists ONLY the kwargs its block class accepts:
 #   type: rowcol → RowColTransformer(col_heads, row_heads, dim_head,
-#                                    dim_row_head, chunk_size, ...)
+#                                    dim_row_head, chunk_size, out_row_dim, ...)
 # `dim` and (for row-aware blocks) `nfeats` are injected at runtime.
 # ════════════════════════════════════════════════════════════════════════════
 
@@ -46,3 +46,6 @@ constituents:
         attn_dropout:  0.0
         ff_dropout:    0.0
         chunk_size:    512    # null = whole-batch row attention
+        out_row_dim:   128    # row attn+FFN bottleneck: run at 128 instead of
+                              # row_dim = dim*nfeats (~1216) -> ~14x smaller.
+                              # null (or >= row_dim) = full-width row block.

@@ -71,6 +71,71 @@ def _build_row_attention(
     )
 
 
+class RowMixer(nn.Module):
+    """One depth step of intersample (row) attention + feed-forward.
+
+    Operates on the flattened ``(B, row_dim)`` representation, where
+    ``row_dim = dim * nfeats``.  When ``out_row_dim`` is set and smaller than
+    ``row_dim`` the attention and FFN run inside a down-projected
+    ``out_row_dim`` bottleneck — so their (dominant) cost scales with
+    ``out_row_dim`` instead of the full ``row_dim`` — wrapped by a single
+    residual whose up-projection is zero-initialised, so the block starts as
+    the identity and learns intersample mixing from there (adapter-style).
+    ``out_row_dim=None`` (or ``>= row_dim``) keeps the plain full-width path.
+
+    Args:
+        row_dim:     Flattened feature dimension ``dim * nfeats``.
+        out_row_dim: Bottleneck width; ``None`` or ``>= row_dim`` disables it.
+    """
+
+    def __init__(
+        self,
+        row_dim: int,
+        out_row_dim: int | None,
+        *,
+        heads: int,
+        dim_row_head: int,
+        ff_mult: int,
+        attn_dropout: float,
+        ff_dropout: float,
+        chunk_size: int | None,
+    ) -> None:
+        super().__init__()
+        self.bottleneck = out_row_dim is not None and out_row_dim < row_dim
+        d = out_row_dim if self.bottleneck else row_dim
+        if self.bottleneck:
+            self.down = nn.Linear(row_dim, d)
+            self.up = nn.Linear(d, row_dim)
+            # Zero-init the up-projection so the mixer starts as the identity.
+            nn.init.zeros_(self.up.weight)
+            nn.init.zeros_(self.up.bias)
+        self.attn = PreNorm(
+            d,
+            Residual(
+                _build_row_attention(
+                    d,
+                    heads=heads,
+                    dim_row_head=dim_row_head,
+                    dropout=attn_dropout,
+                    chunk_size=chunk_size,
+                )
+            ),
+        )
+        self.ff = PreNorm(d, Residual(FeedForward(d, mult=ff_mult, dropout=ff_dropout)))
+
+    def forward(
+        self, x: torch.Tensor, mask: torch.Tensor | None = None
+    ) -> torch.Tensor:
+        if self.bottleneck:
+            z = self.down(x)
+            z = self.attn(z, mask=mask)
+            z = self.ff(z)
+            return x + self.up(z)
+        x = self.attn(x, mask=mask)
+        x = self.ff(x)
+        return x
+
+
 class ColTransformer(nn.Module):
     """Column-attention (within-sample) transformer with configurable depth.
 
@@ -157,6 +222,9 @@ class RowTransformer(nn.Module):
                       attention (:class:`~fm4tag.models.attention.ChunkedRowAttention`);
                       ``None`` uses whole-batch
                       :class:`~fm4tag.models.attention.RowAttention`.
+        out_row_dim:  If set (and ``< row_dim``), run the row attention+FFN in
+                      a down-projected bottleneck of this width (see
+                      :class:`RowMixer`); ``None`` keeps the full ``row_dim``.
     """
 
     def __init__(
@@ -170,32 +238,21 @@ class RowTransformer(nn.Module):
         attn_dropout: float = 0.0,
         ff_dropout: float = 0.0,
         chunk_size: int | None = None,
+        out_row_dim: int | None = None,
     ) -> None:
         super().__init__()
         row_dim = dim * nfeats
         self.blocks = nn.ModuleList(
             [
-                nn.ModuleList(
-                    [
-                        PreNorm(
-                            row_dim,
-                            Residual(
-                                _build_row_attention(
-                                    row_dim,
-                                    heads=row_heads,
-                                    dim_row_head=dim_row_head,
-                                    dropout=attn_dropout,
-                                    chunk_size=chunk_size,
-                                )
-                            ),
-                        ),
-                        PreNorm(
-                            row_dim,
-                            Residual(
-                                FeedForward(row_dim, mult=ff_mult, dropout=ff_dropout)
-                            ),
-                        ),
-                    ]
+                RowMixer(
+                    row_dim,
+                    out_row_dim,
+                    heads=row_heads,
+                    dim_row_head=dim_row_head,
+                    ff_mult=ff_mult,
+                    attn_dropout=attn_dropout,
+                    ff_dropout=ff_dropout,
+                    chunk_size=chunk_size,
                 )
                 for _ in range(depth)
             ]
@@ -206,9 +263,8 @@ class RowTransformer(nn.Module):
     ) -> torch.Tensor:
         _, n, _ = x.shape
         x = rearrange(x, 'b n d -> b (n d)')
-        for attn, ff in self.blocks:
-            x = attn(x, mask=mask)
-            x = ff(x)
+        for mixer in self.blocks:
+            x = mixer(x, mask=mask)
         return rearrange(x, 'b (n d) -> b n d', n=n)
 
 
@@ -231,6 +287,9 @@ class RowColTransformer(nn.Module):
         attn_dropout: Dropout inside both attention sub-layers.
         ff_dropout:   Dropout inside both feed-forward sub-layers.
         chunk_size:   Chunked row attention — see :class:`RowTransformer`.
+        out_row_dim:  If set (and ``< row_dim``), run the row attention+FFN in a
+                      down-projected bottleneck of this width (see
+                      :class:`RowMixer`); ``None`` keeps the full ``row_dim``.
     """
 
     def __init__(
@@ -246,6 +305,7 @@ class RowColTransformer(nn.Module):
         attn_dropout: float = 0.0,
         ff_dropout: float = 0.0,
         chunk_size: int | None = None,
+        out_row_dim: int | None = None,
     ) -> None:
         super().__init__()
         row_dim = dim * nfeats
@@ -270,23 +330,15 @@ class RowColTransformer(nn.Module):
                                 FeedForward(dim, mult=ff_mult, dropout=ff_dropout)
                             ),
                         ),
-                        PreNorm(
+                        RowMixer(
                             row_dim,
-                            Residual(
-                                _build_row_attention(
-                                    row_dim,
-                                    heads=row_heads,
-                                    dim_row_head=dim_row_head,
-                                    dropout=attn_dropout,
-                                    chunk_size=chunk_size,
-                                )
-                            ),
-                        ),
-                        PreNorm(
-                            row_dim,
-                            Residual(
-                                FeedForward(row_dim, mult=ff_mult, dropout=ff_dropout)
-                            ),
+                            out_row_dim,
+                            heads=row_heads,
+                            dim_row_head=dim_row_head,
+                            ff_mult=ff_mult,
+                            attn_dropout=attn_dropout,
+                            ff_dropout=ff_dropout,
+                            chunk_size=chunk_size,
                         ),
                     ]
                 )
@@ -301,11 +353,10 @@ class RowColTransformer(nn.Module):
         # Column Attention expects a per-token ``(b, n)`` mask; row attention
         # keeps the per-sample ``(b,)`` mask.
         col_mask = mask[:, None].expand(-1, n) if mask is not None else None
-        for col_attn, col_ff, row_attn, row_ff in self.blocks:
+        for col_attn, col_ff, row_mixer in self.blocks:
             x = col_attn(x, mask=col_mask)
             x = col_ff(x)
             x = rearrange(x, 'b n d -> b (n d)')
-            x = row_attn(x, mask=mask)
-            x = row_ff(x)
+            x = row_mixer(x, mask=mask)
             x = rearrange(x, 'b (n d) -> b n d', n=n)
         return x

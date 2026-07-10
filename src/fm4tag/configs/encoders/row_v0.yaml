@@ -8,7 +8,7 @@
 # RowTransformer's head arg is `row_heads` and its head dim `dim_row_head`; it
 # has no column attention — so no `col_heads` or `dim_head`.  It supports
 # `chunk_size` for chunked row attention.
-#   type: row → RowTransformer(row_heads, dim_row_head, chunk_size, ...)
+#   type: row → RowTransformer(row_heads, dim_row_head, chunk_size, out_row_dim, ...)
 # `dim` and `nfeats` are injected at runtime.
 # ════════════════════════════════════════════════════════════════════════════
 
@@ -43,3 +43,4 @@ constituents:
         attn_dropout:  0.0
         ff_dropout:    0.0
         chunk_size:    512    # null = whole-batch row attention
+        out_row_dim:   128    # row attn+FFN bottleneck width (null = full row_dim)
