@@ -9,8 +9,8 @@
 # optimizer.backbone_lr — DDP-safe (all params in the optimiser from step 0).
 
 GPU_NODE=gpu-L40S-open,gpu-A40
-GPU_NUM=2
-NUM_WORKERS=8
+GPU_NUM=1
+NUM_WORKERS=16
 
 REPO=/storage3/DSIP/rriva/research/fm4tag-review
 VENV=${REPO}/.venv
@@ -32,11 +32,11 @@ mkdir -pv "${OUTPUT_BASE}"
 # checkpoint was pretrained with.  Checkpoints from pretrain.sh sweeps land in
 #   ${REPO}/slurm/pretraining/run_<TS>/<RUN_NAME>_<ID>/<RUN_NAME>/version_0/checkpoints/epochXXX-stepYYY.ckpt
 ENCODERS=(
-"rowcol ${REPO}/slurm/pretraining/run_XXXXXXXX_XXXXXX/CHANGE_ME.ckpt"
-"col    ${REPO}/slurm/pretraining/run_XXXXXXXX_XXXXXX/CHANGE_ME.ckpt"
+"rowcol ${REPO}/slurm/pretraining/run_20260710_152049/pretrain_20260710_152049_rowcol_bs_1024_c_1.0_jc_1.0_0/pretrain_20260710_152049_rowcol_bs_1024_c_1.0_jc_1.0/version_0/checkpoints/epoch018-step368125.ckpt"
+#"col    ${REPO}/slurm/pretraining/run_XXXXXXXX_XXXXXX/CHANGE_ME.ckpt"
 )
 
-BATCH_SIZES=(512)
+BATCH_SIZES=(2048)
 
 # "cross_entropy jet_contrastive": CE on the head output, SupCon on the
 # aggregator output.  Weights are normalised to unit sum; 0 disables the term.
