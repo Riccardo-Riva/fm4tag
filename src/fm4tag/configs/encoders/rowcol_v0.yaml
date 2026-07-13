@@ -17,9 +17,9 @@ global_encoder:
   dim: 64   # num_features injected at runtime from variables.jets.inputs
   layers:
     - type:         rowcol
-      depth:        4
-      col_heads:    2
-      row_heads:    3
+      depth:        6
+      col_heads:    4
+      row_heads:    4
       dim_head:     32
       dim_row_head: 32
       ff_mult:      1
@@ -32,16 +32,16 @@ constituents:
     _target_: fm4tag.models.Encoder
     dim:              64
     cont_embeddings:  MLP    # MLP | pos_singleMLP
-    proj_hidden:      128    # null → auto (3/4 × dim × n_tokens)
-    proj_out:         64     # null → auto (1/2 × dim × n_tokens)
+    proj_hidden:      256    # null → auto (3/4 × dim × n_tokens)
+    proj_out:         128     # null → auto (1/2 × dim × n_tokens)
     # categories and num_continuous are injected at runtime from variables.tracks
     layers:
       - type:          rowcol
-        depth:         4
+        depth:         6
         col_heads:     2
         row_heads:     4
         dim_head:      32
-        dim_row_head:  64
+        dim_row_head:  32
         ff_mult:       1
         attn_dropout:  0.0
         ff_dropout:    0.0

@@ -290,9 +290,14 @@ callbacks:
     monitor:    val/loss
     save_top_k: 3
     mode:       min
-    # Explicit filename: the metric name contains a '/', which would otherwise
-    # be auto-inserted into the filename and create subdirectories.
-    filename:   'epoch{epoch:03d}-step{step}'
+    save_last:  true          # also write a `last.ckpt` (latest training state)
+    # The monitored metric 'val/loss' contains a '/'. With
+    # auto_insert_metric_name: false only the metric VALUE is interpolated
+    # (via the {val/loss:.4f} placeholder) — the metric NAME never reaches the
+    # filename, so no spurious subdirectory is created. The human-readable
+    # label 'val_loss' is written literally (slash rewritten as underscore),
+    # giving names like `epoch012-step3400-val_loss0.1235.ckpt`.
+    filename:   'epoch{epoch:03d}-step{step}-val_loss{val/loss:.4f}'
     auto_insert_metric_name: false
 
   early_stopping:
