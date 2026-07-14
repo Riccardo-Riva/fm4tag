@@ -14,8 +14,10 @@
 
 global_encoder:
   _target_: fm4tag.models.GlobalTransformerEncoder
-  feature_dim: 64
-  dim: 64   # num_features injected at runtime from variables.jets.inputs
+  dim:          64    # token width — the backbone runs at this width
+  proj_hidden:  null  # null → auto (2 × dim × n_tokens)
+  proj_out:     64    # projector output width — head only, never the backbone
+  # num_features injected at runtime from variables.jets.inputs
   layers:
     - type:         row
       depth:        4

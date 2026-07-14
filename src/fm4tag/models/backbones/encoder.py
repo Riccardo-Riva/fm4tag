@@ -49,40 +49,50 @@ class GlobalEncoder(nn.Module):
 
     Heads
     -----
-    * ``projector``     — MLP mapping ``(num_features * dim)`` → projection space,
+    * ``projector``     — MLP mapping ``(num_features * dim)`` → ``proj_out``,
                           shared across all views for the contrastive loss.
     * ``reconstructor`` — per-feature sep_MLP for denoising reconstruction (MSE).
 
     Args:
-        num_features: Number of global continuous features ``F_g``.
-        dim:          Embedding dimension.
+        num_features: Number of global continuous features ``F_g``.  Injected at
+                      runtime from ``variables.<global_object>.inputs``.
+        dim:          Token embedding width — the width the backbone runs at.
+        proj_out:     Output width of the contrastive projector head.  Sizes only
+                      the head; the backbone never sees it.
+        proj_hidden:  Hidden width of the projector.  ``None`` → auto
+                      (``2 * proj_in``).  The auto rule *expands* here, where
+                      :class:`Encoder`'s bottlenecks, because the global
+                      ``proj_in`` (``num_features * dim``) is a handful of
+                      features wide rather than a few dozen.
     """
 
     def __init__(
         self,
         num_features: int,
-        feature_dim: int,  # injected at runtime from variables.jets.inputs
         dim: int,
+        proj_out: int,
+        proj_hidden: int | None = None,
     ) -> None:
         super().__init__()
         self.num_features = num_features
         self.dim = dim
-        self.feature_dim = feature_dim
+        self.proj_out = proj_out
 
-        H = 2 * self.feature_dim
+        H = 2 * self.dim
         self.fc1 = nn.Conv1d(
             num_features, num_features * H, kernel_size=1, groups=num_features
         )
         self.fc2 = nn.Conv1d(
             num_features * H,
-            num_features * self.feature_dim,
+            num_features * self.dim,
             kernel_size=1,
             groups=num_features,
         )
 
-        proj_in = num_features * self.feature_dim
-        self.projector = simple_MLP([proj_in, 2 * proj_in, self.dim])
-        self.reconstructor = sep_MLP(self.feature_dim, num_features, [1] * num_features)
+        proj_in = num_features * self.dim
+        _proj_hidden = proj_hidden if proj_hidden is not None else 2 * proj_in
+        self.projector = simple_MLP([proj_in, _proj_hidden, self.proj_out])
+        self.reconstructor = sep_MLP(self.dim, num_features, [1] * num_features)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Embed global features.
@@ -91,11 +101,11 @@ class GlobalEncoder(nn.Module):
             x: ``(N, F_g)`` continuous feature values (already normalised).
 
         Returns:
-            ``(N, F_g, feature_dim)`` — one embedding token per feature.
+            ``(N, F_g, dim)`` — one embedding token per feature.
         """
         h = F.relu(self.fc1(x.unsqueeze(-1)))  # (N, F_g*H, 1)
-        out = self.fc2(h).squeeze(-1)  # (N, F_g*feature_dim)
-        return out.view(x.size(0), self.num_features, self.feature_dim)
+        out = self.fc2(h).squeeze(-1)  # (N, F_g*dim)
+        return out.view(x.size(0), self.num_features, self.dim)
 
 
 class GlobalTransformerEncoder(GlobalEncoder):
@@ -103,35 +113,44 @@ class GlobalTransformerEncoder(GlobalEncoder):
 
     Drop-in alternative to :class:`GlobalEncoder` (same constructor arguments
     plus ``layers``, same heads, same forward signature).  After the
-    per-feature MLP embedding, the ``(N, F_g, feature_dim)`` tokens are
-    refined by a declarative stack of attention blocks using the same
-    ``layers`` syntax as :class:`Encoder`:
+    per-feature MLP embedding, the ``(N, F_g, dim)`` tokens are refined by a
+    declarative stack of attention blocks using the same ``layers`` syntax as
+    :class:`Encoder`:
 
     * ``type: col``    → :class:`ColTransformer`
     * ``type: row``    → :class:`RowTransformer`
     * ``type: rowcol`` → :class:`RowColTransformer`
 
-    The attention ``dim`` is ``feature_dim`` and ``nfeats`` (for row-aware
-    blocks) is ``num_features`` — both injected automatically.
+    ``dim`` and ``nfeats`` (for row-aware blocks) are injected into every layer
+    automatically — ``nfeats`` is ``num_features``.
 
     Args:
-        num_features: Number of global continuous features ``F_g``.
-        feature_dim:  Per-feature token embedding dimension.
-        dim:          Output dimension of the contrastive projector.
+        num_features: Number of global continuous features ``F_g``.  Injected at
+                      runtime from ``variables.<global_object>.inputs``.
+        dim:          Token embedding width — the width the attention stack runs at.
+        proj_out:     Output width of the contrastive projector head.
         layers:       List of layer-config dicts (see :class:`Encoder`).
+        proj_hidden:  Hidden width of the projector.  ``None`` → auto
+                      (``2 * proj_in``); see :class:`GlobalEncoder`.
     """
 
     def __init__(
         self,
         num_features: int,
-        feature_dim: int,
         dim: int,
+        proj_out: int,
         layers: list,
+        proj_hidden: int | None = None,
     ) -> None:
-        super().__init__(num_features=num_features, feature_dim=feature_dim, dim=dim)
-        self.layers = _build_layers(layers, dim=feature_dim, nfeats=num_features)
+        super().__init__(
+            num_features=num_features,
+            dim=dim,
+            proj_out=proj_out,
+            proj_hidden=proj_hidden,
+        )
+        self.layers = _build_layers(layers, dim=dim, nfeats=num_features)
         # Final norm of the pre-norm residual stream — see :class:`Encoder`.
-        self.norm_out = nn.LayerNorm(feature_dim)
+        self.norm_out = nn.LayerNorm(dim)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Embed global features and refine them with attention.
@@ -140,7 +159,7 @@ class GlobalTransformerEncoder(GlobalEncoder):
             x: ``(N, F_g)`` continuous feature values (already normalised).
 
         Returns:
-            ``(N, F_g, feature_dim)`` — one embedding token per feature.
+            ``(N, F_g, dim)`` — one embedding token per feature.
         """
         tokens = super().forward(x)
         for layer in self.layers:

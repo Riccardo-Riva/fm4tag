@@ -106,22 +106,22 @@ def test_layer_swap_produces_correct_block_type_and_runs():
 # ---------------------------------------------------------------------------
 
 _N_GLOBAL = 2
-_FEATURE_DIM = 16
+_GLOBAL_DIM = 16
 
 
 def test_global_transformer_encoder_builds_and_runs():
     """GlobalTransformerEncoder is a drop-in replacement for GlobalEncoder."""
     model = GlobalTransformerEncoder(
         num_features=_N_GLOBAL,
-        feature_dim=_FEATURE_DIM,
-        dim=_DIM,
+        dim=_GLOBAL_DIM,
+        proj_out=_DIM,
         layers=[{'type': 'col', 'depth': 2, 'heads': 2, 'dim_head': 8}],
     )
     assert isinstance(model.layers[0], ColTransformer)
 
     x = torch.randn(_B, _N_GLOBAL)
     out = model(x)
-    assert out.shape == (_B, _N_GLOBAL, _FEATURE_DIM)
+    assert out.shape == (_B, _N_GLOBAL, _GLOBAL_DIM)
     assert not out.isnan().any()
 
     # Same heads as GlobalEncoder, used identically by the pretrain module.
@@ -139,15 +139,15 @@ def test_global_encoder_selected_via_hydra_target():
     ff_cfg = OmegaConf.create(
         {
             '_target_': 'fm4tag.models.GlobalEncoder',
-            'feature_dim': _FEATURE_DIM,
-            'dim': _DIM,
+            'dim': _GLOBAL_DIM,
+            'proj_out': _DIM,
         }
     )
     tr_cfg = OmegaConf.create(
         {
             '_target_': 'fm4tag.models.GlobalTransformerEncoder',
-            'feature_dim': _FEATURE_DIM,
-            'dim': _DIM,
+            'dim': _GLOBAL_DIM,
+            'proj_out': _DIM,
             'layers': [{'type': 'col', 'depth': 1, 'heads': 2, 'dim_head': 8}],
         }
     )
@@ -158,4 +158,4 @@ def test_global_encoder_selected_via_hydra_target():
     assert type(tr_enc) is GlobalTransformerEncoder
 
     x = torch.randn(_B, _N_GLOBAL)
-    assert ff_enc(x).shape == tr_enc(x).shape == (_B, _N_GLOBAL, _FEATURE_DIM)
+    assert ff_enc(x).shape == tr_enc(x).shape == (_B, _N_GLOBAL, _GLOBAL_DIM)

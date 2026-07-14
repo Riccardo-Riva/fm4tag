@@ -25,7 +25,7 @@ _N_CLASSES = 4
 
 @pytest.fixture()
 def encoders():
-    global_enc = GlobalEncoder(num_features=2, feature_dim=_DIM, dim=_DIM)
+    global_enc = GlobalEncoder(num_features=2, dim=_DIM, proj_out=_DIM)
     track_enc = Encoder(
         categories=_CATEGORIES,
         num_continuous=_NUM_CONTINUOUS,

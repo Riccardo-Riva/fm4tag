@@ -73,7 +73,7 @@ def _make_encoders():
 
     return torch.nn.ModuleDict(
         {
-            'jets': GlobalEncoder(num_features=2, feature_dim=4, dim=4),
+            'jets': GlobalEncoder(num_features=2, dim=4, proj_out=4),
             'tracks': Encoder(
                 categories=[2, 3],
                 num_continuous=2,

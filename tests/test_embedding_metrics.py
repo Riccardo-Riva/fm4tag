@@ -22,7 +22,7 @@ _DIM = 16
 def module():
     encoders = torch.nn.ModuleDict(
         {
-            'jets': GlobalEncoder(num_features=2, feature_dim=_DIM, dim=_DIM),
+            'jets': GlobalEncoder(num_features=2, dim=_DIM, proj_out=_DIM),
             'tracks': Encoder(
                 categories=_CATEGORIES,
                 num_continuous=_NUM_CONTINUOUS,

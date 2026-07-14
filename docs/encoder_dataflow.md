@@ -21,6 +21,10 @@ raw features ──► [1] embedding front-end ──► tokens (B, N, dim)
 `N` = number of tokens = number of features for that object; `dim` = token
 embedding width. Only stage **[2]** differs between the three encoder kinds.
 
+> **Constructor names.** Both encoder kinds name the token width `dim`, and the
+> projector's widths `proj_hidden` / `proj_out`. The projector widths size only
+> head **[3a]** — they never touch the backbone.
+
 Concrete sizes in the default config:
 
 | object | class | N (tokens) | dim |
@@ -47,7 +51,7 @@ object type; the backbone downstream is identical.
 x_cont  (B, F_g)                         # F_g continuous global features
    │  per-feature grouped-Conv1d MLP  (fc1 → ReLU → fc2, groups=F_g)
    ▼
-tokens  (B, F_g, feature_dim)            # one token per feature   → N = F_g
+tokens  (B, F_g, dim)                    # one token per feature   → N = F_g
 ```
 
 ### Constituent object (`Encoder`) — categorical + continuous
