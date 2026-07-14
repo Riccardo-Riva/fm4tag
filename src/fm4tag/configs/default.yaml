@@ -128,9 +128,9 @@ datamodule:
 # global_dim and const_dims are injected at runtime from the encoders.
 aggregator:
   _target_:     fm4tag.models.TransformerAggregator
-  depth:        4
+  depth:        6
   heads:        4
-  dim_head:     32
+  dim_head:     64
   ff_mult:      4
   ff_dropout:   0.0
   attn_dropout: 0.0
@@ -140,7 +140,7 @@ aggregator:
 head:
   _target_: fm4tag.models.MultiStreamClassifierHead
   mlp_hidden:  256   # null → auto (max(jet_dim // 2, y_dim))
-  mlp_dropout: 0.0
+  mlp_dropout: 0.02
 
 # ── Multi-view augmentation pipelines (shared by pretrain and finetune) ──────
 # First view is the denoising input; all views participate in contrastive.
