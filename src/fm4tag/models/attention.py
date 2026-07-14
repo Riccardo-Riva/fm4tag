@@ -92,15 +92,19 @@ class Attention(nn.Module):
 
 
 class RowAttention(nn.Module):
-    """Intersample (row) attention across the whole batch dimension.
+    """All-pairs intersample (row) attention over the batch axis.
 
-    Every sample attends to every other sample in the batch.  For chunked
-    (grouped) intersample attention see :class:`ChunkedRowAttention`.
+    Every sample attends to every other sample in the batch, independently for
+    each of the ``N`` token positions and at width ``dim`` — the token axis is
+    a batch dimension, so one attention operator is shared across tokens.  Cost
+    is O(B²) in the batch size; see :class:`InducedRowAttention` for the
+    O(B·num_inds) inducing-point variant.
+
     Consequence: outputs (also at inference) depend on batch composition.
 
     Args:
-        x:    ``(B, dim)`` — one flattened feature vector per sample.
-        mask: ``(B,)`` bool — ``True`` = valid, ``False`` = padding.
+        x:    ``(B, N, dim)`` — token grid.
+        mask: ``(B,)`` bool — ``True`` = valid sample, ``False`` = padding.
     """
 
     def __init__(self, dim, heads=8, dim_row_head=16, dropout=0.0):
@@ -115,14 +119,16 @@ class RowAttention(nn.Module):
         h = self.heads
 
         q, k, v = self.to_qkv(x).chunk(3, dim=-1)
-        q = rearrange(q, 'b (h d) -> h b d', h=h)
-        k = rearrange(k, 'b (h d) -> h b d', h=h)
-        v = rearrange(v, 'b (h d) -> h b d', h=h)
+        # (B, N, h*d) → (N, h, B, d): tokens become a batch dim, the sample axis
+        # B becomes the attention sequence.
+        q = rearrange(q, 'b n (h d) -> n h b d', h=h)
+        k = rearrange(k, 'b n (h d) -> n h b d', h=h)
+        v = rearrange(v, 'b n (h d) -> n h b d', h=h)
 
         attn_mask = None
         if mask is not None:
-            # Key-padding mask: (B,) → (1, 1, B), broadcast over heads/queries.
-            attn_mask = torch.where(mask[None, None, :], 0.0, float('-inf'))
+            # Key-padding mask over the sample axis: (B,) → (1, 1, 1, B).
+            attn_mask = torch.where(mask, 0.0, float('-inf'))[None, None, None, :]
 
         out = sdpa(
             q,
@@ -131,73 +137,36 @@ class RowAttention(nn.Module):
             attn_mask=attn_mask,
             dropout_p=self.dropout if self.training else 0.0,
         )
-        out = rearrange(out, 'h b d -> b (h d)')
+        out = rearrange(out, 'n h b d -> b n (h d)')
         return self.to_out(out)
 
 
-class ChunkedRowAttention(nn.Module):
-    """Intersample (row) attention within disjoint chunks of the batch.
+class CrossAttention(nn.Module):
+    """Multi-head cross-attention with the sample axis as the sequence.
 
-    The batch is split into disjoint groups of ``chunk_size`` samples and
-    attention is computed independently within each group.  In **train** mode a
-    random permutation is applied before chunking and its inverse afterwards, so
-    the caller sees outputs in the original batch order.  In **eval** mode
-    contiguous (identity) chunks are used, keeping evaluation deterministic.
-
-    When ``chunk_size`` does not divide ``B`` (including ``chunk_size >= B``,
-    which yields a single group) the batch is zero-padded up to a multiple of
-    ``chunk_size``; the padded rows are discarded after attention.
-
-    Args:
-        x:          ``(B, dim)`` — one flattened feature vector per sample.
-        chunk_size: Group size along B.
+    Both operands are ``(N, S, dim)``: the token axis ``N`` is a batch
+    dimension, so the projections are shared across token positions, and ``S``
+    (samples, or inducing points) is the attention sequence.  Used to build the
+    two stages of :class:`InducedRowAttention`.
     """
 
-    def __init__(self, dim, heads=8, dim_row_head=16, dropout=0.0, chunk_size=None):
+    def __init__(self, dim, heads=8, dim_head=16, dropout=0.0):
         super().__init__()
-        if chunk_size is None:
-            raise ValueError('ChunkedRowAttention requires chunk_size to be set')
-        inner_dim = dim_row_head * heads
+        inner_dim = dim_head * heads
         self.heads = heads
-        self.to_qkv = nn.Linear(dim, inner_dim * 3, bias=False)
+        self.to_q = nn.Linear(dim, inner_dim, bias=False)
+        self.to_kv = nn.Linear(dim, inner_dim * 2, bias=False)
         self.to_out = nn.Linear(inner_dim, dim)
         self.dropout = dropout
-        self.chunk_size = chunk_size
 
-    def forward(self, x, mask=None):
-        B = x.size(0)
+    def forward(self, x_q, x_kv, attn_mask=None):
         h = self.heads
 
-        if self.training:
-            perm = torch.randperm(B, device=x.device)
-            inv = torch.empty_like(perm)
-            inv[perm] = torch.arange(B, device=x.device)
-            xp = x[perm]
-        else:
-            xp = x
+        q = rearrange(self.to_q(x_q), 'n s (h d) -> n h s d', h=h)
+        k, v = self.to_kv(x_kv).chunk(2, dim=-1)
+        k = rearrange(k, 'n s (h d) -> n h s d', h=h)
+        v = rearrange(v, 'n s (h d) -> n h s d', h=h)
 
-        pad = (-B) % self.chunk_size
-        if pad:
-            # pad the B axis with zeros; padded rows are discarded after
-            xp = F.pad(xp, (0, 0, 0, pad))
-        xp = rearrange(xp, '(g c) d -> g c d', c=self.chunk_size)
-
-        # Mask the padded rows as keys so they do not dilute the softmax of the
-        # valid samples sharing the (last) incomplete group.  Only key columns
-        # are masked, so every query row keeps at least one valid key
-        # (pad < chunk_size) and no row becomes fully -inf (hence no NaN); the
-        # padded query rows are discarded by the ``[:B]`` slice below.
-        attn_mask = None
-        if pad:
-            g = xp.size(0)
-            key_valid = torch.arange(g * self.chunk_size, device=x.device) < B
-            key_valid = rearrange(key_valid, '(g c) -> g c', c=self.chunk_size)
-            attn_mask = torch.where(key_valid[:, None, None, :], 0.0, float('-inf'))
-
-        q, k, v = self.to_qkv(xp).chunk(3, dim=-1)
-        q = rearrange(q, 'g c (h d) -> g h c d', h=h)
-        k = rearrange(k, 'g c (h d) -> g h c d', h=h)
-        v = rearrange(v, 'g c (h d) -> g h c d', h=h)
         out = sdpa(
             q,
             k,
@@ -205,9 +174,79 @@ class ChunkedRowAttention(nn.Module):
             attn_mask=attn_mask,
             dropout_p=self.dropout if self.training else 0.0,
         )
-        out = rearrange(out, 'g h c d -> g c (h d)')
-        out = self.to_out(out)
-        out = rearrange(out, 'g c d -> (g c) d')[:B]
-        if self.training:
-            return out[inv]
-        return out
+        out = rearrange(out, 'n h s d -> n s (h d)')
+        return self.to_out(out)
+
+
+class InducedRowAttention(nn.Module):
+    """Induced intersample (row) attention — ISAB over the batch axis.
+
+    Two cross-attentions through ``num_inds`` learned inducing points replace
+    the all-pairs row attention of :class:`RowAttention`:
+
+    1. the inducing points read the whole batch → summary ``(num_inds, dim)``
+    2. every sample reads that summary          → ``(B, dim)``
+
+    Cost is O(B · num_inds) rather than O(B²), and the batch size only ever
+    appears as a key/query length against a *fixed* number of inducing points.
+    A variable ``B`` — the packed valid-constituent count changes every step —
+    therefore needs no chunking, no random permutation and no tail padding, and
+    no attention mask is required, which keeps the whole row path eligible for
+    FlashAttention.
+
+    Like :class:`RowAttention` this runs per token at width ``dim`` with the
+    projections shared across the ``N`` token positions: the tabicl
+    ``ColEmbedding`` factorisation, in which each feature builds its own
+    distribution summary across samples and cross-feature mixing is left to the
+    column attention.
+
+    Two deliberate choices:
+
+    * The inducing points are **per token** (``(N, num_inds, dim)``).  tabicl
+      shares one set across columns because its column count varies per table;
+      here ``N`` is fixed per encoder and each token is a distinct feature with
+      its own embedding subspace, so each gets its own probes.  The cost is
+      ``N · num_inds · dim`` parameters (~19k for tracks).
+    * ``to_out`` of the second cross-attention is **zero-initialised**, so under
+      the surrounding residual the block starts as the identity and learns
+      intersample mixing from there.  This replaces the zero-initialised
+      up-projection of the old ``out_row_dim`` bottleneck as the stabiliser for
+      the row path.
+
+    Args:
+        x:    ``(B, N, dim)`` — token grid.
+        mask: ``(B,)`` bool — ``True`` = valid sample, ``False`` = padding.
+    """
+
+    def __init__(self, dim, nfeats, heads=8, dim_row_head=16, dropout=0.0, num_inds=16):
+        super().__init__()
+        self.inds = nn.Parameter(torch.empty(nfeats, num_inds, dim))
+        nn.init.trunc_normal_(self.inds, std=0.02)
+
+        self.norm_inds = nn.LayerNorm(dim)
+        self.attn_inds = CrossAttention(
+            dim, heads=heads, dim_head=dim_row_head, dropout=dropout
+        )
+        self.norm_summary = nn.LayerNorm(dim)
+        self.attn_out = CrossAttention(
+            dim, heads=heads, dim_head=dim_row_head, dropout=dropout
+        )
+
+        nn.init.zeros_(self.attn_out.to_out.weight)
+        nn.init.zeros_(self.attn_out.to_out.bias)
+
+    def forward(self, x, mask=None):
+        # (B, N, dim) → (N, B, dim): tokens become a batch dim, samples become
+        # the attention sequence.
+        xt = rearrange(x, 'b n d -> n b d')
+
+        attn_mask = None
+        if mask is not None:
+            # Samples are keys only in the first cross-attention; the inducing
+            # points (keys of the second) are never padding.
+            attn_mask = torch.where(mask, 0.0, float('-inf'))[None, None, None, :]
+
+        inds = self.norm_inds(self.inds)  # (N, num_inds, dim)
+        summary = inds + self.attn_inds(inds, xt, attn_mask)  # (N, num_inds, dim)
+        out = self.attn_out(xt, self.norm_summary(summary))  # (N, B, dim)
+        return rearrange(out, 'n b d -> b n d')

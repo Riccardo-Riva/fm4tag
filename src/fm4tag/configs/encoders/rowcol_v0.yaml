@@ -7,7 +7,7 @@
 #
 # Every `layers` entry lists ONLY the kwargs its block class accepts:
 #   type: rowcol → RowColTransformer(col_heads, row_heads, dim_head,
-#                                    dim_row_head, chunk_size, out_row_dim, ...)
+#                                    dim_row_head, num_inds, ...)
 # `dim` and (for row-aware blocks) `nfeats` are injected at runtime.
 # ════════════════════════════════════════════════════════════════════════════
 
@@ -25,7 +25,7 @@ global_encoder:
       ff_mult:      1
       attn_dropout: 0.0
       ff_dropout:   0.0
-      chunk_size:   256
+      num_inds:     16     # null = all-pairs row attention over the batch
 
 constituents:
   tracks:
@@ -45,7 +45,7 @@ constituents:
         ff_mult:       1
         attn_dropout:  0.0
         ff_dropout:    0.0
-        chunk_size:    512    # null = whole-batch row attention
-        out_row_dim:   128    # row attn+FFN bottleneck: run at 128 instead of
-                              # row_dim = dim*nfeats (~1216) -> ~14x smaller.
-                              # null (or >= row_dim) = full-width row block.
+        num_inds:      16     # ISAB inducing points: row attention costs
+                              # O(B*num_inds) instead of O(B^2) and handles the
+                              # variable packed-constituent count B natively.
+                              # null = all-pairs row attention over the batch.

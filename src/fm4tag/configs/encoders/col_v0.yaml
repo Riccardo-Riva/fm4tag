@@ -6,7 +6,7 @@
 # or overridden on the CLI:  encoders=col_v0
 #
 # ColTransformer's head arg is `heads` (not `col_heads`), and it has no row
-# attention — so no `row_heads`, `dim_row_head`, or `chunk_size`.
+# attention — so no `row_heads`, `dim_row_head`, or `num_inds`.
 #   type: col → ColTransformer(heads, dim_head, ...)
 # `dim` is injected at runtime.
 # ════════════════════════════════════════════════════════════════════════════

@@ -76,30 +76,52 @@ def test_cpu_tensor_falls_back_even_if_flash_attn_available():
     assert out.shape == (2, 4, 6, 8)
 
 
+# (q_shape, kv_shape) — equal for self-attention, different sequence lengths for
+# the cross-attention inside InducedRowAttention.
+_SHAPES = [
+    # Attention (column), self: (b, h, n, d)
+    ((2, 4, 6, 8), (2, 4, 6, 8)),
+    # RowAttention, self over the sample axis: (n, h, B, d)
+    ((5, 4, 10, 8), (5, 4, 10, 8)),
+    # CrossAttention stage 1 — inducing points read the batch: q seq = num_inds,
+    # kv seq = B.
+    ((5, 4, 6, 8), (5, 4, 10, 8)),
+    # CrossAttention stage 2 — samples read the summary: q seq = B,
+    # kv seq = num_inds.
+    ((5, 4, 10, 8), (5, 4, 6, 8)),
+]
+
+
+@pytest.mark.parametrize('q_shape,kv_shape', _SHAPES)
+def test_fallback_handles_cross_attention_shapes(q_shape, kv_shape):
+    """The SDPA fallback (what runs without flash-attn) must accept seq_q != seq_kv."""
+    torch.manual_seed(0)
+    q = torch.randn(*q_shape)
+    k = torch.randn(*kv_shape)
+    v = torch.randn(*kv_shape)
+    out = sdpa(q, k, v)
+    assert out.shape == q_shape
+    assert torch.isfinite(out).all()
+
+
 @pytest.mark.skipif(not torch.cuda.is_available(), reason='requires a CUDA device')
 @pytest.mark.skipif(
     not attention_mod.HAS_FLASH_ATTN, reason='requires flash-attn installed'
 )
-@pytest.mark.parametrize(
-    'shape',
-    [
-        (2, 4, 6, 8),  # Attention-style: (b, h, n, d)
-        (4, 6, 8),  # RowAttention-style: (h, seq, d), no batch dim
-        (3, 4, 5, 8),  # ChunkedRowAttention-style: (g, h, c, d)
-    ],
-)
-def test_flash_path_matches_sdpa_on_gpu(shape):
+@pytest.mark.parametrize('q_shape,kv_shape', _SHAPES)
+def test_flash_path_matches_sdpa_on_gpu(q_shape, kv_shape):
     torch.manual_seed(0)
     device = torch.device('cuda')
     dtype = torch.float16
-    q = torch.randn(*shape, device=device, dtype=dtype)
-    k = torch.randn(*shape, device=device, dtype=dtype)
-    v = torch.randn(*shape, device=device, dtype=dtype)
+    q = torch.randn(*q_shape, device=device, dtype=dtype)
+    k = torch.randn(*kv_shape, device=device, dtype=dtype)
+    v = torch.randn(*kv_shape, device=device, dtype=dtype)
 
     out_flash = sdpa(q, k, v)
     out_ref = F.scaled_dot_product_attention(
         q, k, v, attn_mask=None, dropout_p=0.0, is_causal=False
     )
+    assert out_flash.shape == q_shape
     assert torch.allclose(out_flash, out_ref, atol=2e-2, rtol=2e-2)
 
 

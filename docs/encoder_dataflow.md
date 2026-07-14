@@ -23,10 +23,16 @@ embedding width. Only stage **[2]** differs between the three encoder kinds.
 
 Concrete sizes in the default config:
 
-| object | class | N (tokens) | dim | row_dim = N·dim |
-|---|---|---|---|---|
-| `jets` (global) | `GlobalTransformerEncoder` | 2 (pt, eta) | 64 | 128 |
-| `tracks` (constituent) | `Encoder` | 19 (9 cat + 10 con) | 64 | 1216 |
+| object | class | N (tokens) | dim |
+|---|---|---|---|
+| `jets` (global) | `GlobalTransformerEncoder` | 2 (pt, eta) | 64 |
+| `tracks` (constituent) | `Encoder` | 19 (9 cat + 10 con) | 64 |
+
+> **What is `B`?** For the global object it is the jets in the batch. For a
+> constituent object it is **every valid constituent of every jet in the batch**,
+> packed by boolean-indexing the padded `(B_jets, C)` grid (see
+> `modules/view_encoding.py`). So `B` is *data-dependent and changes every step* —
+> which is why the row step must handle a variable set size natively.
 
 ---
 
@@ -74,8 +80,13 @@ Two attention axes are in play:
 - **Column (within-sample):** tokens of *one* sample attend to each other —
   over the `N` axis, at width `dim`. Cheap, batch-independent.
 - **Row (intersample):** each *sample* attends to *other samples* in the batch —
-  over the `B` axis, on the flattened `row_dim = N·dim` vector. Expensive,
-  batch-composition dependent.
+  over the `B` axis, **independently per token and at width `dim`**, with the
+  projections shared across tokens. Batch-composition dependent.
+
+This is the factorisation tabicl uses (`ColEmbedding` attends over samples
+per-column; `RowInteraction` attends over columns per-row). The row step never
+sees a token's neighbours — cross-feature mixing is entirely the column step's
+job, and `rowcol` alternates the two.
 
 ### `col` — `ColTransformer`
 
@@ -84,8 +95,8 @@ Column attention only. Operates directly on `(B, N, dim)`.
 ```
 x (B, N, dim)
    └─ depth × [
-        PreNorm(dim) → Attention(over N, within sample)   → + residual
-        PreNorm(dim) → FeedForward(dim)                    → + residual
+        x + Attention(over N, within sample)(norm(x))
+        x + FeedForward(dim)(norm(x))
       ]
 x (B, N, dim)
 ```
@@ -98,9 +109,8 @@ Row attention only. Flattens the tokens, mixes across the batch, unflattens.
 
 ```
 x (B, N, dim)
-   └─ flatten ─► (B, row_dim),  row_dim = N·dim
-        └─ depth × RowMixer        # see below
-   └─ unflatten ─► (B, N, dim)
+   └─ depth × RowMixer        # see below
+x (B, N, dim)
 ```
 
 ### `rowcol` — `RowColTransformer`
@@ -111,67 +121,74 @@ Column then row, per depth step. Reshapes between the two axes each step.
 x (B, N, dim)
    └─ depth × [
         # --- column (within-sample), at width dim ---
-        PreNorm(dim) → Attention(over N)        → + residual
-        PreNorm(dim) → FeedForward(dim)         → + residual
-        flatten ─► (B, row_dim)
+        x + Attention(over N)(norm(x))
+        x + FeedForward(dim)(norm(x))
         # --- row (intersample) ---
         RowMixer                                 # see below
-        unflatten ─► (B, N, dim)
       ]
 x (B, N, dim)
 ```
 
 ---
 
-## RowMixer — the row (intersample) step, with optional bottleneck
+## RowMixer — the row (intersample) step
 
-Used by `row` and `rowcol`. Input/output are the flattened `(B, row_dim)`.
-`row_dim = N·dim` is large (1216 for tracks), so running attention **and** the
-GEGLU feed-forward at `row_dim` is what made this block ~95% of the model. The
-`out_row_dim` knob down-projects the whole row step into a bottleneck.
-
-### Bottleneck path — `out_row_dim < row_dim` (default: `out_row_dim = 128`)
+Used by `row` and `rowcol`. Input and output are the token grid `(B, N, dim)`;
+no flattening. Row attention transposes to `(N, B, dim)` so the token axis is a
+batch dimension and the **sample axis `B` is the attention sequence**:
 
 ```
-x (B, row_dim)
-   │  down: Linear(row_dim → out_row_dim)
+x (B, N, dim)
+   │  x + RowAttention|InducedRowAttention (over B, per token)(norm(x))
+   │  x + FeedForward(dim)(norm(x))
    ▼
-z (B, out_row_dim)
-   │  PreNorm → RowAttention(across B, intersample) → + residual   ┐ all at
-   │  PreNorm → FeedForward(out_row_dim)            → + residual   ┘ out_row_dim
-   ▼
-z (B, out_row_dim)
-   │  up: Linear(out_row_dim → row_dim)      # weight+bias zero-init
-   ▼
-x + up(z)      (B, row_dim)                  # single residual; starts as identity
+x (B, N, dim)
 ```
 
-- The up-projection is **zero-initialised**, so the row step begins as the
-  identity (the encoder starts col-only) and learns intersample mixing
-  adapter-style — a stabiliser for the otherwise-diverging row path.
-- Attention/FFN cost now scales with `out_row_dim`, not `row_dim`
-  (tracks `RowColTransformer`: 22.9M → 2.09M params).
+Because every projection has width `dim` (64), not `N·dim` (1216), the row step
+is affordable at full width — the old `out_row_dim` down/up bottleneck is gone.
 
-### Full-width path — `out_row_dim = None` (or `≥ row_dim`)
+### RowAttention variants (both attend over the `B` axis, per token)
+
+`num_inds` in the layer config picks one:
+
+- `num_inds: null` → **`RowAttention`**: all-pairs — every sample attends to
+  every other sample. O(B²).
+- `num_inds: m` (default 16) → **`InducedRowAttention`**: ISAB. Two
+  cross-attentions through `m` learned inducing points, O(B·m):
 
 ```
-x (B, row_dim)
-   │  PreNorm(row_dim) → RowAttention(across B) → + residual
-   │  PreNorm(row_dim) → FeedForward(row_dim)   → + residual
-   ▼
-x (B, row_dim)
+        inducing points I (N, m, dim)          x (N, B, dim)
+                    │                               │
+                    └────► MAB₁: I attends to x ◄───┘        # read the batch
+                                  │
+                          summary (N, m, dim)
+                                  │
+                    ┌────► MAB₂: x attends to summary        # every sample reads it
+                    ▼
+                 out (N, B, dim)
 ```
 
-### RowAttention variants (both operate over the `B` axis)
+Why ISAB is the default:
 
-- `chunk_size = null` → **`RowAttention`**: every sample attends to every other
-  sample in the batch.
-- `chunk_size = k` → **`ChunkedRowAttention`**: the batch is split into disjoint
-  groups of `k` (randomly permuted in train, contiguous in eval) and attention
-  is computed within each group. Padding rows (when `k ∤ B`) are masked out.
+- **Variable `B` is native.** The inducing points are fixed learned queries, so
+  the packed constituent count can change every step. No chunking, no random
+  permutation, no tail padding — all of which the old `ChunkedRowAttention`
+  needed, and which made a sample's output depend on which 512 others happened
+  to land in its chunk.
+- **Permutation-invariant**, and identical in train and eval.
+- **No attention mask is needed**, which keeps the row path eligible for
+  FlashAttention (an arbitrary mask forces the SDPA fallback).
+- The out-projection of MAB₂ is **zero-initialised**, so under the residual the
+  row step starts as the identity (the encoder begins col-only) and learns
+  intersample mixing from there.
 
-> Consequence of row attention: a sample's output depends on which other
-> samples share its batch/chunk — keep evaluation batch composition fixed when
+The inducing points are **per token** (`(N, m, dim)`). tabicl shares one set
+across columns because its column count varies per table; here `N` is fixed and
+each token is a distinct physics feature with its own embedding subspace.
+
+> Consequence of row attention (any variant): a sample's output depends on which
+> other samples share its batch — keep evaluation batch composition fixed when
 > comparing numbers.
 
 ---

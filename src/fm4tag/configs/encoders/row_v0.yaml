@@ -6,9 +6,9 @@
 # or overridden on the CLI:  encoders=row_v0
 #
 # RowTransformer's head arg is `row_heads` and its head dim `dim_row_head`; it
-# has no column attention — so no `col_heads` or `dim_head`.  It supports
-# `chunk_size` for chunked row attention.
-#   type: row → RowTransformer(row_heads, dim_row_head, chunk_size, out_row_dim, ...)
+# has no column attention — so no `col_heads` or `dim_head`.  `num_inds` selects
+# the induced (ISAB) row attention.
+#   type: row → RowTransformer(row_heads, dim_row_head, num_inds, ...)
 # `dim` and `nfeats` are injected at runtime.
 # ════════════════════════════════════════════════════════════════════════════
 
@@ -24,7 +24,7 @@ global_encoder:
       ff_mult:      1
       attn_dropout: 0.0
       ff_dropout:   0.0
-      chunk_size:   256
+      num_inds:     16     # null = all-pairs row attention over the batch
 
 constituents:
   tracks:
@@ -42,5 +42,5 @@ constituents:
         ff_mult:       1
         attn_dropout:  0.0
         ff_dropout:    0.0
-        chunk_size:    512    # null = whole-batch row attention
-        out_row_dim:   128    # row attn+FFN bottleneck width (null = full row_dim)
+        num_inds:      16     # ISAB inducing points: O(B*num_inds) row attention
+                              # null = all-pairs row attention over the batch

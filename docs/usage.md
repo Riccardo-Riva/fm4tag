@@ -154,8 +154,11 @@ fm4tag-hpo hpo.n_trials=50
 
 - **Intersample (row) attention makes outputs batch-dependent — also at
   inference.** A jet's embedding/prediction depends on the other jets in its
-  batch (`chunk_size` groups). Keep evaluation batch composition fixed when
-  comparing numbers.
+  batch: the row step summarises the whole batch through `num_inds` inducing
+  points and every sample reads that summary. Keep evaluation batch composition
+  fixed when comparing numbers. (This is inherent to intersample attention, not
+  to the ISAB variant — but unlike the old chunked row attention it is at least
+  permutation-invariant and identical between train and eval.)
 - **Staged unfreeze is DDP-safe:** `finetune.unfreeze_at_epoch` keeps every
   parameter in the optimiser from step 0 (so DDP registers a sync hook for
   each) and holds the pretrained parts at `lr=0` until the unfreeze epoch. The

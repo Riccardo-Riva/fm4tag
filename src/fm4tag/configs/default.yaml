@@ -114,9 +114,9 @@ datamodule:
 #   encoders.constituents.<name>   — one Encoder per constituent object
 # whose "layers" list carries ONLY the kwargs its block class accepts:
 #   type: col    → ColTransformer    (heads, dim_head)
-#   type: row    → RowTransformer    (row_heads, dim_row_head, chunk_size)
+#   type: row    → RowTransformer    (row_heads, dim_row_head, num_inds)
 #   type: rowcol → RowColTransformer (col_heads, row_heads, dim_head,
-#                                     dim_row_head, chunk_size)
+#                                     dim_row_head, num_inds)
 # "dim" and (for row-aware blocks) "nfeats" are injected automatically.
 #
 # Per-key CLI overrides still work, e.g.
