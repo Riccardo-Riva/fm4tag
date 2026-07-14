@@ -5,15 +5,15 @@
 # ── Settings ──────────────────────────────────────────────────────────────────
 
 GPU_NODE=gpu-L40S-open,gpu-A40
-GPU_NUM=2
-NUM_WORKERS=8
+GPU_NUM=1
+NUM_WORKERS=12
 
-REPO=/storage3/DSIP/rriva/research/fm4tag-review
+REPO=/storage3/DSIP/rriva/research/fm4tag-main
 VENV=${REPO}/.venv
 CONFIG_DIR=${REPO}/src/fm4tag/configs
 
 CONFIG=default.yaml
-MAX_EPOCHS=100
+MAX_EPOCHS=50
 
 # Global timestamp for this sweep (seconds precision)
 

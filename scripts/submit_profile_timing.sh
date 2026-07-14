@@ -8,7 +8,7 @@
 #
 # Results: slurm/profiling/run_<TS>/{out.txt, profile_pretrain.json, profile_finetune.json}
 
-REPO=/storage3/DSIP/rriva/research/fm4tag-review
+REPO=/storage3/DSIP/rriva/research/fm4tag
 TS=$(date +%Y%m%d_%H%M%S)
 OUT=${REPO}/slurm/profiling/run_${TS}
 OVERRIDES="$@"
@@ -18,7 +18,7 @@ mkdir -pv "${OUT}"
 cat > "${OUT}/profile_run.sh" << EOF
 #!/bin/bash
 #SBATCH --job-name=profile_${TS}
-#SBATCH --partition=gpu-L40S-open,gpu-A40
+#SBATCH --partition=gpu-L40S-open,gpu-A40,cliffjumper,gpu-1080
 #SBATCH --gres=gpu:1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=10
