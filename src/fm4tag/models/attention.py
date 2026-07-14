@@ -3,6 +3,49 @@ import torch.nn.functional as F
 from torch import nn
 from einops import rearrange
 
+try:
+    from flash_attn import flash_attn_func
+
+    HAS_FLASH_ATTN = True
+except ImportError:
+    flash_attn_func = None
+    HAS_FLASH_ATTN = False
+
+_FLASH_ATTN_DTYPES = (torch.float16, torch.bfloat16)
+
+
+def sdpa(q, k, v, attn_mask=None, dropout_p=0.0):
+    """Scaled dot-product attention, routed through FlashAttention-2 when possible.
+
+    ``q``/``k``/``v``: ``(..., h, seq, d)`` — any number of leading batch-like
+    dims (none for :class:`RowAttention`, one for :class:`Attention`, one
+    "group" dim for :class:`ChunkedRowAttention`).  Falls back to
+    ``F.scaled_dot_product_attention`` whenever an explicit ``attn_mask`` is
+    given (flash-attn doesn't support arbitrary attention masks), when
+    ``flash-attn`` isn't installed, or off-CUDA/unsupported dtype.
+    """
+    if (
+        HAS_FLASH_ATTN
+        and attn_mask is None
+        and q.is_cuda
+        and q.dtype in _FLASH_ATTN_DTYPES
+    ):
+        orig_shape = q.shape
+        qf = q.reshape(-1, *q.shape[-3:]).transpose(1, 2).contiguous()
+        kf = k.reshape(-1, *k.shape[-3:]).transpose(1, 2).contiguous()
+        vf = v.reshape(-1, *v.shape[-3:]).transpose(1, 2).contiguous()
+        out = flash_attn_func(qf, kf, vf, dropout_p=dropout_p)
+        return out.transpose(1, 2).reshape(orig_shape)
+
+    return F.scaled_dot_product_attention(
+        q,
+        k,
+        v,
+        attn_mask=attn_mask,
+        dropout_p=dropout_p,
+        is_causal=False,
+    )
+
 
 class Attention(nn.Module):
     """Scaled dot-product self-attention over the token dimension of a sample.
@@ -37,13 +80,12 @@ class Attention(nn.Module):
             attn_mask = mask[:, None, None, :]
             attn_mask = torch.where(attn_mask, 0.0, float('-inf'))
 
-        out = F.scaled_dot_product_attention(
+        out = sdpa(
             q,
             k,
             v,
             attn_mask=attn_mask,
             dropout_p=self.dropout if self.training else 0.0,
-            is_causal=False,
         )
         out = rearrange(out, 'b h n d -> b n (h d)')
         return self.to_out(out)
@@ -82,13 +124,12 @@ class RowAttention(nn.Module):
             # Key-padding mask: (B,) → (1, 1, B), broadcast over heads/queries.
             attn_mask = torch.where(mask[None, None, :], 0.0, float('-inf'))
 
-        out = F.scaled_dot_product_attention(
+        out = sdpa(
             q,
             k,
             v,
             attn_mask=attn_mask,
             dropout_p=self.dropout if self.training else 0.0,
-            is_causal=False,
         )
         out = rearrange(out, 'h b d -> b (h d)')
         return self.to_out(out)
@@ -157,13 +198,12 @@ class ChunkedRowAttention(nn.Module):
         q = rearrange(q, 'g c (h d) -> g h c d', h=h)
         k = rearrange(k, 'g c (h d) -> g h c d', h=h)
         v = rearrange(v, 'g c (h d) -> g h c d', h=h)
-        out = F.scaled_dot_product_attention(
+        out = sdpa(
             q,
             k,
             v,
             attn_mask=attn_mask,
             dropout_p=self.dropout if self.training else 0.0,
-            is_causal=False,
         )
         out = rearrange(out, 'g h c d -> g c (h d)')
         out = self.to_out(out)
