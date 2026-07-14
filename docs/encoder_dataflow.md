@@ -193,6 +193,21 @@ each token is a distinct physics feature with its own embedding subspace.
 
 ---
 
+## Final LayerNorm — closing the pre-norm stack
+
+The blocks are pre-norm (`x + f(norm(x))`, see `models/blocks.py`), so nothing
+normalises the residual stream on the way *out* of the stack: its scale is free
+to grow with depth as the weights train. The heads below are plain Linears and
+would inherit that drift, so both `Encoder` and `GlobalTransformerEncoder` end
+with a `norm_out = LayerNorm(dim)` — the `ln_f` of a pre-norm transformer.
+
+> tabicl omits this and instead zero-inits *every* block (attention out-proj and
+> FFN second linear), so its whole stack starts as the identity. We zero-init
+> only the ISAB out-projection, so the final norm is the more robust guard: it
+> holds however far training moves the weights, not just at init.
+
+---
+
 ## [3] Heads hanging off the encoder output `(B, N, dim)`
 
 Not part of the backbone, but part of the encoder module — three heads read the

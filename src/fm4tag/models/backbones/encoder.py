@@ -130,6 +130,8 @@ class GlobalTransformerEncoder(GlobalEncoder):
     ) -> None:
         super().__init__(num_features=num_features, feature_dim=feature_dim, dim=dim)
         self.layers = _build_layers(layers, dim=feature_dim, nfeats=num_features)
+        # Final norm of the pre-norm residual stream — see :class:`Encoder`.
+        self.norm_out = nn.LayerNorm(feature_dim)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Embed global features and refine them with attention.
@@ -143,7 +145,7 @@ class GlobalTransformerEncoder(GlobalEncoder):
         tokens = super().forward(x)
         for layer in self.layers:
             tokens = layer(tokens)
-        return tokens
+        return self.norm_out(tokens)
 
 
 class Encoder(nn.Module):
@@ -241,6 +243,14 @@ class Encoder(nn.Module):
         nfeats = self.num_categories + num_continuous
         self.layers = _build_layers(layers, dim=dim, nfeats=nfeats)
 
+        # Final norm of the pre-norm residual stream.  The blocks are
+        # ``x + f(norm(x))`` (see :class:`~fm4tag.models.blocks.PreNormResidual`),
+        # so nothing normalises the stream on the way out of the stack and its
+        # scale is free to grow with depth as the weights train.  The heads below
+        # (projector, reconstructors) are plain Linears and would inherit that
+        # drift, so normalise once here — the ``ln_f`` of a pre-norm transformer.
+        self.norm_out = nn.LayerNorm(dim)
+
         # Denoising reconstruction heads (always sep style).
         self.cat_reconstructor = sep_MLP(dim, self.num_categories, categories)
         self.con_reconstructor = sep_MLP(
@@ -259,7 +269,7 @@ class Encoder(nn.Module):
             x = torch.cat((x, x_cont), dim=1)
         for layer in self.layers:
             x = layer(x, mask=mask)
-        return x
+        return self.norm_out(x)
 
 
 def embed_data(

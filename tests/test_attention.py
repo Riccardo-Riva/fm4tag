@@ -177,3 +177,44 @@ def test_induced_gradients_reach_inducing_points():
     assert attn.inds.grad is not None
     assert torch.count_nonzero(attn.inds.grad) > 0
 
+
+# ── pre-norm stack must be closed by a final LayerNorm ───────────────────────
+
+
+@pytest.mark.parametrize('depth', [1, 6, 12])
+def test_encoder_output_is_normalised_regardless_of_depth(depth):
+    """The pre-norm residual stream is unnormalised on the way out of the stack.
+
+    ``Encoder.norm_out`` (the ``ln_f`` of a pre-norm transformer) is what keeps
+    the encoder output — and therefore the projector and reconstructor inputs —
+    at a fixed scale however deep the stack is and however far the weights drift.
+    """
+    from fm4tag.models.backbones import Encoder
+
+    torch.manual_seed(0)
+    encoder = Encoder(
+        categories=[3, 4],
+        num_continuous=2,
+        dim=DIM,
+        layers=[
+            {
+                'type': 'rowcol',
+                'depth': depth,
+                'col_heads': 2,
+                'row_heads': 2,
+                'dim_head': 8,
+                'dim_row_head': 8,
+                'num_inds': 4,
+            }
+        ],
+    ).eval()
+
+    # Feed a stream that is already far off unit scale.
+    x_cat = torch.randn(32, 2, DIM) * 10.0
+    x_con = torch.randn(32, 2, DIM) * 10.0
+    with torch.no_grad():
+        out = encoder(x_cat, x_con)
+
+    assert out.shape == (32, 4, DIM)
+    per_token_std = out.std(dim=-1)
+    assert torch.allclose(per_token_std, torch.ones_like(per_token_std), atol=0.1)
