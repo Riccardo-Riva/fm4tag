@@ -41,7 +41,7 @@ from einops import rearrange
 from torch import nn
 
 from ..attention import Attention, ChunkedRowAttention, RowAttention
-from ..blocks import FeedForward, PreNorm, Residual
+from ..blocks import FeedForward, PreNormResidual
 
 
 def _build_row_attention(
@@ -109,19 +109,17 @@ class RowMixer(nn.Module):
             # Zero-init the up-projection so the mixer starts as the identity.
             nn.init.zeros_(self.up.weight)
             nn.init.zeros_(self.up.bias)
-        self.attn = PreNorm(
+        self.attn = PreNormResidual(
             d,
-            Residual(
-                _build_row_attention(
-                    d,
-                    heads=heads,
-                    dim_row_head=dim_row_head,
-                    dropout=attn_dropout,
-                    chunk_size=chunk_size,
-                )
+            _build_row_attention(
+                d,
+                heads=heads,
+                dim_row_head=dim_row_head,
+                dropout=attn_dropout,
+                chunk_size=chunk_size,
             ),
         )
-        self.ff = PreNorm(d, Residual(FeedForward(d, mult=ff_mult, dropout=ff_dropout)))
+        self.ff = PreNormResidual(d, FeedForward(d, mult=ff_mult, dropout=ff_dropout))
 
     def forward(
         self, x: torch.Tensor, mask: torch.Tensor | None = None
@@ -139,7 +137,7 @@ class RowMixer(nn.Module):
 class ColTransformer(nn.Module):
     """Column-attention (within-sample) transformer with configurable depth.
 
-    Each depth step is ``PreNorm(Residual(Attention)) + PreNorm(Residual(FF))``.
+    Each depth step is ``PreNormResidual(Attention) + PreNormResidual(FF)``.
 
     Args:
         dim:          Embedding dimension.
@@ -166,22 +164,17 @@ class ColTransformer(nn.Module):
             [
                 nn.ModuleList(
                     [
-                        PreNorm(
+                        PreNormResidual(
                             dim,
-                            Residual(
-                                Attention(
-                                    dim,
-                                    heads=heads,
-                                    dim_head=dim_head,
-                                    dropout=attn_dropout,
-                                )
+                            Attention(
+                                dim,
+                                heads=heads,
+                                dim_head=dim_head,
+                                dropout=attn_dropout,
                             ),
                         ),
-                        PreNorm(
-                            dim,
-                            Residual(
-                                FeedForward(dim, mult=ff_mult, dropout=ff_dropout)
-                            ),
+                        PreNormResidual(
+                            dim, FeedForward(dim, mult=ff_mult, dropout=ff_dropout)
                         ),
                     ]
                 )
@@ -313,22 +306,17 @@ class RowColTransformer(nn.Module):
             [
                 nn.ModuleList(
                     [
-                        PreNorm(
+                        PreNormResidual(
                             dim,
-                            Residual(
-                                Attention(
-                                    dim,
-                                    heads=col_heads,
-                                    dim_head=dim_head,
-                                    dropout=attn_dropout,
-                                )
+                            Attention(
+                                dim,
+                                heads=col_heads,
+                                dim_head=dim_head,
+                                dropout=attn_dropout,
                             ),
                         ),
-                        PreNorm(
-                            dim,
-                            Residual(
-                                FeedForward(dim, mult=ff_mult, dropout=ff_dropout)
-                            ),
+                        PreNormResidual(
+                            dim, FeedForward(dim, mult=ff_mult, dropout=ff_dropout)
                         ),
                         RowMixer(
                             row_dim,

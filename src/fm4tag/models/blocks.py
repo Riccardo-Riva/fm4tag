@@ -2,23 +2,26 @@ import torch.nn.functional as F
 from torch import nn
 
 
-class Residual(nn.Module):
-    def __init__(self, fn):
-        super().__init__()
-        self.fn = fn
+class PreNormResidual(nn.Module):
+    """Pre-norm sublayer with the residual on the *un-normalised* input::
 
-    def forward(self, x, **kwargs):
-        return self.fn(x, **kwargs) + x
+        x + fn(norm(x))
 
+    The ordering matters.  This used to be spelled ``PreNorm(dim, Residual(fn))``,
+    which expands to ``fn(norm(x)) + norm(x)`` — the skip connection runs through
+    the LayerNorm, so the stack has no clean identity path and the residual stream
+    is renormalised at every sublayer.  (The bug is inherited from SAINT; tabicl,
+    and pre-norm transformers generally, use ``x + fn(norm(x))``.)  Keeping the
+    composition in one module stops it being re-inverted at a call site.
+    """
 
-class PreNorm(nn.Module):
     def __init__(self, dim, fn):
         super().__init__()
         self.norm = nn.LayerNorm(dim)
         self.fn = fn
 
     def forward(self, x, **kwargs):
-        return self.fn(self.norm(x), **kwargs)
+        return x + self.fn(self.norm(x), **kwargs)
 
 
 class GEGLU(nn.Module):

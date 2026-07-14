@@ -1,7 +1,7 @@
 from torch import nn
 
 from ..attention import Attention
-from ..blocks import FeedForward, PreNorm, Residual
+from ..blocks import FeedForward, PreNormResidual
 
 
 class Classifier_Transformer(nn.Module):
@@ -19,22 +19,17 @@ class Classifier_Transformer(nn.Module):
             [
                 nn.ModuleList(
                     [
-                        PreNorm(
+                        PreNormResidual(
                             dim,
-                            Residual(
-                                Attention(
-                                    dim,
-                                    heads=heads,
-                                    dim_head=dim_head,
-                                    dropout=attn_dropout,
-                                )
+                            Attention(
+                                dim,
+                                heads=heads,
+                                dim_head=dim_head,
+                                dropout=attn_dropout,
                             ),
                         ),
-                        PreNorm(
-                            dim,
-                            Residual(
-                                FeedForward(dim, mult=ff_mult, dropout=ff_dropout)
-                            ),
+                        PreNormResidual(
+                            dim, FeedForward(dim, mult=ff_mult, dropout=ff_dropout)
                         ),
                     ]
                 )
