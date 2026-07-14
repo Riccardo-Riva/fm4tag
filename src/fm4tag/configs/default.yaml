@@ -230,7 +230,7 @@ finetune:
   lr:           ${optimizer.lr}
   backbone_lr:  ${optimizer.backbone_lr}
   weight_decay: ${optimizer.weight_decay}
-  warmup_frac:  0.1
+  warmup_frac:  0.08
   # DDP-safe staged unfreeze (all params in the optimiser from step 0; the
   # pretrained parts held at lr=0 until this epoch, then ramped onto the cosine
   # schedule). 0 = train everything from step 0 (from-scratch); >= max_epochs =
@@ -245,13 +245,13 @@ optimizer:
 
 # ── PyTorch Lightning Trainer ─────────────────────────────────────────────────
 trainer:
-  max_epochs:         100
+  max_epochs:         50
   accelerator:        gpu
   devices:            2
   #strategy:          ddp_find_unused_parameters_true
   precision:          "bf16-mixed"
   log_every_n_steps:  100
-  gradient_clip_val:  1.0   # global grad-norm clip (transformer stability)
+  #gradient_clip_val:  1.0   # global grad-norm clip (transformer stability)
 
 # ── Profiler ─────────────────────────────────────────────────────────────────
 # Hydra-instantiated; set to null (or remove) to disable.
@@ -304,7 +304,7 @@ callbacks:
     _target_: lightning.pytorch.callbacks.EarlyStopping
     monitor:  val/loss
     min_delta: 0. # minimum change in the monitored quantity to qualify as an improvement
-    patience: 10
+    patience: 15
     mode:     min
 
 # Staged unfreeze of the pretrained parts during finetuning is handled by
@@ -335,8 +335,8 @@ hpo:
   phases:       [finetune]      # [pretrain] | [finetune] | [pretrain, finetune]
   pretrain_encoder_ckpt: null   # fixed pretrain ckpt for finetune-only HPO
 
-  metric:       val/head/auroc  # objective: any logged metric key
-  direction:    maximize        # minimize | maximize
+  metric:       val/loss        # objective: any logged metric key
+  direction:    minimize        # minimize | maximize
   disable_wandb: true           # drop the wandb logger per trial (keep CSV)
 
   sampler:  TPE
