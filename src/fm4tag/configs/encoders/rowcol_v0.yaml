@@ -13,15 +13,17 @@
 
 global_encoder:
   _target_: fm4tag.models.GlobalTransformerEncoder
-  feature_dim: 64
-  dim: 64   # num_features injected at runtime from variables.jets.inputs
+  dim:          128    # token width — the backbone runs at this width
+  proj_hidden:  null   # null → auto (2 × dim × n_tokens)
+  proj_out:     128    # projector output width — head only, never the backbone
+  # num_features injected at runtime from variables.jets.inputs
   layers:
     - type:         rowcol
       depth:        6
-      col_heads:    4
-      row_heads:    4
-      dim_head:     32
-      dim_row_head: 32
+      col_heads:    2
+      row_heads:    2
+      dim_head:     64
+      dim_row_head: 64
       ff_mult:      1
       attn_dropout: 0.0
       ff_dropout:   0.0
@@ -30,7 +32,7 @@ global_encoder:
 constituents:
   tracks:
     _target_: fm4tag.models.Encoder
-    dim:              64
+    dim:              128
     cont_embeddings:  MLP    # MLP | pos_singleMLP
     proj_hidden:      256    # null → auto (3/4 × dim × n_tokens)
     proj_out:         128     # null → auto (1/2 × dim × n_tokens)
@@ -39,9 +41,9 @@ constituents:
       - type:          rowcol
         depth:         6
         col_heads:     2
-        row_heads:     4
-        dim_head:      32
-        dim_row_head:  32
+        row_heads:     2
+        dim_head:      64
+        dim_row_head:  64
         ff_mult:       1
         attn_dropout:  0.0
         ff_dropout:    0.0
