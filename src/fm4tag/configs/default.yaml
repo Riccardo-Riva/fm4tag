@@ -69,7 +69,8 @@ variables:
         numberOfSCTSharedHits:                    [0,1,2,3]
 
 # ── Data — file paths ────────────────────────────────────────────────────────
-base_path: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_152051 # 60M
+base_path: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_112022 # 62M
+#base_path: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_152051 # 60M
 #base_path: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251114_155623 # 6M 
 
 pretrain_dataset_path: ${base_path}/pretrain/output/pp_output_pretrain.h5
@@ -77,8 +78,8 @@ train_dataset_path: ${base_path}/train/output/pp_output_train.h5
 val_dataset_path:   ${base_path}/val/output/pp_output_val.h5
 test_dataset_path:  ${base_path}/test/output/pp_output_test.h5
 
-norm_dict_path:  ${base_path}/pretrain/output/norm_dict.yaml
-class_dict_path: ${base_path}/pretrain/output/class_dict.yaml
+norm_dict_path:  ${base_path}/train/output/norm_dict.yaml
+class_dict_path: ${base_path}/train/output/class_dict.yaml
 
 # ── DataModule ────────────────────────────────────────────────────────────────
 # Instantiated via Hydra (with _convert_='all' at the call site, see pretrain):
@@ -231,7 +232,7 @@ finetune:
   lr:           ${optimizer.lr}
   backbone_lr:  ${optimizer.backbone_lr}
   weight_decay: ${optimizer.weight_decay}
-  warmup_frac:  0.08
+  warmup_frac:  0.00
   # DDP-safe staged unfreeze (all params in the optimiser from step 0; the
   # pretrained parts held at lr=0 until this epoch, then ramped onto the cosine
   # schedule). 0 = train everything from step 0 (from-scratch); >= max_epochs =
