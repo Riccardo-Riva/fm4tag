@@ -1,5 +1,5 @@
 # notebooks
-notebooks/*.png
+notebooks/**/*.png
 notebooks/wandb/
 
 # slurm
