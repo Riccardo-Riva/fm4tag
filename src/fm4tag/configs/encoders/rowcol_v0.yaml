@@ -27,7 +27,7 @@ global_encoder:
       ff_mult:      1
       attn_dropout: 0.0
       ff_dropout:   0.0
-      num_inds:     16     # null = all-pairs row attention over the batch
+      num_inds:     128     # null = all-pairs row attention over the batch
 
 constituents:
   tracks:
@@ -47,7 +47,7 @@ constituents:
         ff_mult:       1
         attn_dropout:  0.0
         ff_dropout:    0.0
-        num_inds:      16     # ISAB inducing points: row attention costs
+        num_inds:      128     # ISAB inducing points: row attention costs
                               # O(B*num_inds) instead of O(B^2) and handles the
                               # variable packed-constituent count B natively.
                               # null = all-pairs row attention over the batch.
