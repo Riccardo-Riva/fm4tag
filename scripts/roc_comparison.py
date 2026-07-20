@@ -402,6 +402,7 @@ def plot_rocs(
         xlabel=f'${signal}$-jet efficiency',
         figsize=tuple(plot_cfg.get('figsize', (7, 7))),
         y_scale=plot_cfg.get('y_scale', 1.3),
+        atlas_brand=cfg.get('atlas_brand', 'ATLAS'),
         atlas_first_tag=plot_cfg.get('atlas_first_tag', 'Simulation Internal'),
         atlas_second_tag=plot_cfg.get('atlas_second_tag', ''),
         dpi=plot_cfg.get('dpi', 200),

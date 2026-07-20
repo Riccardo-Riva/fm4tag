@@ -1,20 +1,46 @@
 # ROC comparison config for scripts/roc_comparison.py
 #
-# Compares the three classify-from-scratch runs of run_20260708_045439
-# (identical architecture, jet-contrastive loss weight 0.0 / 0.3 / 1.0).
+# Compares the nine classify-from-scratch runs of run_20260714_172712, a
+# 3x3 sweep over learning rate {1e-5, 3e-5, 1e-4} and jet-contrastive loss
+# weight {0.0, 0.3, 1.0} (all rowcol, ddp2, bs 1024, ce 1.0).
 #
-#     python scripts/roc_comparison.py --config scripts/configs/roc_comparison_run_20260708_045439.yaml
+#     python scripts/roc_comparison.py --config scripts/configs/roc_comparison_run_20260714_172712.yaml
+#
+# Colours are grouped into hue families by learning rate (blue = 1e-5,
+# green = 3e-5, red = 1e-4), shaded light -> dark with rising JC weight, so
+# both sweep axes read off the colour.  Background class stays the linestyle.
 
 # ── Models: one training-run directory per entry ──────────────────────────────
 # checkpoint: best (default) | last | /explicit/path.ckpt
 # colour:     optional hex override (default: colour-blind-safe palette in order)
 models:
-  - dir: /storage3/DSIP/rriva/research/fm4tag-review/slurm/classify_from_scratch/run_20260708_045439/scratch_20260708_045439_rowcol_bs_1024_ce_1.0_jc_0.0_0
-    label: 'CE only'
-  - dir: /storage3/DSIP/rriva/research/fm4tag-review/slurm/classify_from_scratch/run_20260708_045439/scratch_20260708_045439_rowcol_bs_1024_ce_1.0_jc_0.3_1
-    label: 'CE + 0.3 JC'
-  - dir: /storage3/DSIP/rriva/research/fm4tag-review/slurm/classify_from_scratch/run_20260708_045439/scratch_20260708_045439_rowcol_bs_1024_ce_1.0_jc_1.0_2
-    label: 'CE + 1.0 JC'
+  - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch/run_20260714_172712/scratch_20260714_172712_rowcol_ddp2_bs_1024_lr_1e-5_ce_1.0_jc_0.0_0
+    label: 'lr 1e-5, CE only'
+    colour: '#9ECAE1'
+  - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch/run_20260714_172712/scratch_20260714_172712_rowcol_ddp2_bs_1024_lr_1e-5_ce_1.0_jc_0.3_1
+    label: 'lr 1e-5, CE + 0.3 JC'
+    colour: '#4292C6'
+  - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch/run_20260714_172712/scratch_20260714_172712_rowcol_ddp2_bs_1024_lr_1e-5_ce_1.0_jc_1.0_2
+    label: 'lr 1e-5, CE + 1.0 JC'
+    colour: '#08519C'
+  - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch/run_20260714_172712/scratch_20260714_172712_rowcol_ddp2_bs_1024_lr_3e-5_ce_1.0_jc_0.0_3
+    label: 'lr 3e-5, CE only'
+    colour: '#A1D99B'
+  - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch/run_20260714_172712/scratch_20260714_172712_rowcol_ddp2_bs_1024_lr_3e-5_ce_1.0_jc_0.3_4
+    label: 'lr 3e-5, CE + 0.3 JC'
+    colour: '#41AB5D'
+  - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch/run_20260714_172712/scratch_20260714_172712_rowcol_ddp2_bs_1024_lr_3e-5_ce_1.0_jc_1.0_5
+    label: 'lr 3e-5, CE + 1.0 JC'
+    colour: '#006D2C'
+  - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch/run_20260714_172712/scratch_20260714_172712_rowcol_ddp2_bs_1024_lr_1e-4_ce_1.0_jc_0.0_6
+    label: 'lr 1e-4, CE only'
+    colour: '#FC9272'
+  - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch/run_20260714_172712/scratch_20260714_172712_rowcol_ddp2_bs_1024_lr_1e-4_ce_1.0_jc_0.3_7
+    label: 'lr 1e-4, CE + 0.3 JC'
+    colour: '#EF3B2C'
+  - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch/run_20260714_172712/scratch_20260714_172712_rowcol_ddp2_bs_1024_lr_1e-4_ce_1.0_jc_1.0_8
+    label: 'lr 1e-4, CE + 1.0 JC'
+    colour: '#A50F15'
 
 # ── Optional reference taggers (HDF5 score columns) ───────────────────────────
 # Uncomment entries to overlay them.  Without `file:` the columns are read from
@@ -64,7 +90,7 @@ inference:
   num_workers: 8
 
 plot:
-  out_dir: plots/roc_run_20260708_045439  # fallback — overridden by --output
+  out_dir: plots/roc_run_20260714_172712  # fallback — overridden by --output
   atlas_brand: ''
   atlas_first_tag: 'Simulation Internal'
   atlas_second_tag: "$\\sqrt{s} = 13$ TeV, $t\\bar{t}$\n$20 < p_T < 250$ GeV, $|\\eta| < 2.5$"
