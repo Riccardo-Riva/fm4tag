@@ -107,10 +107,9 @@ def _make_batch(B: int = 4, C: int = 8) -> dict:
 # ---------------------------------------------------------------------------
 
 
-def test_construction_normalises_weights(encoders, aggregator, two_views):
+def test_construction_uses_weights_as_is(encoders, aggregator, two_views):
     module = _make_module(encoders, aggregator, two_views)
-    assert sum(module.loss_weights.values()) == pytest.approx(1.0)
-    assert module.loss_weights['contrastive'] == pytest.approx(0.6 / 2.0)
+    assert module.loss_weights == _WEIGHTS
 
 
 def test_missing_weight_keys_default_to_zero(encoders, aggregator, two_views):
@@ -194,8 +193,8 @@ def test_zero_weight_components_not_computed_or_logged(
     assert 'jets_embedding/loss_denoising_con' not in log_dict
 
 
-def test_proportional_weights_give_identical_loss(encoders, aggregator, two_views):
-    """[2, 1, 1, 2] must behave exactly like [1, 0.5, 0.5, 1]."""
+def test_scaling_weights_scales_loss(encoders, aggregator, two_views):
+    """Weights are applied as-is: doubling every weight doubles the loss."""
     weights_a = {
         'contrastive': 2.0,
         'denoising_cat': 1.0,
@@ -211,7 +210,7 @@ def test_proportional_weights_give_identical_loss(encoders, aggregator, two_view
     loss_a, _ = module_a._compute_loss(batch)
     torch.manual_seed(0)
     loss_b, _ = module_b._compute_loss(batch)
-    assert torch.isclose(loss_a, loss_b, atol=1e-6)
+    assert torch.isclose(loss_a, 2 * loss_b, atol=1e-6)
 
 
 def test_three_views_loss(encoders, aggregator, three_views):

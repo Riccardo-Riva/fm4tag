@@ -29,7 +29,7 @@ from torch import nn
 from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
 
 from ..augmentations import Compose
-from ..losses import denoising_cat_loss, denoising_con_loss, normalize_loss_weights
+from ..losses import denoising_cat_loss, denoising_con_loss, validate_loss_weights
 from .view_encoding import (
     encode_clean,
     encode_constituent_view,
@@ -57,9 +57,9 @@ class PretrainModule(L.LightningModule):
         constituent_objects: Names of the constituent objects.
         loss_weights: Mapping with keys among ``contrastive``,
                      ``denoising_cat``, ``denoising_con``, ``jet_contrastive``
-                     (missing keys default to 0).  Normalised to unit sum, so
-                     only the relative balance matters; a weight of 0 disables
-                     that component entirely (not computed, not logged).
+                     (missing keys default to 0).  Used as-is (not
+                     normalised); a weight of 0 disables that component
+                     entirely (not computed, not logged).
         contrastive_loss:     Loss on per-object projections; called with the
                               list of per-view ``(N, D)`` tensors.
         jet_contrastive_loss: Loss on aggregator outputs; called with the list
@@ -102,7 +102,7 @@ class PretrainModule(L.LightningModule):
                 f'expected a subset of {LOSS_COMPONENTS}.'
             )
         weights = {k: float(loss_weights.get(k, 0.0)) for k in LOSS_COMPONENTS}
-        self.loss_weights = normalize_loss_weights(weights)
+        self.loss_weights = validate_loss_weights(weights)
 
         needs_views = (
             self.loss_weights['contrastive'] > 0

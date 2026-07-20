@@ -163,9 +163,10 @@ views:
 #   hydra_instantiate(cfg.pretrain, encoders=..., aggregator=..., views=...,
 #                     _convert_='all')
 #
-# loss_weights are normalised to unit sum ([2,1] ≡ [1,0.5]); a weight of 0
-# disables that component entirely — not computed, not logged.  Every active
-# component is logged as <split>/<component>/<metric>.
+# loss_weights are used as-is (not normalised) as the multiplier on each
+# component's loss; a weight of 0 disables that component entirely — not
+# computed, not logged.  Every active component is logged as
+# <split>/<component>/<metric>.
 pretrain:
   _target_: fm4tag.modules.PretrainModule
 

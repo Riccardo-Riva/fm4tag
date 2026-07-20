@@ -6,7 +6,7 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from fm4tag.losses import MultiViewSupConLoss, normalize_loss_weights
+from fm4tag.losses import MultiViewSupConLoss, validate_loss_weights
 
 
 # ---------------------------------------------------------------------------
@@ -199,36 +199,28 @@ def test_no_gather_when_single_process():
 
 
 # ---------------------------------------------------------------------------
-# normalize_loss_weights
+# validate_loss_weights
 # ---------------------------------------------------------------------------
 
 
-def test_weights_normalised_to_unit_sum():
-    w = normalize_loss_weights({'a': 2.0, 'b': 1.0, 'c': 1.0})
-    assert sum(w.values()) == pytest.approx(1.0)
-    assert w['a'] == pytest.approx(0.5)
-
-
-def test_proportional_weightings_are_equivalent():
-    # [2, 1] must be equivalent to [1, 0.5].
-    assert normalize_loss_weights({'a': 2.0, 'b': 1.0}) == pytest.approx(
-        normalize_loss_weights({'a': 1.0, 'b': 0.5})
-    )
+def test_weights_used_as_is():
+    w = validate_loss_weights({'a': 2.0, 'b': 1.0, 'c': 1.0})
+    assert w == {'a': 2.0, 'b': 1.0, 'c': 1.0}
 
 
 def test_zero_weights_stay_zero():
-    w = normalize_loss_weights({'a': 1.0, 'b': 0.0})
+    w = validate_loss_weights({'a': 1.0, 'b': 0.0})
     assert w == {'a': 1.0, 'b': 0.0}
 
 
 def test_all_zero_weights_raise():
     with pytest.raises(ValueError, match='At least one'):
-        normalize_loss_weights({'a': 0.0, 'b': 0.0})
+        validate_loss_weights({'a': 0.0, 'b': 0.0})
 
 
 def test_negative_weights_raise():
     with pytest.raises(ValueError, match='non-negative'):
-        normalize_loss_weights({'a': 1.0, 'b': -0.5})
+        validate_loss_weights({'a': 1.0, 'b': -0.5})
 
 
 # ---------------------------------------------------------------------------

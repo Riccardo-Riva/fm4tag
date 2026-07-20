@@ -5,8 +5,9 @@ The classification pass is::
     out    = forward(batch)            # clean embeddings incl. 'aggregator'
     logits = head(out['aggregator'])   # classifier head
 
-Loss composition is controlled by ``loss_weights`` (normalised to unit sum;
-a weight of 0 disables that component entirely — not computed, not logged):
+Loss composition is controlled by ``loss_weights`` (used as-is, not
+normalised; a weight of 0 disables that component entirely — not computed,
+not logged):
 
 * ``cross_entropy``   — on the head's class logits.
 * ``jet_contrastive`` — the batch is re-encoded under each augmentation view
@@ -48,7 +49,7 @@ from torch.optim.lr_scheduler import LambdaLR
 from torchmetrics.classification import MulticlassAUROC
 
 from ..augmentations import Compose
-from ..losses import normalize_loss_weights
+from ..losses import validate_loss_weights
 from .view_encoding import (
     encode_clean,
     encode_constituent_view,
@@ -76,7 +77,7 @@ class FinetuneModule(L.LightningModule):
         constituent_objects: Names of the constituent objects.
         loss_weights: Mapping with keys among ``cross_entropy`` and
                     ``jet_contrastive`` (missing keys default to 0).
-                    Normalised to unit sum; 0 disables the component.
+                    Used as-is (not normalised); 0 disables the component.
         jet_contrastive_loss: Loss on aggregator outputs; called with the list
                     of per-view ``(B, D)`` tensors.
         n_classes:  Number of classes (for the AUROC metric).
@@ -121,7 +122,7 @@ class FinetuneModule(L.LightningModule):
                 f'expected a subset of {LOSS_COMPONENTS}.'
             )
         weights = {k: float(loss_weights.get(k, 0.0)) for k in LOSS_COMPONENTS}
-        self.loss_weights = normalize_loss_weights(weights)
+        self.loss_weights = validate_loss_weights(weights)
 
         if self.loss_weights['jet_contrastive'] > 0 and len(views) < 2:
             raise ValueError(

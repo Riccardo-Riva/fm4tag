@@ -111,10 +111,9 @@ def _make_batch(B: int = 4, C: int = 8) -> dict:
 # ---------------------------------------------------------------------------
 
 
-def test_construction_normalises_weights(encoders, aggregator, head, two_views):
+def test_construction_uses_weights_as_is(encoders, aggregator, head, two_views):
     module = _make_module(encoders, aggregator, head, two_views)
-    assert sum(module.loss_weights.values()) == pytest.approx(1.0)
-    assert module.loss_weights['cross_entropy'] == pytest.approx(1.0 / 1.3)
+    assert module.loss_weights == {'cross_entropy': 1.0, 'jet_contrastive': 0.3}
 
 
 def test_unknown_weight_key_raises(encoders, aggregator, head, two_views):
@@ -175,9 +174,8 @@ def test_log_dict_uses_component_nomenclature(encoders, aggregator, head, two_vi
     assert set(log_dict) == {'loss', 'head/loss_ce', 'aggregator/loss_contrastive'}
 
 
-def test_proportional_weights_give_identical_loss(
-    encoders, aggregator, head, two_views
-):
+def test_scaling_weights_scales_loss(encoders, aggregator, head, two_views):
+    """Weights are applied as-is: doubling every weight doubles the loss."""
     weights_a = {'cross_entropy': 2.0, 'jet_contrastive': 0.6}
     weights_b = {'cross_entropy': 1.0, 'jet_contrastive': 0.3}
     module_a = _make_module(encoders, aggregator, head, two_views, weights_a)
@@ -188,7 +186,7 @@ def test_proportional_weights_give_identical_loss(
     loss_a, _, _ = module_a._compute_loss(batch)
     torch.manual_seed(0)
     loss_b, _, _ = module_b._compute_loss(batch)
-    assert torch.isclose(loss_a, loss_b, atol=1e-6)
+    assert torch.isclose(loss_a, 2 * loss_b, atol=1e-6)
 
 
 # ---------------------------------------------------------------------------
