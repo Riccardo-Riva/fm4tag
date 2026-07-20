@@ -13,7 +13,7 @@
 
 global_encoder:
   _target_: fm4tag.models.GlobalTransformerEncoder
-  dim:          128    # token width — the backbone runs at this width
+  dim:          16     # token width — the backbone runs at this width
   proj_hidden:  null   # null → auto (2 × dim × n_tokens)
   proj_out:     128    # projector output width — head only, never the backbone
   # num_features injected at runtime from variables.jets.inputs
@@ -22,32 +22,35 @@ global_encoder:
       depth:        6
       col_heads:    2
       row_heads:    2
-      dim_head:     64
-      dim_row_head: 64
+      dim_head:     8
+      dim_row_head: 8
       ff_mult:      1
       attn_dropout: 0.0
       ff_dropout:   0.0
-      num_inds:     128     # null = all-pairs row attention over the batch
+      num_inds:     16      # null = all-pairs row attention over the batch
 
 constituents:
   tracks:
     _target_: fm4tag.models.Encoder
-    dim:              128
+    dim:              16
     cont_embeddings:  MLP    # MLP | pos_singleMLP
-    proj_hidden:      256    # null → auto (3/4 × dim × n_tokens)
-    proj_out:         128     # null → auto (1/2 × dim × n_tokens)
+    proj_hidden:      null   # null → auto (3/4 × dim × n_tokens)
+    proj_out:         128    # null → auto (1/2 × dim × n_tokens)
     # categories and num_continuous are injected at runtime from variables.tracks
     layers:
       - type:          rowcol
         depth:         6
         col_heads:     2
         row_heads:     2
-        dim_head:      64
-        dim_row_head:  64
+        dim_head:      8
+        dim_row_head:  8
         ff_mult:       1
         attn_dropout:  0.0
         ff_dropout:    0.0
-        num_inds:      128     # ISAB inducing points: row attention costs
-                              # O(B*num_inds) instead of O(B^2) and handles the
-                              # variable packed-constituent count B natively.
+        num_inds:      16      # ISAB inducing points: row attention costs
+                              # O(B*num_inds) per token instead of O(B^2), and
+                              # runs N=19 independent per-token attentions — cost
+                              # scales with num_inds*dim, so keep this modest.
+                              # (num_inds=128 measured 3.47->1.20 it/s on the
+                              # dim=128 architecture; reverted here.)
                               # null = all-pairs row attention over the batch.
