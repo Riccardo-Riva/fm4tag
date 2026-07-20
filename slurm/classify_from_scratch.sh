@@ -76,7 +76,7 @@ BATCH_SIZES=(1024)
 # Learning rates to compare.  `finetune.lr` interpolates from `optimizer.lr`, and
 # backbone_lr is forced to null below (everything is randomly initialised here),
 # so this single value is the learning rate for the whole model.
-LEARNING_RATES=(1e-5 3e-5 1e-4)
+LEARNING_RATES=(3e-5 1e-4 3e-4)
 
 # "cross_entropy jet_contrastive": CE on the head output, SupCon on the
 # aggregator output.  Weights are normalised to unit sum; 0 disables the term.
