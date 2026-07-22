@@ -27,6 +27,7 @@ global_encoder:
       attn_dropout: 0.0
       ff_dropout:   0.0
       num_inds:     16     # null = all-pairs row attention over the batch
+      row_mode:     per_token  # per_token | concat — see RowMixer
 
 constituents:
   tracks:
@@ -46,3 +47,4 @@ constituents:
         ff_dropout:    0.0
         num_inds:      16     # ISAB inducing points: O(B*num_inds) row attention
                               # null = all-pairs row attention over the batch
+        row_mode:      per_token  # per_token | concat — see RowMixer

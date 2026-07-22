@@ -11,6 +11,7 @@ import pytest
 import torch
 
 from fm4tag.models.attention import InducedRowAttention, RowAttention
+from fm4tag.models.backbones.transformers import RowMixer
 
 B, N, DIM = 10, 5, 16
 
@@ -176,6 +177,101 @@ def test_induced_gradients_reach_inducing_points():
     out.sum().backward()
     assert attn.inds.grad is not None
     assert torch.count_nonzero(attn.inds.grad) > 0
+
+
+# ── RowMixer: per_token vs concat row_mode ───────────────────────────────────
+
+
+def _row_mixer(row_mode: str, num_inds: int | None = 6) -> RowMixer:
+    torch.manual_seed(0)
+    return RowMixer(
+        DIM,
+        N,
+        heads=2,
+        dim_row_head=8,
+        ff_mult=1,
+        attn_dropout=0.0,
+        ff_dropout=0.0,
+        num_inds=num_inds,
+        row_mode=row_mode,
+    ).eval()
+
+
+@pytest.mark.parametrize('row_mode', ['per_token', 'concat'])
+@pytest.mark.parametrize('num_inds', [6, None])
+def test_row_mixer_shape_roundtrips(row_mode, num_inds):
+    """Both modes and both num_inds settings return the (B, N, dim) grid."""
+    mixer = _row_mixer(row_mode, num_inds)
+    out = mixer(torch.randn(B, N, DIM))
+    assert out.shape == (B, N, DIM)
+    assert torch.isfinite(out).all()
+
+
+def test_row_mixer_rejects_unknown_mode():
+    with pytest.raises(ValueError, match='row_mode'):
+        _row_mixer('sideways')
+
+
+def test_concat_row_attention_runs_at_row_dim():
+    """In concat mode the row attention operates on the flattened N*dim vector."""
+    mixer = _row_mixer('concat', num_inds=6)
+    # attn.fn is the InducedRowAttention; its inducing points are a single set
+    # (nfeats == 1) of width row_dim = N*dim, not N sets of width dim.
+    assert mixer.attn.fn.inds.shape == (1, 6, N * DIM)
+
+
+def test_per_token_row_attention_runs_per_token():
+    mixer = _row_mixer('per_token', num_inds=6)
+    assert mixer.attn.fn.inds.shape == (N, 6, DIM)
+
+
+@pytest.mark.parametrize('row_mode', ['per_token', 'concat'])
+def test_row_mixer_attn_sublayer_is_identity_at_init(row_mode):
+    """Zero-init ISAB out-projection ⇒ the row-attention sublayer starts as a no-op."""
+    mixer = _row_mixer(row_mode, num_inds=6)
+    x = torch.randn(B, N, DIM)
+    if row_mode == 'concat':
+        x = x.reshape(B, 1, N * DIM)
+    with torch.no_grad():
+        assert torch.allclose(mixer.attn(x), x, atol=1e-6)
+
+
+@pytest.mark.parametrize('row_mode', ['per_token', 'concat'])
+def test_row_mixer_permutation_equivariant_over_samples(row_mode):
+    """Reordering the batch reorders the outputs identically, in either mode."""
+    mixer = _row_mixer(row_mode, num_inds=6)
+    # Un-zero the ISAB out-projection so the block is not a trivial identity.
+    torch.nn.init.normal_(mixer.attn.fn.attn_out.to_out.weight, std=0.1)
+    x = torch.randn(B, N, DIM)
+    perm = torch.randperm(B)
+    with torch.no_grad():
+        out, out_perm = mixer(x)[perm], mixer(x[perm])
+    assert torch.allclose(out, out_perm, atol=1e-5)
+
+
+def test_concat_mixes_across_tokens_but_per_token_does_not():
+    """The two modes differ exactly in whether the row step couples feature tokens.
+
+    per_token: perturbing token 3 leaves the other tokens' outputs untouched.
+    concat:    the row attention sees the whole flattened vector, so it does not.
+    """
+    x = torch.randn(B, N, DIM)
+    x_pert = x.clone()
+    x_pert[:, 3, :] += 5.0
+    others = [n for n in range(N) if n != 3]
+
+    per_token = _row_mixer('per_token', num_inds=6)
+    torch.nn.init.normal_(per_token.attn.fn.attn_out.to_out.weight, std=0.1)
+    with torch.no_grad():
+        a, b = per_token(x), per_token(x_pert)
+    assert torch.allclose(a[:, others], b[:, others], atol=1e-5)
+
+    concat = _row_mixer('concat', num_inds=6)
+    torch.nn.init.normal_(concat.attn.fn.attn_out.to_out.weight, std=0.1)
+    torch.nn.init.normal_(concat.ff.fn.net[0].weight, std=0.1)
+    with torch.no_grad():
+        a, b = concat(x), concat(x_pert)
+    assert not torch.allclose(a[:, others], b[:, others], atol=1e-3)
 
 
 # ── pre-norm stack must be closed by a final LayerNorm ───────────────────────

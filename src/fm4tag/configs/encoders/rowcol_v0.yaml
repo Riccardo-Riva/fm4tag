@@ -28,6 +28,8 @@ global_encoder:
       attn_dropout: 0.0
       ff_dropout:   0.0
       num_inds:     16      # null = all-pairs row attention over the batch
+      row_mode:     per_token  # per_token = one ISAB per feature token (see
+                               # rowcol_concat_v0 for the concat alternative)
 
 constituents:
   tracks:
@@ -54,3 +56,7 @@ constituents:
                               # (num_inds=128 measured 3.47->1.20 it/s on the
                               # dim=128 architecture; reverted here.)
                               # null = all-pairs row attention over the batch.
+        row_mode:      per_token  # per_token = one ISAB per feature token, at
+                              # width dim.  Use rowcol_concat_v0 to run a single
+                              # ISAB over the concatenated (N*dim) vector, where
+                              # num_inds is paid once and can grow cheaply.

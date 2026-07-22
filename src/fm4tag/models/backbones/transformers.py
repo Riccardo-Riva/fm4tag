@@ -76,17 +76,37 @@ def _build_row_attention(
 class RowMixer(nn.Module):
     """One depth step of intersample (row) attention + feed-forward.
 
-    Operates on the token grid ``(B, N, dim)`` directly: row attention runs over
-    the batch axis independently for each of the ``N`` tokens, at width ``dim``,
-    with the projections shared across tokens.  This is the tabicl
-    ``ColEmbedding`` factorisation — each feature builds its own summary across
-    samples, and cross-feature mixing is left to the column attention.
+    ``row_mode`` selects how the ``(B, N, dim)`` token grid is presented to the
+    row step; both variants attend over the batch axis ``B`` and return
+    ``(B, N, dim)``:
+
+    * ``'per_token'`` (default) — one row attention per token, run independently
+      for each of the ``N`` tokens at width ``dim`` with the projections shared
+      across tokens.  This is the tabicl ``ColEmbedding`` factorisation: each
+      feature builds its own summary across samples, and cross-feature mixing is
+      left to the column attention.  ``N`` narrow attentions per step; the cost
+      of ``num_inds`` is paid ``N`` times.
+
+    * ``'concat'`` — the token grid is flattened to a single wide row vector
+      ``(B, N*dim)`` and the whole row step (norm + attention + feed-forward)
+      runs at width ``row_dim = N*dim``.  This is the pre-ISAB "row attention on
+      the concatenated token embeddings" shape, but with ISAB
+      (:class:`InducedRowAttention`) as the O(B*num_inds) summary in place of the
+      old O(B²) / chunked attention.  One wide attention per step instead of
+      ``N`` narrow ones: it uses the GPU far better and ``num_inds`` is paid once,
+      so it can grow cheaply — the whole point of recovering this shape.  The
+      trade is parameter count: the projections and feed-forward now scale with
+      ``row_dim`` rather than ``dim``.
 
     Args:
-        dim:      Token embedding width — also the width of the row step.
-        nfeats:   Number of tokens ``N`` (sizes the per-token inducing points).
+        dim:      Token embedding width.
+        nfeats:   Number of tokens ``N``.  Sizes the per-token inducing points in
+                  ``per_token`` mode, and the flattened ``row_dim = N*dim`` in
+                  ``concat`` mode.
         num_inds: Inducing points for :class:`InducedRowAttention`; ``None``
-                  selects all-pairs :class:`RowAttention` instead.
+                  selects all-pairs :class:`RowAttention` instead.  Orthogonal to
+                  ``row_mode`` — every (mode, num_inds) pair is valid.
+        row_mode: ``'per_token'`` | ``'concat'`` (see above).
     """
 
     def __init__(
@@ -100,13 +120,25 @@ class RowMixer(nn.Module):
         attn_dropout: float,
         ff_dropout: float,
         num_inds: int | None,
+        row_mode: str = 'per_token',
     ) -> None:
         super().__init__()
+        if row_mode not in ('per_token', 'concat'):
+            raise ValueError(
+                f"row_mode must be 'per_token' or 'concat', got {row_mode!r}"
+            )
+        self.row_mode = row_mode
+
+        # In concat mode the whole feature vector is a single row token of width
+        # row_dim; the attention then has nfeats == 1 (one inducing-point set).
+        width = dim * nfeats if row_mode == 'concat' else dim
+        row_nfeats = 1 if row_mode == 'concat' else nfeats
+
         self.attn = PreNormResidual(
-            dim,
+            width,
             _build_row_attention(
-                dim,
-                nfeats,
+                width,
+                row_nfeats,
                 heads=heads,
                 dim_row_head=dim_row_head,
                 dropout=attn_dropout,
@@ -114,12 +146,20 @@ class RowMixer(nn.Module):
             ),
         )
         self.ff = PreNormResidual(
-            dim, FeedForward(dim, mult=ff_mult, dropout=ff_dropout)
+            width, FeedForward(width, mult=ff_mult, dropout=ff_dropout)
         )
 
     def forward(
         self, x: torch.Tensor, mask: torch.Tensor | None = None
     ) -> torch.Tensor:
+        if self.row_mode == 'concat':
+            b, n, d = x.shape
+            # Flatten the token grid into one wide row vector; the row step runs
+            # at width row_dim = n*d, then we restore the grid.
+            x = x.reshape(b, 1, n * d)
+            x = self.attn(x, mask=mask)
+            x = self.ff(x)
+            return x.reshape(b, n, d)
         x = self.attn(x, mask=mask)
         return self.ff(x)
 
@@ -204,6 +244,8 @@ class RowTransformer(nn.Module):
                       (:class:`~fm4tag.models.attention.InducedRowAttention`,
                       O(B·num_inds)); ``None`` uses all-pairs
                       :class:`~fm4tag.models.attention.RowAttention` (O(B²)).
+        row_mode:     ``'per_token'`` | ``'concat'`` — how the row step sees the
+                      token grid; see :class:`RowMixer`.
     """
 
     def __init__(
@@ -217,6 +259,7 @@ class RowTransformer(nn.Module):
         attn_dropout: float = 0.0,
         ff_dropout: float = 0.0,
         num_inds: int | None = 16,
+        row_mode: str = 'per_token',
     ) -> None:
         super().__init__()
         self.blocks = nn.ModuleList(
@@ -230,6 +273,7 @@ class RowTransformer(nn.Module):
                     attn_dropout=attn_dropout,
                     ff_dropout=ff_dropout,
                     num_inds=num_inds,
+                    row_mode=row_mode,
                 )
                 for _ in range(depth)
             ]
@@ -263,6 +307,8 @@ class RowColTransformer(nn.Module):
         ff_dropout:   Dropout inside both feed-forward sub-layers.
         num_inds:     Inducing points for the row step — see
                       :class:`RowTransformer`.
+        row_mode:     ``'per_token'`` | ``'concat'`` — how the row step sees the
+                      token grid; see :class:`RowMixer`.
     """
 
     def __init__(
@@ -278,6 +324,7 @@ class RowColTransformer(nn.Module):
         attn_dropout: float = 0.0,
         ff_dropout: float = 0.0,
         num_inds: int | None = 16,
+        row_mode: str = 'per_token',
     ) -> None:
         super().__init__()
         self.blocks = nn.ModuleList(
@@ -305,6 +352,7 @@ class RowColTransformer(nn.Module):
                             attn_dropout=attn_dropout,
                             ff_dropout=ff_dropout,
                             num_inds=num_inds,
+                            row_mode=row_mode,
                         ),
                     ]
                 )
