@@ -22,23 +22,36 @@ GPU_NODE=gpu-L40S-open,gpu-A40
 # the same SMs and memory, which defeats the point of data-parallel training.
 # For single-GPU runs, prefer --gres=shard:12 (= one GPU's worth) to be a good
 # citizen on the shared queues.
+#
+# 2 (not 3+) divides evenly into each node's 8 GPUs, so grid jobs from the same
+# sweep pack without stranding GPUs (3+3 leaves 2 idle -- observed on node102 in
+# run_20260803_162005, where it also meant 2 of our own jobs' dataloaders were
+# competing on one node, see NUM_WORKERS below).
 GPU_NUM=2
 
 # Dataloader workers PER RANK (each DDP rank runs its own dataloader, so the node
 # carries GPU_NUM x NUM_WORKERS worker processes).
 #
-# Do not lower this.  Profiling (slurm/profiling/run_20260713_161724) puts one
-# training step at ~319 ms of compute (fwd 117 + bwd 183 + clip 17 + opt 1) while
-# the dataloader with 12 workers delivers a batch every ~422 ms — i.e. training is
-# already DATA-BOUND and the GPU idles ~25% of the time.  Halving the workers would
-# roughly halve dataloader throughput and starve the GPU for most of the step.
-NUM_WORKERS=12
+# Single-job profiling (slurm/profiling/run_20260713_161724) puts one training
+# step at ~319 ms of compute (fwd 117 + bwd 183 + clip 17 + opt 1) while the
+# dataloader with 12 workers delivers a batch every ~422 ms -- i.e. a LONE job is
+# already DATA-BOUND at 12 workers, and fewer would starve it further.
+#
+# That profiling assumed no node-mate. In run_20260803_162005, two of our own
+# GPU_NUM=3 grid jobs landed on the same physical node (72 combined dataloader
+# workers hammering the same storage3 mount), and one rank measurably stalled
+# waiting on data while its DDP peers busy-spun on the collective. 10 trades a
+# little of a solo job's margin for less contention when jobs (ours or another
+# user's) share a node -- which on this cluster is the common case, not the
+# exception.
+NUM_WORKERS=10
 
 REPO=/storage3/DSIP/rriva/research/fm4tag
 VENV=${REPO}/.venv
 CONFIG_DIR=${REPO}/src/fm4tag/configs
 
-CONFIG=default.yaml
+#CONFIG=default.yaml
+CONFIG=rowcol_concat_test.yaml
 MAX_EPOCHS=50
 
 # gpu-A40 nodes have only 80 CPUs (gpu-L40S-open have 192).  Slurm never schedules
@@ -83,7 +96,8 @@ BATCH_SIZES=(1024)
 # Learning rates to compare.  `finetune.lr` interpolates from `optimizer.lr`, and
 # backbone_lr is forced to null below (everything is randomly initialised here),
 # so this single value is the learning rate for the whole model.
-LEARNING_RATES=(3e-5 1e-4 3e-4)
+#LEARNING_RATES=(3e-5 1e-4 3e-4)
+LEARNING_RATES=(3e-4 1e-4)
 
 # "cross_entropy jet_contrastive": CE on the head output, SupCon on the
 # aggregator output.  Weights are normalised to unit sum; 0 disables the term.
@@ -91,6 +105,7 @@ LOSS_CONFIGS=(
 "1.0 0.0"
 "1.0 0.3"
 "1.0 1.0"
+"1.0 3.0"
 )
 
 RUN_ID=0
