@@ -1,54 +1,36 @@
 from numpy.lib.recfunctions import structured_to_unstructured as s2u
 
 import h5py
+import numpy as np
 import os
 import torch
 from torch.utils.data import Dataset
 
 
-def cat_con_collate_fn(batch: list[dict]) -> dict:
-    """Collate a list of samples from DatasetCatCon into a batched dict.
+class DatasetCatCon(Dataset):
+    """Batch-at-a-time HDF5 dataset.
 
-    The default PyTorch collate_fn handles nested dicts but does not enforce
-    dtypes. This function stacks tensors and casts each field to its expected
-    dtype so model code never needs to cast internally.
+    ``__getitem__`` takes a list of contiguous ``(start, stop)`` spans (produced
+    by :class:`~fm4tag.datasets.samplers.BatchSliceSampler`) and returns the
+    fully collated batch — the DataLoader runs with ``batch_size=None`` and no
+    ``collate_fn``, so there is no per-sample path at all.
 
-    Expected input shape per sample (from DatasetCatCon.__getitem__):
-        label       : ()
-        global      : (F_g,)
-        constituents: { obj_name: { categorical: (N, F_cat),
-                                    continuous:  (N, F_con),
-                                    valid:       (N,) } }
+    This is deliberate, not an optimisation detail.  The file is chunked and lzf
+    compressed (``jets`` 3174 rows/chunk, ``tracks`` 100 rows/chunk), so h5py
+    cannot read a single row: it decompresses the whole enclosing chunk.  The
+    previous per-row ``__getitem__`` therefore decompressed ~485 MB to build a
+    2.45 MB batch (13.4 s/batch measured) where a contiguous read costs 26.6 ms.
+    Reading spans also lets normalisation and dtype casting run once per batch as
+    vectorised numpy, instead of a few thousand tiny per-sample tensor ops.
 
-    Output shapes (batch size B):
+    Output shapes (batch size B, constituent slots C):
         label       : (B,)          long
         global      : (B, F_g)      float32
-        constituents: { obj_name: { categorical: (B, N, F_cat)  long
-                                    continuous:  (B, N, F_con)  float32
-                                    valid:       (B, N)         bool } }
+        constituents: { obj_name: { categorical: (B, C, F_cat)  long
+                                    continuous:  (B, C, F_con)  float32
+                                    valid:       (B, C)         bool } }
     """
-    labels = torch.stack([s['label'] for s in batch])  # (B,)
-    globals = torch.stack([s['global'] for s in batch]).float()  # (B, F_g)
 
-    object_names = batch[0]['constituents'].keys()
-    constituents = {}
-    for name in object_names:
-        constituents[name] = {
-            'categorical': torch.stack(
-                [s['constituents'][name]['categorical'] for s in batch]
-            ).long(),  # (B, N, F_cat)
-            'continuous': torch.stack(
-                [s['constituents'][name]['continuous'] for s in batch]
-            ).float(),  # (B, N, F_con)
-            'valid': torch.stack(
-                [s['constituents'][name]['valid'] for s in batch]
-            ).bool(),  # (B, N)
-        }
-
-    return {'label': labels, 'global': globals, 'constituents': constituents}
-
-
-class DatasetCatCon(Dataset):
     def __init__(
         self,
         file_path,
@@ -70,9 +52,20 @@ class DatasetCatCon(Dataset):
         self.label_name = variables[self.global_object]['label']
         self.class_dict = class_dict
 
-        # Pre-build per-object mean/std tensors once so __getitem__ does no
-        # dict lookups or tensor allocations for normalization.
-        self._build_norm_tensors(norm_dict)
+        # Field name lists, materialised once — s2u is called with these per
+        # batch and omegaconf ListConfig would be re-resolved on every call.
+        self._g_fields = list(self.variables[self.global_object]['inputs'])
+        self._c_fields = {
+            name: {
+                'categorical': list(self.variables[name]['inputs']['categorical']),
+                'continuous': list(self.variables[name]['inputs']['continuous']),
+            }
+            for name in self.constituent_objects
+        }
+
+        # Pre-build per-object mean/std arrays so the batch normalisation is a
+        # single broadcast subtract/divide.
+        self._build_norm_arrays(norm_dict)
 
         with h5py.File(self.file_path, 'r') as file:
             print(f'\nDatasetCatCon: {self.file_path}')
@@ -85,42 +78,39 @@ class DatasetCatCon(Dataset):
     # Normalisation
     # ------------------------------------------------------------------
 
-    def _build_norm_tensors(self, norm_dict: dict | None) -> None:
-        """Convert norm_dict to pre-allocated tensors for fast per-sample use.
+    def _build_norm_arrays(self, norm_dict: dict | None) -> None:
+        """Convert norm_dict to float32 arrays broadcastable over a batch.
 
         norm_dict expected format::
 
             { "tracks": { "d0": {"mean": 0.0, "std": 1.0}, ... }, ... }
 
-        The tensors are stored as:
-            self._norm[obj_name]["mean"]  shape (F_con,)
-            self._norm[obj_name]["std"]   shape (F_con,)
+        Stored as ``self._norm[obj_name]["mean" | "std"]`` of shape ``(F_con,)``,
+        which broadcasts against both ``(B, F_g)`` and ``(B, C, F_con)``.
         """
-        self._norm: dict[str, dict[str, torch.Tensor]] = {}
+        self._norm: dict[str, dict[str, np.ndarray]] = {}
         if norm_dict is None:
             return
 
-        # Global object: inputs is a flat list (all continuous, no categorical).
-        # Constituent objects: inputs.continuous is the continuous feature list.
         all_objects = [self.global_object] + list(self.constituent_objects)
         for obj_name in all_objects:
             if obj_name not in norm_dict:
                 continue
             obj_norm = norm_dict[obj_name]
-            # Bracket access: works for plain dicts and DictConfig alike.
             features = (
-                self.variables[obj_name]['inputs']
+                self._g_fields
                 if obj_name == self.global_object
-                else self.variables[obj_name]['inputs']['continuous']
+                else self._c_fields[obj_name]['continuous']
             )
             self._norm[obj_name] = {
-                'mean': torch.tensor(
-                    [obj_norm[f]['mean'] for f in features], dtype=torch.float32
+                'mean': np.array(
+                    [obj_norm[f]['mean'] for f in features], dtype=np.float32
                 ),
-                # Pre-clamped so __getitem__ can divide directly without per-sample ops.
-                'std': torch.tensor(
-                    [obj_norm[f]['std'] for f in features], dtype=torch.float32
-                ).clamp(min=1e-8),
+                # Pre-clamped so the divide needs no per-batch guard.
+                'std': np.maximum(
+                    np.array([obj_norm[f]['std'] for f in features], dtype=np.float32),
+                    1e-8,
+                ),
             }
 
     # ------------------------------------------------------------------
@@ -136,48 +126,62 @@ class DatasetCatCon(Dataset):
         self.g_dset = self.file[self.global_object]
         self.c_dsets = {name: self.file[name] for name in self.constituent_objects}
 
-    def __getitem__(self, idx: int) -> dict:
+    @staticmethod
+    def _read_spans(dset, spans: list[tuple[int, int]]) -> np.ndarray:
+        """Read and concatenate contiguous row ranges with one h5py call each."""
+        if len(spans) == 1:
+            start, stop = spans[0]
+            return dset[start:stop]
+        return np.concatenate([dset[start:stop] for start, stop in spans])
+
+    def __getitem__(self, spans) -> dict:
+        """Return one collated batch.
+
+        Args:
+            spans: List of ``(start, stop)`` row ranges, or a single such tuple.
+        """
         if self.file is None:
             self._open_file()
 
-        # Single read per object — h5py dataset[idx] is a disk access each time.
-        g_record = self.g_dset[idx]
-        label = torch.tensor(g_record[self.label_name], dtype=torch.long)
+        if isinstance(spans, tuple) and len(spans) == 2 and np.isscalar(spans[0]):
+            spans = [spans]
 
-        # Global features (all numerical, shape: (F_g,))
-        X_g = torch.from_numpy(
-            s2u(g_record[self.variables[self.global_object]['inputs']], dtype=None)
-        ).float()
+        # ── Global object ────────────────────────────────────────────────
+        g_records = self._read_spans(self.g_dset, spans)  # (B,) structured
 
+        labels = torch.from_numpy(
+            np.ascontiguousarray(g_records[self.label_name], dtype=np.int64)
+        )
+
+        X_g = s2u(g_records[self._g_fields], dtype=np.float32)  # (B, F_g)
         if self.global_object in self._norm:
             norm = self._norm[self.global_object]
             X_g = (X_g - norm['mean']) / norm['std']
+        globals_ = torch.from_numpy(np.ascontiguousarray(X_g))
 
-        # Constituent features, one dict entry per object
+        # ── Constituent objects ──────────────────────────────────────────
         constituents = {}
         for obj_name in self.constituent_objects:
-            c_record = self.c_dsets[obj_name][idx]
-            X_cat = torch.from_numpy(
-                s2u(c_record[self.variables[obj_name]['inputs']['categorical']], dtype=None)
-            )
-            X_con = torch.from_numpy(
-                s2u(c_record[self.variables[obj_name]['inputs']['continuous']], dtype=None)
-            ).float()
+            c_records = self._read_spans(self.c_dsets[obj_name], spans)  # (B, C)
+            fields = self._c_fields[obj_name]
+
+            X_cat = s2u(c_records[fields['categorical']], dtype=np.int64)
+            X_con = s2u(c_records[fields['continuous']], dtype=np.float32)
 
             if obj_name in self._norm:
                 norm = self._norm[obj_name]
                 X_con = (X_con - norm['mean']) / norm['std']
 
-            valid = torch.from_numpy(c_record['valid'])
-
             constituents[obj_name] = {
-                'categorical': X_cat,  # (N, F_cat)
-                'continuous': X_con,  # (N, F_con)
-                'valid': valid,  # (N,)
+                'categorical': torch.from_numpy(np.ascontiguousarray(X_cat)),
+                'continuous': torch.from_numpy(np.ascontiguousarray(X_con)),
+                'valid': torch.from_numpy(
+                    np.ascontiguousarray(c_records['valid'], dtype=np.bool_)
+                ),
             }
 
         return {
-            'label': label,
-            'global': X_g,
+            'label': labels,
+            'global': globals_,
             'constituents': constituents,
         }

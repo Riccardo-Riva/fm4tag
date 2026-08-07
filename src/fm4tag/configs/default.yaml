@@ -98,11 +98,27 @@ datamodule:
   norm_dict_path:  ${norm_dict_path}
   class_dict_path: ${class_dict_path}
 
+  # NOTE: batch_size is a MODEL hyper-parameter here, not just a throughput
+  # knob — the row (intersample) attention makes every sample's output depend on
+  # its batch-mates, at inference as well as training.  Measured throughput is
+  # already flat past ~1024 (1024->4096 buys +19% for 4x the memory), so there is
+  # nothing to win by raising it and the model semantics change if you do.
   batch_size:      1024
   num_workers:     6
   prefetch_factor: 2
   pin_memory:      true
-  persistent_workers: false
+  # Workers re-open the 43 GB HDF5 on every restart; a cold first batch was
+  # measured at 107 s, paid per loader per epoch when this was false.
+  persistent_workers: true
+  # Contiguous row runs stitched into one batch.  The file is chunked + lzf
+  # compressed, so h5py cannot read a single row — it decompresses the whole
+  # enclosing chunk (~240 kB for a 76-byte jet row).  Reading spans instead of
+  # indices cut a batch from 485 MB decompressed to ~3 MB.
+  #   1  = one contiguous slice (cheapest read; batch composition frozen across
+  #        epochs, which the row attention can learn — avoid here)
+  #   >1 = stitched from that many random regions, redrawn every epoch
+  reads_per_batch: 8
+  seed:            ${seed}
 
 # ── Backbone architecture ─────────────────────────────────────────────────────
 # The encoder architecture (the per-object embedding transformers) lives in the
@@ -253,6 +269,10 @@ trainer:
   #strategy:          ddp_find_unused_parameters_true
   precision:          "bf16-mixed"
   log_every_n_steps:  100
+  # BatchSliceSampler shards batches across ranks itself (it yields row spans,
+  # which Lightning's injected DistributedSampler would replace with plain
+  # integer indices and silently undo the batched reads). Must stay false.
+  use_distributed_sampler: false
   #gradient_clip_val:  1.0   # global grad-norm clip (transformer stability)
 
 # ── Profiler ─────────────────────────────────────────────────────────────────

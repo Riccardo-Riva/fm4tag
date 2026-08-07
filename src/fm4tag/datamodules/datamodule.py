@@ -3,7 +3,8 @@ from torch.utils.data import DataLoader
 
 import yaml
 
-from ..datasets.datasets import DatasetCatCon, cat_con_collate_fn
+from ..datasets.datasets import DatasetCatCon
+from ..datasets.loader import make_batch_dataloader
 
 
 class CatConDataModule(L.LightningDataModule):
@@ -22,7 +23,9 @@ class CatConDataModule(L.LightningDataModule):
         num_workers: int = 4,
         prefetch_factor: int = 2,
         pin_memory: bool = True,
-        persistent_workers: bool = False,
+        persistent_workers: bool = True,
+        reads_per_batch: int = 8,
+        seed: int = 0,
     ) -> None:
         super().__init__()
         self.save_hyperparameters()
@@ -41,6 +44,8 @@ class CatConDataModule(L.LightningDataModule):
         self._prefetch_factor = prefetch_factor
         self._pin_memory = pin_memory
         self._persistent_workers = persistent_workers
+        self._reads_per_batch = reads_per_batch
+        self._seed = seed
 
         # Loaded once in the main process; shared across both phases.
         self._norm_dict = self._load_yaml(norm_dict_path)
@@ -63,26 +68,20 @@ class CatConDataModule(L.LightningDataModule):
             return yaml.safe_load(f)
 
     def _make_dataloader(self, dataset: DatasetCatCon, *, shuffle: bool) -> DataLoader:
-        return DataLoader(
+        return make_batch_dataloader(
             dataset,
             batch_size=self._batch_size,
             shuffle=shuffle,
             # Drop last incomplete batch during training for stable batch stats.
             drop_last=shuffle,
+            reads_per_batch=self._reads_per_batch,
             num_workers=self._num_workers,
-            collate_fn=cat_con_collate_fn,
-            prefetch_factor=self._prefetch_factor if self._num_workers > 0 else None,
-            # Keep workers alive between epochs so HDF5 handles are not reopened.
-            persistent_workers=self._persistent_workers if self._num_workers > 0 else None,
+            prefetch_factor=self._prefetch_factor,
             pin_memory=self._pin_memory,
-            # Start workers from a clean process instead of forking the parent.
-            # With the default 'fork', workers inherit the parent's initialized
-            # CUDA context; when an inherited CUDA tensor's destructor later runs
-            # in the worker it aborts with cudaErrorInitializationError (CUDA
-            # cannot be re-initialized in a fork child), killing the worker. The
-            # finetune path hits this reliably because of its GPU-resident
-            # torchmetrics/head state. 'forkserver' avoids inheriting CUDA.
-            multiprocessing_context='forkserver' if self._num_workers > 0 else None, #TODO: check if this is needed (should be mandatory in Linux)
+            # Keep workers alive between epochs so HDF5 handles are not reopened
+            # — a cold start cost 107 s per loader per epoch when they were not.
+            persistent_workers=self._persistent_workers,
+            seed=self._seed,
         )
 
     # ------------------------------------------------------------------

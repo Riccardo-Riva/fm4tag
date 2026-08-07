@@ -61,14 +61,14 @@ import torch
 import yaml
 from hydra.utils import instantiate as hydra_instantiate
 from omegaconf import DictConfig, OmegaConf
-from torch.utils.data import DataLoader, Subset
 from tqdm import tqdm
 
 from ftag import Flavours
 from ftag.utils import calculate_rejection
 from puma import Histogram, HistogramPlot, Roc, RocPlot, VarVsEff, VarVsEffPlot
 
-from fm4tag.datasets.datasets import DatasetCatCon, cat_con_collate_fn
+from fm4tag.datasets.datasets import DatasetCatCon
+from fm4tag.datasets.loader import make_batch_dataloader
 from fm4tag.utils import build_aggregator, build_encoders, build_head
 
 # ---------------------------------------------------------------------------
@@ -241,19 +241,16 @@ def run_inference(
         norm_dict=_load_yaml(run_cfg.get('norm_dict_path')),
         class_dict=_load_yaml(run_cfg.get('class_dict_path')),
     )
-    if n_jets is not None and n_jets < len(dataset):
-        dataset = Subset(dataset, range(n_jets))
-
-    loader = DataLoader(
+    # Truncation goes to the sampler, not torch.utils.data.Subset: the dataset is
+    # indexed by contiguous row spans, and Subset remaps integer indices.
+    loader = make_batch_dataloader(
         dataset,
         batch_size=batch_size,
         shuffle=False,
         num_workers=num_workers,
-        collate_fn=cat_con_collate_fn,
         pin_memory=(device.type == 'cuda'),
-        prefetch_factor=2 if num_workers > 0 else None,
-        # See CatConDataModule: avoids CUDA re-init crashes in fork children.
-        multiprocessing_context='forkserver' if num_workers > 0 else None,
+        prefetch_factor=2,
+        max_rows=n_jets,
     )
 
     module.to(device)

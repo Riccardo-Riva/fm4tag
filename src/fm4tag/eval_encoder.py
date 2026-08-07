@@ -48,10 +48,10 @@ import hydra
 import torch
 from einops import rearrange
 from omegaconf import DictConfig, OmegaConf
-from torch.utils.data import DataLoader
 
 from fm4tag.models import embed_data
-from fm4tag.datasets.datasets import DatasetCatCon, cat_con_collate_fn
+from fm4tag.datasets.datasets import DatasetCatCon
+from fm4tag.datasets.loader import make_batch_dataloader
 from fm4tag.utils import build_encoders, load_pretrained_encoders
 from fm4tag.metrics.metrics import effective_rank, uniformity
 
@@ -198,13 +198,12 @@ def evaluate(
         else None,
     )
     num_workers = dl_cfg.get('num_workers', 4)
-    loader = DataLoader(
+    loader = make_batch_dataloader(
         dataset,
         batch_size=dl_cfg.get('batch_size', 1024),
         shuffle=False,
         num_workers=num_workers,
-        collate_fn=cat_con_collate_fn,
-        prefetch_factor=dl_cfg.get('prefetch_factor', 2) if num_workers > 0 else None,
+        prefetch_factor=dl_cfg.get('prefetch_factor', 2),
         pin_memory=dl_cfg.get('pin_memory', True),
     )
 
