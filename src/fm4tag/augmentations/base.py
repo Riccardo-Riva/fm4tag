@@ -115,6 +115,27 @@ class Compose(nn.Module):
             [a for a in augmentations if a.stage == Stage.EMBEDDING]
         )
 
+    @property
+    def is_identity(self) -> bool:
+        """True if this view leaves its input untouched at every stage.
+
+        Such a view reproduces the clean (unaugmented) encoder pass exactly, so
+        callers that already hold that pass can reuse it instead of recomputing
+        a full forward — see
+        :meth:`~fm4tag.modules.finetune_module.FinetuneModule._encode_jet_views`.
+
+        Only literal :class:`~fm4tag.augmentations.Identity` entries count: any
+        other augmentation is assumed to change its input, even if a particular
+        parameterisation (e.g. ``lam=0``) happens not to.
+        """
+        from .identity import Identity
+
+        return all(
+            isinstance(a, Identity)
+            for stage in (self.pre_flatten, self.raw, self.embedding)
+            for a in stage
+        )
+
     @staticmethod
     def _run_stage(
         modules: nn.ModuleList,

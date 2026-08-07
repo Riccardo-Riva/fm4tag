@@ -191,15 +191,33 @@ class FinetuneModule(L.LightningModule):
     # Loss
     # ------------------------------------------------------------------
 
-    def _encode_jet_views(self, batch: dict) -> list[torch.Tensor]:
-        """One aggregator output per augmentation view (as in pretraining)."""
-        enc_global = self.backbone[self.global_object]
-        z_global_views = [
-            encode_global_view(enc_global, view, batch['global'])[0]
-            for view in self.views
-        ]
+    def _encode_jet_views(
+        self, batch: dict, z_clean: torch.Tensor | None = None
+    ) -> list[torch.Tensor]:
+        """One aggregator output per augmentation view (as in pretraining).
 
-        z_consts_per_obj: list[list[torch.Tensor]] = []
+        An identity view runs the same encoders, projector and aggregator over
+        the same inputs as the clean pass, so it reproduces it exactly.  When
+        ``z_clean`` (the clean ``aggregator`` output) is supplied it is reused
+        for those views instead of being recomputed — with the default
+        ``[CutMix+Mixup, Identity]`` pair this turns three full encoder passes
+        per step into two, bit-for-bit unchanged.
+        """
+        views = list(self.views)
+        todo = [
+            v for v, view in enumerate(views)
+            if z_clean is None or not view.is_identity
+        ]
+        if not todo:
+            return [z_clean for _ in views]
+
+        enc_global = self.backbone[self.global_object]
+        z_global_views = {
+            v: encode_global_view(enc_global, views[v], batch['global'])[0]
+            for v in todo
+        }
+
+        z_consts_per_obj: list[dict[int, torch.Tensor]] = []
         valids_per_obj: list[torch.Tensor] = []
         for obj_name in self.constituent_objects:
             encoder = self.backbone[obj_name]
@@ -208,20 +226,22 @@ class FinetuneModule(L.LightningModule):
             B, C = valids.shape
             valids_flat = valids.reshape(-1)
 
-            z_views = []
-            for view in self.views:
-                z, _ = encode_constituent_view(encoder, view, const, valids_flat)
-                z_views.append(scatter_valid(z, valids_flat, B, C))
+            z_views = {}
+            for v in todo:
+                z, _ = encode_constituent_view(encoder, views[v], const, valids_flat)
+                z_views[v] = scatter_valid(z, valids_flat, B, C)
             z_consts_per_obj.append(z_views)
             valids_per_obj.append(valids)
 
         return [
-            self.aggregator(
+            z_clean
+            if v not in z_global_views
+            else self.aggregator(
                 z_global_views[v],
                 [z_views[v] for z_views in z_consts_per_obj],
                 valids_per_obj,
             )
-            for v in range(len(self.views))
+            for v in range(len(views))
         ]
 
     def _compute_loss(
@@ -242,8 +262,9 @@ class FinetuneModule(L.LightningModule):
             log_dict['head/loss_ce'] = l_ce
 
         if w['jet_contrastive'] > 0:
-            # Costs V extra full encoder passes on top of the clean one above.
-            z_jet_list = self._encode_jet_views(batch)
+            # Costs one extra full encoder pass per NON-identity view; identity
+            # views reuse the clean aggregator output computed above.
+            z_jet_list = self._encode_jet_views(batch, z_clean=out['aggregator'])
             l_jet = self.jet_contrastive_loss(z_jet_list)
             total = total + w['jet_contrastive'] * l_jet
             log_dict['aggregator/loss_contrastive'] = l_jet
