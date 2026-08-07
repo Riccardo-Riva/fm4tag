@@ -345,10 +345,21 @@ loggers:
   wandb:
     _target_: lightning.pytorch.loggers.WandbLogger
     save_dir: ${output_dir}
-    name:     ${experiment_name}
     project:  fm4tag
-    entity:   riccardo-riva-cern
+    entity:   ririva-cern
     log_model: true
+    # name/group/job_type below are fallbacks for ad-hoc manual runs. The
+    # slurm/*.sh sweep scripts override all three on the CLI so that every
+    # run launched by one `bash *.sh` invocation shares a `group` (one row
+    # per sweep in the wandb UI, expandable into its member runs), `job_type`
+    # is a stable phase label ("pretrain"/"finetune"/"scratch") that survives
+    # across sweeps even though classify_from_scratch.sh runs under
+    # phase=finetune under the hood, and `name` carries only the
+    # hyperparameters that vary WITHIN the sweep (phase+timestamp already
+    # live in `group`, so repeating them in `name` would be noise).
+    name:     ${experiment_name}
+    group:    ${phase}
+    job_type: ${phase}
 
 # ── Hyperparameter optimisation (fm4tag-hpo) ──────────────────────────────────
 hpo:

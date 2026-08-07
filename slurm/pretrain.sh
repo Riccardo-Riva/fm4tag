@@ -52,6 +52,13 @@ OUTPUT_BASE=${REPO}/slurm/pretraining/run_${TIMESTAMP}
 
 mkdir -pv "${OUTPUT_BASE}"
 
+# wandb: one group per invocation of this script, so every run this sweep
+# submits clusters into a single expandable row in the wandb UI. job_type is
+# a fixed phase label independent of the timestamp, so "all pretrain runs
+# ever" is one filter away regardless of which sweep they came from.
+WANDB_GROUP="pretrain_${TIMESTAMP}"
+WANDB_JOB_TYPE="pretrain"
+
 # ── Grid definitions ──────────────────────────────────────────────────────────
 
 TRANSFORMER_TYPES=("rowcol" "col")
@@ -103,6 +110,11 @@ read CONTRASTIVE JET_CONTRASTIVE <<< "${LOSS_CONF}"
 RUN_NAME="pretrain_${TIMESTAMP}_${TRANSFORMER_TYPE}_ddp${GPU_NUM}_bs_${BATCH_SIZE}_lr_${LR}_c_${CONTRASTIVE}_jc_${JET_CONTRASTIVE}"
 OUTPUT_DIR=${OUTPUT_BASE}/${RUN_NAME}_${RUN_ID}
 
+# Short wandb display name: only the axes that vary WITHIN this sweep.
+# Phase + timestamp are already carried by WANDB_GROUP, so repeating them
+# here would just be noise in the runs table.
+WANDB_NAME="${TRANSFORMER_TYPE}_ddp${GPU_NUM}_bs${BATCH_SIZE}_lr${LR}_c${CONTRASTIVE}_jc${JET_CONTRASTIVE}_${RUN_ID}"
+
 mkdir -pv "${OUTPUT_DIR}"
 
 cat > "${OUTPUT_DIR}/pretrain_run.sh" << EOF
@@ -126,6 +138,7 @@ export NCCL_P2P_DISABLE=1
 export TORCH_NCCL_ASYNC_ERROR_HANDLING=1
 
 srun \
+--kill-on-bad-exit=1 \
 --output=${OUTPUT_DIR}/rank_%t.out \
 --error=${OUTPUT_DIR}/rank_%t.err \
 fm4tag \
@@ -143,7 +156,10 @@ pretrain.loss_weights.denoising_cat=${DENOISING_CAT} \
 pretrain.loss_weights.denoising_con=${DENOISING_CON} \
 pretrain.loss_weights.jet_contrastive=${JET_CONTRASTIVE} \
 experiment_name=${RUN_NAME} \
-output_dir=${OUTPUT_DIR}
+output_dir=${OUTPUT_DIR} \
+loggers.wandb.group=${WANDB_GROUP} \
+loggers.wandb.job_type=${WANDB_JOB_TYPE} \
+loggers.wandb.name=${WANDB_NAME}
 
 echo "Elapsed: \$((SECONDS/3600))h \$(((SECONDS/60)%60))m \$((SECONDS%60))s"
 EOF

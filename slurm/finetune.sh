@@ -56,6 +56,13 @@ OUTPUT_BASE=${REPO}/slurm/finetuning/run_${TIMESTAMP}
 
 mkdir -pv "${OUTPUT_BASE}"
 
+# wandb: one group per invocation of this script, so every run this sweep
+# submits clusters into a single expandable row in the wandb UI. job_type is
+# a fixed phase label independent of the timestamp, so "all finetune runs
+# ever" is one filter away regardless of which sweep they came from.
+WANDB_GROUP="finetune_${TIMESTAMP}"
+WANDB_JOB_TYPE="finetune"
+
 # ── Grid definitions ──────────────────────────────────────────────────────────
 
 # "transformer_type checkpoint" pairs: the architecture must match the one the
@@ -119,6 +126,11 @@ fi
 RUN_NAME="finetune_${TIMESTAMP}_${TRANSFORMER_TYPE}_ddp${GPU_NUM}_bs_${BATCH_SIZE}_lr_${LR}_blr_${BACKBONE_LR}_ce_${CROSS_ENTROPY}_jc_${JET_CONTRASTIVE}"
 OUTPUT_DIR=${OUTPUT_BASE}/${RUN_NAME}_${RUN_ID}
 
+# Short wandb display name: only the axes that vary WITHIN this sweep.
+# Phase + timestamp are already carried by WANDB_GROUP, so repeating them
+# here would just be noise in the runs table.
+WANDB_NAME="${TRANSFORMER_TYPE}_ddp${GPU_NUM}_bs${BATCH_SIZE}_lr${LR}_blr${BACKBONE_LR}_ce${CROSS_ENTROPY}_jc${JET_CONTRASTIVE}_${RUN_ID}"
+
 mkdir -pv "${OUTPUT_DIR}"
 
 cat > "${OUTPUT_DIR}/finetune_run.sh" << EOF
@@ -143,6 +155,7 @@ export NCCL_P2P_DISABLE=1
 export TORCH_NCCL_ASYNC_ERROR_HANDLING=1
 
 srun \\
+    --kill-on-bad-exit=1 \\
     --output=${OUTPUT_DIR}/rank_%t.out \\
     --error=${OUTPUT_DIR}/rank_%t.err \\
     fm4tag \\
@@ -160,7 +173,10 @@ srun \\
     finetune.loss_weights.cross_entropy=${CROSS_ENTROPY} \\
     finetune.loss_weights.jet_contrastive=${JET_CONTRASTIVE} \\
     experiment_name=${RUN_NAME} \\
-    output_dir=${OUTPUT_DIR}
+    output_dir=${OUTPUT_DIR} \\
+    loggers.wandb.group=${WANDB_GROUP} \\
+    loggers.wandb.job_type=${WANDB_JOB_TYPE} \\
+    loggers.wandb.name=${WANDB_NAME}
 
 echo "Elapsed: \$((SECONDS/3600))h \$(((SECONDS/60)%60))m \$((SECONDS%60))s"
 EOF
