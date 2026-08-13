@@ -1,0 +1,61 @@
+# Validation cross-entropy vs epoch for the CutMix/Mixup lambda scan.
+#
+# All runs are classify-from-scratch, rowcol_concat, ddp2, bs 1024, lr 3e-4,
+# cross_entropy 1.0.  Thirteen of them use jet_contrastive 1.0 and sweep lambda
+# over [0.03, 0.9] (three from run_20260807_162950, ten from run_20260811_105149);
+# the fourteenth is the jet_contrastive 0.0 reference, drawn in black.
+#
+#     python scripts/plot_val_curves.py --config scripts/configs/val_loss_ce_lambda_scan.yaml
+#
+# ce / jc / lambda are read from each run's own .hydra/config.yaml — per-entry
+# `lam:`, `jc:`, `ce:`, `label:` and `color:` keys are only overrides.
+
+metric: val/head/loss_ce
+
+# ── Path fragments, interpolated into the model list below ───────────────────
+paths:
+  root: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch
+  # Every run of a sweep shares a directory-name prefix; only the jc / lam
+  # suffix and the sweep index differ.
+  aug: ${paths.root}/run_20260807_162950/scratch_20260807_162950_rowcol_concat_ddp2_bs_1024_lr_3e-4_ce_1.0
+  fine: ${paths.root}/run_20260811_105149/scratch_bs_1024_lr_3e-4_ce_1.0
+
+color:
+  cmap: ['#1f3ecc', '#7a1fa2', '#cc1f1f']  # blue -> purple -> red
+  vmin: 0.0                                # lambda mapped to the low end
+  vmax: 1.0                                # lambda mapped to the high end
+  baseline_color: black                    # used for every run with jc == 0
+  colorbar: false                          # the legend already spells lambda out
+
+plot:
+  out_dir: plots/val_loss_ce
+  filename: val_loss_ce_lambda_scan.png
+  title: 'Validation CE — CutMix/Mixup $\lambda$ scan (CE 1.0, JC 1.0)'
+  ylabel: ${metric}
+  legend_title: 'jet-contrastive / augmentation'
+  legend_outside: true
+  figsize: [8.5, 5.0]
+  # lambda 0.75 and 0.9 collapse to ~1.1 and would flatten everything else;
+  # comment this out to see them.
+  ylim: [0.598, 0.70]
+
+models:
+  # ── Reference: jet-contrastive off ─────────────────────────────────────────
+  - dir: ${paths.aug}_jc_0.0_lam_0.03_0
+
+  # ── jc = 1.0, lambda scan: run_20260807_162950 ─────────────────────────────
+  - dir: ${paths.aug}_jc_1.0_lam_0.03_4
+  - dir: ${paths.aug}_jc_1.0_lam_0.1_5
+  - dir: ${paths.aug}_jc_1.0_lam_0.3_6
+
+  # ── jc = 1.0, lambda scan: run_20260811_105149 ─────────────────────────────
+  - dir: ${paths.fine}_jc_1.0_lam_0.15_0
+  - dir: ${paths.fine}_jc_1.0_lam_0.2_1
+  - dir: ${paths.fine}_jc_1.0_lam_0.25_2
+  - dir: ${paths.fine}_jc_1.0_lam_0.35_3
+  - dir: ${paths.fine}_jc_1.0_lam_0.4_4
+  - dir: ${paths.fine}_jc_1.0_lam_0.45_5
+  - dir: ${paths.fine}_jc_1.0_lam_0.5_6
+  - dir: ${paths.fine}_jc_1.0_lam_0.6_7
+  - dir: ${paths.fine}_jc_1.0_lam_0.75_8
+  - dir: ${paths.fine}_jc_1.0_lam_0.9_9
