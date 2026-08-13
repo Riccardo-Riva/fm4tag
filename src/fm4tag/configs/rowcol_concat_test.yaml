@@ -184,13 +184,15 @@ head:
 # ── Multi-view augmentation pipelines (shared by pretrain and finetune) ──────
 # First view is the denoising input; all views participate in contrastive.
 # Instantiated in the runner and passed to the module as a kwarg override.
+
+lambda: 0.1
 views:
   - _target_: fm4tag.augmentations.Compose
     augmentations:
       - _target_: fm4tag.augmentations.CutMix
-        lam: 0.1
+        lam: ${lambda}
       - _target_: fm4tag.augmentations.Mixup
-        lam: 0.1
+        lam: ${lambda}
   - _target_: fm4tag.augmentations.Compose
     augmentations:
       - _target_: fm4tag.augmentations.Identity

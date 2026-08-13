@@ -80,7 +80,16 @@ WANDB_JOB_TYPE="scratch"
 
 # ── Grid definitions ──────────────────────────────────────────────────────────
 
-TRANSFORMER_TYPES=("rowcol")
+# Encoder config group: the CLI gets `encoders=${TRANSFORMER_TYPE}_v0`, so this
+# must name a file in src/fm4tag/configs/encoders/ minus the _v0 suffix.
+#   rowcol         -> rowcol_v0         (per-token ISAB, dim 16)
+#   rowcol_concat  -> rowcol_concat_v0  (one ISAB over the concatenated N*dim
+#                                        vector; measured 2.17M params in 43.2 ms
+#                                        against rowcol_v0's 0.06M in 54.8 ms —
+#                                        strictly more model for less time)
+# Keep CONFIG in sync: rowcol_concat_test.yaml already defaults to the concat
+# encoder group, but the CLI override above is what actually decides.
+TRANSFORMER_TYPES=("rowcol_concat")
 
 # PER-RANK batch size.  Lightning injects a DistributedSampler under DDP, so each
 # rank's dataloader yields BATCH_SIZE samples and the gradient batch is
@@ -97,24 +106,46 @@ BATCH_SIZES=(1024)
 # backbone_lr is forced to null below (everything is randomly initialised here),
 # so this single value is the learning rate for the whole model.
 #LEARNING_RATES=(3e-5 1e-4 3e-4)
-LEARNING_RATES=(3e-4 1e-4)
+LEARNING_RATES=(3e-4)
 
 # "cross_entropy jet_contrastive": CE on the head output, SupCon on the
 # aggregator output.  Weights are normalised to unit sum; 0 disables the term.
 LOSS_CONFIGS=(
-"1.0 0.0"
-"1.0 0.3"
+#"1.0 0.0"
+#"1.0 0.3"
 "1.0 1.0"
-"1.0 3.0"
 )
+
+# Augmentation strength for the contrastive view.  `lambda` in the config feeds
+# BOTH CutMix.lam and Mixup.lam of views[0]; views[1] is Identity and takes no
+# parameter.  Overridden on the CLI as `lambda=<x>` (a Python keyword, but Hydra
+# parses overrides as strings, so this is fine — verified end to end).
+#NOISE_LAMBDAS=(0.03 0.1 0.3)
+NOISE_LAMBDAS=(0.15 0.2 0.25 0.35 0.4 0.45 0.5 0.6 0.75 0.9)
+
+# `lambda` only ever reaches the model through views[0], and FinetuneModule only
+# builds the views when jet_contrastive > 0 (see _compute_loss).  So at jc=0.0
+# every NOISE_LAMBDAS value produces a bit-identical run — same seed, same data
+# order, same weights.  A literal 3x3 grid would therefore submit 3 copies of the
+# same baseline and burn ~2 x 50 epochs of GPU on nothing.
+#
+# 1 = collapse those duplicates to a single jc=0.0 baseline (3x3 -> 7 real runs).
+# 0 = submit the literal cartesian product, duplicates included.
+SKIP_REDUNDANT_LAMBDA=${SKIP_REDUNDANT_LAMBDA:-1}
 
 RUN_ID=0
 
 # DRY_RUN=1 writes every job script but submits nothing.
 DRY_RUN=${DRY_RUN:-0}
 
-N_RUNS=$(( ${#TRANSFORMER_TYPES[@]} * ${#BATCH_SIZES[@]} * ${#LEARNING_RATES[@]} * ${#LOSS_CONFIGS[@]} ))
-echo "Grid: ${#TRANSFORMER_TYPES[@]} arch x ${#BATCH_SIZES[@]} bs x ${#LEARNING_RATES[@]} lr x ${#LOSS_CONFIGS[@]} loss = ${N_RUNS} runs"
+N_CELLS=$(( ${#TRANSFORMER_TYPES[@]} * ${#BATCH_SIZES[@]} * ${#LEARNING_RATES[@]} \
+            * ${#LOSS_CONFIGS[@]} * ${#NOISE_LAMBDAS[@]} ))
+echo "Grid: ${#TRANSFORMER_TYPES[@]} arch x ${#BATCH_SIZES[@]} bs x ${#LEARNING_RATES[@]} lr" \
+     "x ${#LOSS_CONFIGS[@]} loss x ${#NOISE_LAMBDAS[@]} lambda = ${N_CELLS} cells"
+if [[ "${SKIP_REDUNDANT_LAMBDA}" == "1" ]]; then
+    echo "       (lambda is inert at jet_contrastive=0 — duplicate baselines will be skipped;"
+    echo "        set SKIP_REDUNDANT_LAMBDA=0 to submit the literal product)"
+fi
 
 # ── Submit grid ───────────────────────────────────────────────────────────────
 
@@ -122,16 +153,27 @@ for TRANSFORMER_TYPE in "${TRANSFORMER_TYPES[@]}"; do
 for BATCH_SIZE in "${BATCH_SIZES[@]}"; do
 for LR in "${LEARNING_RATES[@]}"; do
 for LOSS_CONF in "${LOSS_CONFIGS[@]}"; do
+for LAMBDA in "${NOISE_LAMBDAS[@]}"; do
 
 read CROSS_ENTROPY JET_CONTRASTIVE <<< "${LOSS_CONF}"
 
-RUN_NAME="scratch_${TIMESTAMP}_${TRANSFORMER_TYPE}_ddp${GPU_NUM}_bs_${BATCH_SIZE}_lr_${LR}_ce_${CROSS_ENTROPY}_jc_${JET_CONTRASTIVE}"
+# See SKIP_REDUNDANT_LAMBDA above: with the contrastive term off, the views
+# (and hence lambda) never run, so keep only the first lambda as the baseline.
+if [[ "${SKIP_REDUNDANT_LAMBDA}" == "1" ]] \
+   && awk "BEGIN{exit !(${JET_CONTRASTIVE} == 0)}" \
+   && [[ "${LAMBDA}" != "${NOISE_LAMBDAS[0]}" ]]; then
+    echo "  skip (duplicate of the jc=0.0 baseline): lambda=${LAMBDA}"
+    continue
+fi
+
+#RUN_NAME="scratch_${TIMESTAMP}_${TRANSFORMER_TYPE}_ddp${GPU_NUM}_bs_${BATCH_SIZE}_lr_${LR}_ce_${CROSS_ENTROPY}_jc_${JET_CONTRASTIVE}_lam_${LAMBDA}"
+RUN_NAME="scratch_${TRANSFORMER_TYPE}_bs_${BATCH_SIZE}_lr_${LR}_ce_${CROSS_ENTROPY}_jc_${JET_CONTRASTIVE}_lam_${LAMBDA}"
 OUTPUT_DIR=${OUTPUT_BASE}/${RUN_NAME}_${RUN_ID}
 
 # Short wandb display name: only the axes that vary WITHIN this sweep.
 # Phase + timestamp are already carried by WANDB_GROUP, so repeating them
 # here would just be noise in the runs table.
-WANDB_NAME="${TRANSFORMER_TYPE}_ddp${GPU_NUM}_bs${BATCH_SIZE}_lr${LR}_ce${CROSS_ENTROPY}_jc${JET_CONTRASTIVE}_${RUN_ID}"
+WANDB_NAME="${TRANSFORMER_TYPE}_ddp${GPU_NUM}_bs${BATCH_SIZE}_lr${LR}_ce${CROSS_ENTROPY}_jc${JET_CONTRASTIVE}_lam${LAMBDA}_${RUN_ID}"
 
 mkdir -pv "${OUTPUT_DIR}"
 
@@ -143,6 +185,8 @@ cat > "${OUTPUT_DIR}/classify_from_scratch_run.sh" << EOF
 #!/bin/bash
 #SBATCH --job-name=${RUN_NAME}
 #SBATCH --partition=${GPU_NODE}
+# node82's GPU5 (0000:D1:00.0) fails NVML init (run_20260811_103403) — exclude until fixed.
+#SBATCH --exclude=node82
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:${GPU_NUM}
 #SBATCH --ntasks-per-node=${GPU_NUM}
@@ -179,6 +223,7 @@ srun \\
     optimizer.lr=${LR} \\
     finetune.loss_weights.cross_entropy=${CROSS_ENTROPY} \\
     finetune.loss_weights.jet_contrastive=${JET_CONTRASTIVE} \\
+    lambda=${LAMBDA} \\
     experiment_name=${RUN_NAME} \\
     output_dir=${OUTPUT_DIR} \\
     loggers.wandb.group=${WANDB_GROUP} \\
@@ -198,6 +243,7 @@ fi
 
 ((RUN_ID++))
 
+done
 done
 done
 done

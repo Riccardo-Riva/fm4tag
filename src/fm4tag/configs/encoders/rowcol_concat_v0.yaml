@@ -13,27 +13,44 @@
 #     apply here.  That is what the larger num_inds below exploits.
 #   * one wide matmul per step uses the GPU (tensor cores) far better than N
 #     narrow ones.
-# The trade: the row attention + feed-forward now run at width row_dim = N*dim,
-# so their parameter count scales with row_dim rather than dim (heavier model).
+# The trade, and it is a steep one: the row attention AND its feed-forward now run
+# at width row_dim = N*dim, and both are dense at that width, so parameters scale
+# as row_dim^2 = (N*dim)^2 — QUADRATIC in dim, not linear.  For tracks (N=19):
+#
+#     dim   row_dim   tracks encoder (depth 6, ff_mult 4)
+#      16      304        14.7 M
+#      32      608        42.7 M
+#      64     1216       138.8 M      <- 9.5x the dim=16 model
+#     128     2432       491.0 M
+#
+# A dim=64 run measured 144 M total params, 74% of which was the row feed-forward
+# alone (17.8 M x 6 depth).  Read the table before raising `dim` here; the same
+# change in rowcol_v0 (per_token) costs ~40x less.
+#
+# ff_mult multiplies the largest term, so it is the cheapest lever: at dim=64,
+# ff_mult 4->2 takes the tracks encoder 138.8 M -> 85.3 M.  `num_inds` is NOT a
+# lever — the inducing points are (1, num_inds, dim) and paid once, so 256->64
+# saves only 1.4 M.  That part of the concat design works as advertised.
 #
 # Select with:  encoders=rowcol_concat_v0
 # ════════════════════════════════════════════════════════════════════════════
 
 global_encoder:
   _target_: fm4tag.models.GlobalTransformerEncoder
-  dim:          64     # token width — the backbone runs at this width
+  dim:          16     # token width — the backbone runs at this width.
+                       # Row-half params go as (N*dim)^2; see the header table.
   proj_hidden:  null   # null → auto (2 × dim × n_tokens)
   proj_out:     128    # projector output width — head only, never the backbone
   # num_features injected at runtime from variables.jets.inputs
   layers:
     - type:         rowcol
       depth:        6
-      col_heads:    2
-      row_heads:    4
-      dim_head:     32
+      col_heads:    1
+      row_heads:    1
+      dim_head:     16
       dim_row_head: 32     # attention inner dim = row_heads*dim_row_head, over
                            # the wide concatenated vector (row_dim = N*dim)
-      ff_mult:      4
+      ff_mult:      2
       attn_dropout: 0.0
       ff_dropout:   0.0
       num_inds:     128     # paid once (concat), so affordable to raise;
@@ -43,7 +60,8 @@ global_encoder:
 constituents:
   tracks:
     _target_: fm4tag.models.Encoder
-    dim:              64
+    dim:              16     # row-half params go as (N*dim)^2 with N=19; see
+                             # the header table before raising this
     cont_embeddings:  MLP    # MLP | pos_singleMLP
     proj_hidden:      null   # null → auto (3/4 × dim × n_tokens)
     proj_out:         128    # null → auto (1/2 × dim × n_tokens)
@@ -51,11 +69,19 @@ constituents:
     layers:
       - type:          rowcol
         depth:         6
-        col_heads:     2
+        col_heads:     1
         row_heads:     8
-        dim_head:      32
-        dim_row_head:  64     # inner dim over the concat vector (row_dim = N*dim)
-        ff_mult:       4
+        dim_head:      16
+        dim_row_head:  32     # inner dim over the concat vector (row_dim = N*dim).
+                              # Attention inner = row_heads*dim_row_head = 8*32 =
+                              # 256, just under row_dim = 19*16 = 304, so the
+                              # projections narrow the residual stream rather than
+                              # expand it.  Watch that ratio when changing dim:
+                              # keeping dim_row_head=64 here would have made the
+                              # inner dim 512, i.e. wider than the stream it reads,
+                              # and the row attention would outweigh the row
+                              # feed-forward (the reverse of the dim=64 regime).
+        ff_mult:       2
         attn_dropout:  0.0
         ff_dropout:    0.0
         num_inds:      256     # paid once (concat), so affordable to raise;
