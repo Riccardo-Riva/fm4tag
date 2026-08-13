@@ -1,0 +1,69 @@
+# Validation cross-entropy vs epoch for the seed-repeated CutMix/Mixup lambda scan.
+#
+# Companion to slurm/classify_param_scan.sh: every `cell:` below is one grid cell
+# of that sweep — the same configuration trained once per seed — so each curve is
+# the seed MEAN with a ±spread band, and each star is the mean best value with
+# the spread across seeds as an error bar.
+#
+#     python scripts/plot_val_curves.py --config scripts/configs/val_loss_lambda_seed_scan.yaml
+#
+# Set `root` to the sweep you want (slurm/classify_param_scan/run_<TS>) and drop
+# any cell whose seeds have not landed yet — an entry with no completed seed is
+# an error, not an empty curve.
+#
+# ce / jc / lambda are read from each run's own .hydra/config.yaml; per-entry
+# `lam:`, `jc:`, `ce:`, `label:` and `color:` are only overrides.
+
+metric: val/head/loss_ce
+
+# Spread shown by the band and the error bars:
+#   std    — standard deviation across seeds (ddof=1); the honest run-to-run scatter
+#   sem    — std / sqrt(n); how well the MEAN is known, shrinks with more seeds
+#   minmax — full range across seeds; the readable choice at n = 2 or 3
+error: std
+
+# Seeds are included only with these `status` values from their run_info.yaml.
+# `truncated` seeds hit the job's walltime and stopped early, so their best value
+# is biased upwards — keep them out unless you are inspecting them on purpose.
+seed_status: [completed]
+
+# ── Path fragments, interpolated into the model list below ───────────────────
+paths:
+  root: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_param_scan/run_TIMESTAMP
+  cell: ${paths.root}/scratch_bs_1024_lr_3e-4_ce_1.0_jc_1.0
+
+  # The single-run λ = 0.03 reference from the earlier sweep, for context.
+  old: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch/run_20260807_162950/scratch_20260807_162950_rowcol_concat_ddp2_bs_1024_lr_3e-4_ce_1.0
+
+color:
+  cmap: ['#1f3ecc', '#7a1fa2', '#cc1f1f']  # blue -> purple -> red
+  scale: uniform                           # 'uniform' (by rank) | 'value' (by lambda)
+  vmin: 0.0                                # only used by scale: value
+  vmax: 0.5
+  baseline_color: black                    # used for every entry with jc == 0
+  colorbar: false                          # the legend already spells lambda out
+
+plot:
+  out_dir: plots/val_loss_ce
+  filename: val_loss_ce_lambda_seed_scan.png
+  title: 'Validation CE — $\lambda$ scan with seed repetitions (CE 1.0, JC 1.0)'
+  ylabel: Validation Cross Entropy loss
+  legend_title: 'augmentation strength'
+  legend_outside: true
+  figsize: [8.5, 5.0]
+  band: true          # false → mean curves only, error bars kept
+  band_alpha: 0.15
+  show_n: true        # append "(n = k)" to the legend of aggregated entries
+  ylim: [0.598, 0.62]
+
+models:
+  # ── Reference: jet-contrastive off, single run ─────────────────────────────
+  - dir: ${paths.old}_jc_0.0_lam_0.03_0
+
+  # ── jc = 1.0, lambda scan, all seeds of each cell ──────────────────────────
+  - cell: ${paths.cell}_lam_0.1_temp_0.1
+  - cell: ${paths.cell}_lam_0.2_temp_0.1
+  - cell: ${paths.cell}_lam_0.25_temp_0.1
+  - cell: ${paths.cell}_lam_0.3_temp_0.1
+  - cell: ${paths.cell}_lam_0.35_temp_0.1
+  - cell: ${paths.cell}_lam_0.4_temp_0.1
