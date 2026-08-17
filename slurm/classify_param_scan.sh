@@ -178,7 +178,7 @@ JET_CONTRASTIVE=1.0
 #   SCAN_PARAM="optimizer.lr";  SCAN_LABEL="lr";  SCAN_VALUES=(1e-4 3e-4 1e-3)
 SCAN_PARAM="lambda"
 SCAN_LABEL="lam"
-SCAN_VALUES=(0.1 0.2 0.25 0.3 0.35 0.4)
+SCAN_VALUES=(0.1 0.2 0.25 0.3 0.35 0.4 0.5)
 
 # ── Scan axis B ───────────────────────────────────────────────────────────────
 # Temperature of the aggregator's (jet-level) contrastive loss — the logit scale
