@@ -205,8 +205,18 @@ BATCH_SIZE=2048
 LR=3e-4
 
 # CE on the head output, SupCon on the aggregator output.
-CROSS_ENTROPY=1.0
-JET_CONTRASTIVE=1.0
+#
+# JET_CONTRASTIVE=0 is a structurally different run, not just a reweighting:
+# FinetuneModule._compute_loss only calls _encode_jet_views() when the weight is
+# > 0, and that is the sole consumer of `views`.  So with 0 the augmentation
+# pipeline never executes and SCAN_PARAM=lambda (which sets CutMix/Mixup on
+# views[0]) becomes INERT — a lambda scan would submit N identical trainings.
+# Scan a single dummy value and spend the budget on seeds instead.  The same
+# goes for SCAN2_PARAM=...jet_contrastive_loss.temperature.
+# It is also cheaper per step: one encoder pass instead of two (see
+# EST_SECONDS_PER_EPOCH, which is calibrated for the jet_contrastive>0 path).
+CROSS_ENTROPY=${CROSS_ENTROPY:-1.0}
+JET_CONTRASTIVE=${JET_CONTRASTIVE:-1.0}
 
 # ── Scan axis A (one slurm job per value, crossed with axis B) ────────────────
 # Any Hydra key.  SCAN_LABEL is the short tag used in directory and wandb names.
