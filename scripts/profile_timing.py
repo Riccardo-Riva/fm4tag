@@ -36,10 +36,22 @@ from pathlib import Path
 import torch
 from hydra import compose, initialize_config_dir
 from hydra.utils import instantiate as hydra_instantiate
+from torch.nn.attention import SDPBackend, sdpa_kernel
 
 from fm4tag.utils.model_builders import build_aggregator, build_encoders, build_head
 
 CONFIG_DIR = str(Path(__file__).resolve().parents[1] / 'src' / 'fm4tag' / 'configs')
+
+# Diagnostic only: forces every torch.nn.functional.scaled_dot_product_attention
+# call (inside fm4tag.models.attention.sdpa's non-flash fallback) onto one
+# specific CUDA kernel, to separate "which backend got auto-selected" from
+# "how expensive is that backend's backward". 'auto' (default) makes no
+# override — whatever torch's heuristics pick, same as real training.
+_SDPA_BACKENDS = {
+    'math': [SDPBackend.MATH],
+    'efficient': [SDPBackend.EFFICIENT_ATTENTION],
+    'flash': [SDPBackend.FLASH_ATTENTION],
+}
 
 # Module classes worth timing individually (subsets of the components above —
 # they overlap with their parents, see the report note).
@@ -207,6 +219,22 @@ def main() -> None:
     ap.add_argument('--device', default='cuda' if torch.cuda.is_available() else 'cpu')
     ap.add_argument('--synthetic', action='store_true', help='synthetic batches; skips the real dataloader')
     ap.add_argument('--out', default=None, help='output dir for the JSON report')
+    ap.add_argument(
+        '--kernel-census', type=int, default=0, metavar='STEPS',
+        help='after the timing loop, profile this many extra steps with '
+             'torch.profiler and print the top CUDA kernels by device time. '
+             'Names the SDPA backend actually selected (flash/cutlass/bmm+softmax) '
+             'and exposes launch-bound-ness: total device time well below the '
+             'measured wall time means the GPU is idling between tiny kernels.',
+    )
+    ap.add_argument(
+        '--sdpa-backend', choices=['auto', *_SDPA_BACKENDS], default='auto',
+        help='diagnostic: force one torch SDPA backend instead of letting it '
+             'auto-select (CUDA only; no-op on CPU). Use to separate backend '
+             'choice from backend cost, e.g. to check whether a recompute-based '
+             'backward (efficient/flash) explains a high backward/forward ratio '
+             'vs the cache-based math backend.',
+    )
     ap.add_argument('overrides', nargs='*', help='hydra overrides, e.g. encoders=col_v0')
     args = ap.parse_args()
 
@@ -243,8 +271,14 @@ def main() -> None:
     # ── Dataloader benchmark (real data only) ───────────────────────────
     data_report = {}
     if args.synthetic:
-        batch_source = lambda: synthetic_batch(cfg, B)  # noqa: E731
-        print('[data] synthetic batches (dataloader benchmark skipped)\n')
+        # Build once and reuse, mirroring the real path's two cached batches.
+        # Regenerating per step put ~90 ms of CPU tensor construction (± 40 ms)
+        # inside the measured step, swamping the compute it is meant to isolate.
+        _synth = [synthetic_batch(cfg, B) for _ in range(2)]
+        batch_source = lambda: _synth[torch.randint(0, len(_synth), (1,)).item()]  # noqa: E731
+        n_valid = int(_synth[0]['constituents'][cfg.constituent_objects[0]]['valid'].sum())
+        print(f'[data] synthetic batches, cached (dataloader benchmark skipped); '
+              f'{n_valid} packed valid constituents\n')
     else:
         dm = hydra_instantiate(
             cfg.datamodule, _convert_='all',
@@ -305,6 +339,16 @@ def main() -> None:
         else contextlib.nullcontext()
     )
     clip_val = cfg.trainer.get('gradient_clip_val', None)
+    # A factory, not an instance: sdpa_kernel() is a @contextmanager, so each
+    # `with` needs its own object — one instance cannot be re-entered.
+    sdpa_ctx = (
+        (lambda _b=_SDPA_BACKENDS[args.sdpa_backend]: sdpa_kernel(_b))
+        if args.sdpa_backend != 'auto' and device.startswith('cuda')
+        else contextlib.nullcontext
+    )
+    if args.sdpa_backend != 'auto':
+        print(f'[sdpa] forcing backend: {args.sdpa_backend}'
+              + ('' if device.startswith('cuda') else '  (no-op off-CUDA)') + '\n')
 
     def one_step(record: ModuleTimers | None, segs: dict | None) -> None:
         marks = {}
@@ -315,11 +359,14 @@ def main() -> None:
 
         s = timer.start(); batch = to_device(batch, device); marks['h2d_copy'] = timer.stop(s)
         s = timer.start()
-        with autocast:
+        with autocast, sdpa_ctx():
             out = module._compute_loss(batch)
             loss = out[0]
         marks['forward+loss'] = timer.stop(s)
-        s = timer.start(); loss.backward(); marks['backward'] = timer.stop(s)
+        s = timer.start()
+        with sdpa_ctx():
+            loss.backward()
+        marks['backward'] = timer.stop(s)
         if clip_val:
             s = timer.start()
             torch.nn.utils.clip_grad_norm_(params, clip_val)
@@ -340,11 +387,18 @@ def main() -> None:
         one_step(None, None)
 
     print(f'[step] measuring x{args.steps} ...\n')
+    # Peak memory is measured over the timed steps only, so the warmup's
+    # allocator growth and the cached batches are already in place.
+    if device.startswith('cuda'):
+        torch.cuda.reset_peak_memory_stats()
     mt = ModuleTimers(module, device)
     segs: dict[str, list[float]] = defaultdict(list)
     for _ in range(args.steps):
         one_step(mt, segs)
     mt.remove()
+    peak_mem_gb = (
+        torch.cuda.max_memory_allocated() / 2**30 if device.startswith('cuda') else 0.0
+    )
 
     # ── Report ───────────────────────────────────────────────────────────
     seg_mean = {k: statistics.mean(v) for k, v in segs.items()}
@@ -353,6 +407,8 @@ def main() -> None:
     for k, v in sorted(seg_mean.items(), key=lambda kv: -kv[1]):
         sd = statistics.stdev(segs[k]) if len(segs[k]) > 1 else 0.0
         print(f'  {k:16s} {v:9.2f} ms  ± {sd:7.2f}   {100 * v / total:5.1f} %')
+    print(f'\n  SUMMARY  {1e3 / total:6.2f} it/s   {total:7.2f} ms/step   '
+          f'peak GPU mem {peak_mem_gb:6.3f} GiB   params {n_params:.2f}M')
 
     fwd_bwd = seg_mean.get('forward+loss', 0.0) + seg_mean.get('backward', 0.0)
     rows = []
@@ -376,18 +432,72 @@ def main() -> None:
     print('\nNotes: single process — DDP all-reduce and cross-rank SupCon gather are NOT '
           'included; nested rows (deep module names) are subsets of their parents.')
 
+    # ── CUDA kernel census ───────────────────────────────────────────────
+    census = {}
+    if args.kernel_census and device.startswith('cuda'):
+        from torch.profiler import ProfilerActivity, profile as torch_profile
+
+        n_census = args.kernel_census
+        print(f'\n[census] profiling {n_census} extra steps ...')
+        with torch_profile(
+            activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA]
+        ) as prof:
+            for _ in range(n_census):
+                one_step(None, None)
+
+        # Keep only true device kernels.  key_averages() also returns the
+        # dispatcher-level ``aten::*`` entries, which carry the device time of
+        # the kernels they launched — counting both double-counts every kernel
+        # (and yields a nonsense >100% device-busy figure).
+        from torch.autograd import DeviceType
+
+        kernels = [
+            e for e in prof.key_averages()
+            if getattr(e, 'self_device_time_total', 0) > 0
+            and getattr(e, 'device_type', None) == DeviceType.CUDA
+        ]
+        kernels.sort(key=lambda e: -e.self_device_time_total)
+        dev_total_ms = sum(e.self_device_time_total for e in kernels) / 1e3 / n_census
+        launches = sum(e.count for e in kernels) / n_census
+
+        print(f'\n── Top CUDA kernels (mean per step over {n_census} steps) ' + '─' * 22)
+        print(f'  {"kernel":76s} {"launches":>9s} {"ms/step":>9s} {"% dev":>7s}')
+        for e in kernels[:25]:
+            ms = e.self_device_time_total / 1e3 / n_census
+            print(f'  {e.key[:76]:76s} {e.count / n_census:9.1f} {ms:9.3f} '
+                  f'{100 * ms / dev_total_ms if dev_total_ms else 0:6.1f} %')
+        print(f'\n  device-busy {dev_total_ms:.2f} ms/step of {total:.2f} ms/step wall '
+              f'({100 * dev_total_ms / total:.0f}% busy) across {launches:.0f} kernel '
+              f'launches/step ({1e3 * total / launches:.1f} us of wall time per launch)')
+        print('  A low busy-% with many launches = launch-latency bound: the fix is '
+              'fewer/larger kernels, not fewer FLOPs.')
+        census = {
+            'steps': n_census,
+            'device_busy_ms_per_step': dev_total_ms,
+            'launches_per_step': launches,
+            'kernels': [
+                {'name': e.key, 'launches_per_step': e.count / n_census,
+                 'ms_per_step': e.self_device_time_total / 1e3 / n_census}
+                for e in kernels[:40]
+            ],
+        }
+
     if args.out:
         out = Path(args.out); out.mkdir(parents=True, exist_ok=True)
         report = {
             'phase': args.phase, 'overrides': args.overrides, 'batch_size': B,
-            'params_M': n_params, 'dataloader': data_report,
+            'params_M': n_params, 'sdpa_backend': args.sdpa_backend,
+            'peak_mem_gb': peak_mem_gb, 'it_per_s': 1e3 / total,
+            'total_ms_per_step': total,
+            'dataloader': data_report, 'kernel_census': census,
             'segments_ms': seg_mean,
             'modules': [
                 {'name': n, 'class': c, 'calls_per_step': k, 'fwd_ms': f, 'bwd_ms': b}
                 for n, c, k, f, b in rows
             ],
         }
-        path = out / f'profile_{args.phase}.json'
+        suffix = f'_{args.sdpa_backend}' if args.sdpa_backend != 'auto' else ''
+        path = out / f'profile_{args.phase}{suffix}.json'
         path.write_text(json.dumps(report, indent=2))
         print(f'\nreport saved: {path}')
 
