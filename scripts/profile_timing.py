@@ -269,11 +269,31 @@ def main() -> None:
             'steady_stdev_ms': statistics.stdev(fetch_ms) if len(fetch_ms) > 1 else 0.0,
             'steady_max_ms': max(fetch_ms),
             'batches_per_s': 1e3 / statistics.mean(fetch_ms),
+            # Raw per-batch series: distinguishes random I/O stalls (spikes
+            # scattered throughout) from monotonic degradation (drift between
+            # the first- and second-half means, e.g. a leaking file handle).
+            'fetch_ms': fetch_ms,
         }
         print(f'[data] cold first batch : {cold:9.1f} ms   (worker startup)')
         print(f'[data] steady fetch     : {data_report["steady_mean_ms"]:9.1f} ms/batch '
               f'± {data_report["steady_stdev_ms"]:.1f}  (max {data_report["steady_max_ms"]:.1f}, '
               f'{data_report["batches_per_s"]:.1f} batches/s)\n')
+
+        if len(fetch_ms) >= 10:
+            half = len(fetch_ms) // 2
+            first_half_mean = statistics.mean(fetch_ms[:half])
+            second_half_mean = statistics.mean(fetch_ms[half:])
+            sorted_ms = sorted(fetch_ms)
+            median = sorted_ms[len(sorted_ms) // 2]
+            p95 = sorted_ms[int(len(sorted_ms) * 0.95)]
+            worst = sorted(range(len(fetch_ms)), key=lambda i: -fetch_ms[i])[:5]
+            print(f'[data] median {median:.1f} ms   p95 {p95:.1f} ms')
+            print(f'[data] first-half mean {first_half_mean:.1f} ms   '
+                  f'second-half mean {second_half_mean:.1f} ms   '
+                  f'(ratio {second_half_mean / first_half_mean:.2f}x — '
+                  f'>>1 suggests drift/degradation, ~1 suggests random stalls)')
+            print(f'[data] slowest batch indices (of {len(fetch_ms)}): '
+                  f'{[(i, round(fetch_ms[i])) for i in worst]}\n')
         cached = [first, batch]
         batch_source = lambda: cached[torch.randint(0, len(cached), (1,)).item()]  # noqa: E731
 
