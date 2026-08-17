@@ -49,6 +49,15 @@
 #   bash slurm/classify_param_scan.sh            # submit
 #   DRY_RUN=1 bash slurm/classify_param_scan.sh  # write job scripts, submit nothing
 #
+# TRANSFORMER_TYPE, MAX_EPOCHS, WALLTIME, SEEDS and SCAN_VALUES can be overridden
+# from the environment (defaults below are unchanged), which is how a short pilot
+# is run without editing this file.  Note the admission test needs
+# MAX_EPOCHS x EST_SECONDS_PER_EPOCH of headroom before it will start a seed, so
+# a short WALLTIME needs a small MAX_EPOCHS or no training will ever start:
+#
+#   TRANSFORMER_TYPE=rowcol_concat SCAN_VALUES="0.1" SEEDS="42 424" \
+#     MAX_EPOCHS=3 WALLTIME=12:00:00 bash slurm/classify_param_scan.sh
+#
 # Resubmitting the SAME cell directory (e.g. after a node failure) reuses the
 # seeds that already completed instead of redoing them — see RESUME_SKIP_COMPLETED.
 # ══════════════════════════════════════════════════════════════════════════════
@@ -87,13 +96,22 @@ VENV=${REPO}/.venv
 CONFIG_DIR=${REPO}/src/fm4tag/configs
 
 CONFIG=default.yaml
-MAX_EPOCHS=100
+MAX_EPOCHS=${MAX_EPOCHS:-100}
 
 # Walltime per CELL (not per training).  The seed loop keeps starting trainings
 # until the time left is smaller than one training's estimated duration, so this
 # is what buys the seeds: at ~24-44 h per training, 7 days gives 3-7 seeds.
-WALLTIME=7-00:00:00
-WALLTIME_SECONDS=$((7 * 24 * 3600))
+WALLTIME=${WALLTIME:-7-00:00:00}
+
+# Derived from WALLTIME so the two can never drift apart.
+# Accepts [D-]HH:MM:SS, slurm's own format.
+walltime_to_seconds() {
+    local t=$1 d=0 a b c
+    [[ "${t}" == *-* ]] && { d=${t%%-*}; t=${t#*-}; }
+    IFS=: read -r a b c <<< "${t}"
+    echo $(( 10#${d} * 86400 + 10#${a} * 3600 + 10#${b} * 60 + 10#${c:-0} ))
+}
+WALLTIME_SECONDS=$(walltime_to_seconds "${WALLTIME}")
 
 MEM=32G
 
@@ -123,7 +141,7 @@ WANDB_JOB_TYPE="scratch"
 # passes it to L.seed_everything(workers=True) (model init, augmentation RNG,
 # dataloader worker seeding) and it is interpolated into datamodule.seed (batch
 # composition / shuffling), so one override reseeds the entire training.
-SEEDS=(42 424 4242 42424 424242 4242424 42424242 424242424)
+read -r -a SEEDS <<< "${SEEDS:-42 424 4242 42424 424242 4242424 42424242 424242424}"
 
 # Duration prior for a training, used to decide whether the next seed still fits.
 # 100 epochs x ~55 min/epoch (50780 steps at 7.8 it/s + ~1.5 min validation,
@@ -151,7 +169,8 @@ RESUME_SKIP_COMPLETED=${RESUME_SKIP_COMPLETED:-1}
 
 # Encoder config group: the CLI gets `encoders=${TRANSFORMER_TYPE}_v0`, so this
 # must name a file in src/fm4tag/configs/encoders/ minus the _v0 suffix.
-TRANSFORMER_TYPE=rowcol
+# e.g. rowcol | rowcol_concat | col | row
+TRANSFORMER_TYPE=${TRANSFORMER_TYPE:-rowcol}
 
 # PER-RANK batch size.  Also a MODEL hyper-parameter, not just a throughput knob:
 # the row (intersample) attention makes every sample's output depend on its
@@ -178,7 +197,7 @@ JET_CONTRASTIVE=1.0
 #   SCAN_PARAM="optimizer.lr";  SCAN_LABEL="lr";  SCAN_VALUES=(1e-4 3e-4 1e-3)
 SCAN_PARAM="lambda"
 SCAN_LABEL="lam"
-SCAN_VALUES=(0.1 0.2 0.25 0.3 0.35 0.4 0.5)
+read -r -a SCAN_VALUES <<< "${SCAN_VALUES:-0.1 0.2 0.25 0.3 0.35 0.4 0.5}"
 
 # ── Scan axis B ───────────────────────────────────────────────────────────────
 # Temperature of the aggregator's (jet-level) contrastive loss — the logit scale
