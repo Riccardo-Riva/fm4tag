@@ -23,6 +23,11 @@ def sdpa(q, k, v, attn_mask=None, dropout_p=0.0):
     ``F.scaled_dot_product_attention`` whenever an explicit ``attn_mask`` is
     given (flash-attn doesn't support arbitrary attention masks), when
     ``flash-attn`` isn't installed, or off-CUDA/unsupported dtype.
+
+    Do not route the small column attentions (``seq=19``, ``head_dim=8``) onto
+    the MATH backend to dodge the padding the fused kernels apply: measured
+    2026-08-17, it does cut their backward ~20%, but triples their forward
+    (unaligned GEMMs + fp32 scores) for a net 2-3% loss and +0.4 GiB.
     """
     if (
         HAS_FLASH_ATTN

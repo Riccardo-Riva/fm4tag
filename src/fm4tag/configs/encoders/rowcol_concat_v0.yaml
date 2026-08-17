@@ -7,12 +7,32 @@
 # vector — the pre-ISAB "row attention on the concatenated embeddings" shape, now
 # with ISAB as the O(B*num_inds) summary.
 #
-# Why choose this over rowcol_v0:
-#   * num_inds is paid ONCE (not N=19 times), so it can grow cheaply — the
-#     num_inds 16->128 throughput cliff of the per-token factorisation does not
-#     apply here.  That is what the larger num_inds below exploits.
-#   * one wide matmul per step uses the GPU (tensor cores) far better than N
-#     narrow ones.
+# Why choose this over rowcol_v0 — MEASURED (1x A40, 60 steps, 2026-08-17):
+#
+#   phase     bs    per_token        concat           gain
+#   finetune  512   5.36 it/s        5.40 it/s        +1%
+#   finetune  1024  4.18 it/s        4.90 it/s       +17%
+#   finetune  2048  2.49 it/s        3.06 it/s       +23%
+#   pretrain  512   2.45 it/s        2.85 it/s       +16%
+#
+#   Controlled (rowcol_v0 with ONLY row_mode flipped, so col_heads/dim_head are
+#   held equal): 4.24 -> 4.72 it/s, 236 -> 212 ms/step, and peak memory went
+#   DOWN slightly (5.73 -> 5.54 GiB).  The gain grows with batch size because
+#   per_token issues N=19 narrow attentions whose inefficiency scales with B.
+#
+#   Mechanism, from the CUDA kernel census: the row step's flash-attention calls
+#   drop 72 -> 24 per step and their backward 28.1 -> 10.1 ms/step.  PyTorch's
+#   flash kernels tile at head-dim 32 and sequence 128, so N narrow attentions
+#   each waste most of a tile; one wide attention does not.
+#
+#   * num_inds is paid ONCE (not N=19 times).  At the current dim=16 num_inds is
+#     close to free in BOTH modes though (concat 256 vs 64: 4.90 vs 4.79 it/s;
+#     per_token 128 vs 16: 4.18 vs 4.20), so this is a smaller advantage than the
+#     original rationale assumed.
+#
+# NOTE this is not a drop-in speedup: concat's row step mixes the feature tokens
+# (per_token's does not), so it is a different model and needs its own quality
+# comparison, not just the throughput numbers above.
 # The trade, and it is a steep one: the row attention AND its feed-forward now run
 # at width row_dim = N*dim, and both are dense at that width, so parameters scale
 # as row_dim^2 = (N*dim)^2 — QUADRATIC in dim, not linear.  For tracks (N=19):
