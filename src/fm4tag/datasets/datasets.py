@@ -4,7 +4,64 @@ import h5py
 import numpy as np
 import os
 import torch
+from h5py import h5s, h5t
 from torch.utils.data import Dataset
+
+
+class _SpanReader:
+    """Read row spans of one HDF5 dataset into a single preallocated buffer.
+
+    Exists to avoid a per-read leak in ``h5py.Dataset.__getitem__``: for a
+    compound (structured) dtype the fast path is skipped and every call runs
+    ``mtype = h5t.py_create(new_dtype)``, which retains ~21 Python objects
+    (~0.9 kB) that ``gc`` never reclaims — measured with h5py 3.15.1 / HDF5
+    1.14.6.  ``read_direct`` goes through the same ``py_create`` and leaks
+    identically; creating the memory type ONCE and driving ``DatasetID.read``
+    with it retains nothing (measured: 0 blocks/read).
+
+    At 16 reads per batch (2 objects x ``reads_per_batch``) and ~1.3 k batches
+    per worker per epoch, the leak was ~180 MB per worker per epoch — with 20
+    persistent workers per job that is ~8 GB over 26 epochs, which is what
+    pushed the 32 GB cgroup over the limit roughly a day into every training.
+
+    Reading straight into one buffer also drops the per-batch
+    ``np.concatenate`` that used to stitch the spans together.
+    """
+
+    def __init__(self, dset: h5py.Dataset) -> None:
+        self._dsid = dset.id
+        self._dtype = dset.dtype
+        # Per-row shape: () for `jets`, (C,) for the constituent objects.
+        self._tail = tuple(dset.shape[1:])
+        self._zeros = (0,) * len(self._tail)
+        # The two objects that must NOT be rebuilt per read.
+        self._mtype = h5t.py_create(self._dtype)
+        self._fspace = self._dsid.get_space()
+        # Memory dataspaces are cheap but not free; a loader only ever asks for
+        # one or two distinct row counts (full batch, and a short final batch).
+        self._mspaces: dict[int, h5s.SpaceID] = {}
+
+    def _mspace(self, total: int) -> h5s.SpaceID:
+        mspace = self._mspaces.get(total)
+        if mspace is None:
+            mspace = h5s.create_simple((total,) + self._tail)
+            self._mspaces[total] = mspace
+        return mspace
+
+    def read(self, spans: list[tuple[int, int]]) -> np.ndarray:
+        """Read and concatenate contiguous row ranges, one HDF5 read each."""
+        total = sum(stop - start for start, stop in spans)
+        out = np.empty((total,) + self._tail, dtype=self._dtype)
+        mspace = self._mspace(total)
+
+        offset = 0
+        for start, stop in spans:
+            count = (stop - start,) + self._tail
+            self._fspace.select_hyperslab((start,) + self._zeros, count)
+            mspace.select_hyperslab((offset,) + self._zeros, count)
+            self._dsid.read(mspace, self._fspace, out, self._mtype)
+            offset += stop - start
+        return out
 
 
 class DatasetCatCon(Dataset):
@@ -121,18 +178,16 @@ class DatasetCatCon(Dataset):
         return self.len
 
     def _open_file(self) -> None:
-        """Open the HDF5 file once per worker process and cache dataset handles."""
-        self.file = h5py.File(self.file_path, 'r', swmr=True, libver='latest')
-        self.g_dset = self.file[self.global_object]
-        self.c_dsets = {name: self.file[name] for name in self.constituent_objects}
+        """Open the HDF5 file once per worker process and cache dataset handles.
 
-    @staticmethod
-    def _read_spans(dset, spans: list[tuple[int, int]]) -> np.ndarray:
-        """Read and concatenate contiguous row ranges with one h5py call each."""
-        if len(spans) == 1:
-            start, stop = spans[0]
-            return dset[start:stop]
-        return np.concatenate([dset[start:stop] for start, stop in spans])
+        The readers built here own the cached memory datatype that keeps the
+        per-read path allocation-free — see :class:`_SpanReader`.
+        """
+        self.file = h5py.File(self.file_path, 'r', swmr=True, libver='latest')
+        self.g_dset = _SpanReader(self.file[self.global_object])
+        self.c_dsets = {
+            name: _SpanReader(self.file[name]) for name in self.constituent_objects
+        }
 
     def __getitem__(self, spans) -> dict:
         """Return one collated batch.
@@ -147,7 +202,7 @@ class DatasetCatCon(Dataset):
             spans = [spans]
 
         # ── Global object ────────────────────────────────────────────────
-        g_records = self._read_spans(self.g_dset, spans)  # (B,) structured
+        g_records = self.g_dset.read(spans)  # (B,) structured
 
         labels = torch.from_numpy(
             np.ascontiguousarray(g_records[self.label_name], dtype=np.int64)
@@ -162,7 +217,7 @@ class DatasetCatCon(Dataset):
         # ── Constituent objects ──────────────────────────────────────────
         constituents = {}
         for obj_name in self.constituent_objects:
-            c_records = self._read_spans(self.c_dsets[obj_name], spans)  # (B, C)
+            c_records = self.c_dsets[obj_name].read(spans)  # (B, C)
             fields = self._c_fields[obj_name]
 
             X_cat = s2u(c_records[fields['categorical']], dtype=np.int64)
