@@ -64,10 +64,21 @@
 
 # ── Settings ──────────────────────────────────────────────────────────────────
 
-# L40S only, deliberately: every seed of every cell must run on the same class of
-# hardware, otherwise the spread we are trying to measure picks up a hardware
-# term, and the per-epoch time prior below (measured on L40S) stops holding.
-GPU_NODE=gpu-L40S-open
+# Partition(s) the cells may land on.  Both available pools are 2 nodes x 8 GPUs
+# with a 7-day limit; A40 nodes have 80 CPUs against L40S's 192, which at
+# CPUS_PER_TASK x GPU_NUM = 24 caps A40 at 3 concurrent cells per node before
+# CPUs rather than GPUs become the binding constraint.
+#
+# A COMMA-SEPARATED LIST lets slurm place each cell on whichever partition frees
+# up first, which is what you want when one pool is saturated and the grid would
+# otherwise sit pending for days.  The cost, and it is a real one: the sweep then
+# straddles two hardware classes, so the seed spread this script exists to
+# measure picks up a hardware term, and the per-epoch prior below (measured on
+# L40S) no longer holds on the A40 cells.  Loss-vs-epoch curves are unaffected —
+# the arithmetic is the same on both — but wall-clock, and therefore how many
+# seeds a cell completes, is not.  Prefer a single partition when a comparison
+# depends on timing; use the list when it depends only on the curves.
+GPU_NODE=${GPU_NODE:-gpu-L40S-open}
 
 # GPUs per TRAINING, all on one node.  Lightning selects DDP for devices > 1 and
 # srun launches one rank per GPU (each rank binds to CUDA_VISIBLE_DEVICES[local_rank]
@@ -144,12 +155,23 @@ WANDB_JOB_TYPE="scratch"
 read -r -a SEEDS <<< "${SEEDS:-42 424 4242 42424 424242 4242424 42424242 424242424}"
 
 # Duration prior for a training, used to decide whether the next seed still fits.
-# 100 epochs x ~55 min/epoch (50780 steps at 7.8 it/s + ~1.5 min validation,
-# measured in run_20260811_105149 at bs 1024 on 2 L40S) + startup.  It stays a
-# FLOOR for the whole job even after real durations are known: an early-stopped
-# 24 h run must not tempt the loop into starting a seed that then needs 44 h.
+# It stays a FLOOR for the whole job even after real durations are known: an
+# early-stopped 24 h run must not tempt the loop into starting a seed that then
+# needs 44 h.
 # Re-measure this if MAX_EPOCHS, BATCH_SIZE, the encoder or the partition change.
-EST_SECONDS_PER_EPOCH=3300
+#
+# 2800 s (~47 min) = the 2772 s/epoch measured on rowcol_CONCAT, bs 2048, 2 L40S
+# (run_20260817_171303, both seeds, epoch boundaries 2775 / 2770 s), plus ~1%.
+# Startup measured at ~20 s there, but 1200 is kept as slack for a cold FS cache.
+#
+# NOTE this prior is encoder-specific and the two encoders differ by ~16%:
+#   rowcol_concat_v0  2772 s/epoch  (measured, see above)
+#   rowcol_v0         ~3300 s/epoch (the previous value, per_token)
+# Getting it WRONG IN THE HIGH DIRECTION silently costs seeds rather than
+# failing: at 3300 with MAX_EPOCHS=100 a 7-day cell admits ONE seed, because
+# after the first training the remaining 90.5 h is just under the 92 h the prior
+# demands — and one seed produces no error bar, which is the point of this script.
+EST_SECONDS_PER_EPOCH=${EST_SECONDS_PER_EPOCH:-2800}
 EST_STARTUP_SECONDS=1200
 EST_RUN_SECONDS=$((MAX_EPOCHS * EST_SECONDS_PER_EPOCH + EST_STARTUP_SECONDS))
 
