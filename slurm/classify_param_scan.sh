@@ -197,8 +197,11 @@ TRANSFORMER_TYPE=${TRANSFORMER_TYPE:-rowcol}
 # PER-RANK batch size.  Also a MODEL hyper-parameter, not just a throughput knob:
 # the row (intersample) attention makes every sample's output depend on its
 # batch-mates, and the ISAB summarises only the rank's own shard (no all-gather),
-# so this is the intersample context each sample actually sees.
-BATCH_SIZE=2048
+# so this is the intersample context each sample actually sees.  Overridable so
+# a sweep can reproduce runs trained at a different context (e.g. the bs-1024
+# classify_from_scratch runs) — comparisons across batch sizes are NOT
+# apples-to-apples for row attention.
+BATCH_SIZE=${BATCH_SIZE:-2048}
 
 # Learning rate for the whole model (`finetune.lr` interpolates `optimizer.lr`
 # and backbone_lr is forced to null below — everything is randomly initialised).
@@ -237,7 +240,7 @@ read -r -a SCAN_VALUES <<< "${SCAN_VALUES:-0.1 0.2 0.25 0.3 0.35 0.4 0.5}"
 # values here multiplies the number of jobs.
 SCAN2_PARAM="finetune.jet_contrastive_loss.temperature"
 SCAN2_LABEL="temp"
-SCAN2_VALUES=(0.1)
+read -r -a SCAN2_VALUES <<< "${SCAN2_VALUES:-0.1}"
 
 # Extra Hydra overrides appended verbatim to every training, e.g.
 #   EXTRA_OVERRIDES=("finetune.warmup_frac=0.05" "trainer.gradient_clip_val=1.0")
