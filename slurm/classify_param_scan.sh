@@ -124,7 +124,7 @@ walltime_to_seconds() {
 }
 WALLTIME_SECONDS=$(walltime_to_seconds "${WALLTIME}")
 
-MEM=32G
+MEM=64G
 
 CPUS_PER_TASK=$((NUM_WORKERS + 2))
 if (( GPU_NUM * CPUS_PER_TASK > 80 )); then

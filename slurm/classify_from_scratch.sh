@@ -191,7 +191,7 @@ cat > "${OUTPUT_DIR}/classify_from_scratch_run.sh" << EOF
 #SBATCH --gres=gpu:${GPU_NUM}
 #SBATCH --ntasks-per-node=${GPU_NUM}
 #SBATCH --cpus-per-task=${CPUS_PER_TASK}
-#SBATCH --mem=128G
+#SBATCH --mem=64G
 #SBATCH --output=${OUTPUT_DIR}/out.txt
 #SBATCH --error=${OUTPUT_DIR}/err.txt
 
