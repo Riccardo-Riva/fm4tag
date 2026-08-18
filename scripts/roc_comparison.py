@@ -55,6 +55,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import h5py
+import hdf5plugin  # noqa: F401  -- registers the LZ4 filter salt's output files use
 import numpy as np
 import pandas as pd
 import torch
@@ -677,25 +678,34 @@ def main() -> None:
 
     reference_label = cfg.get('reference', model_entries[0]['label'])
     taggers: list[Tagger] = []
+    # Two model entries can point at the same checkpoint (e.g. a fraction scan
+    # that plots one model's ROC at several f_c/f_tau settings) — reuse the
+    # in-memory predictions rather than re-running inference for each entry.
+    probs_by_ckpt: dict[str, np.ndarray] = {}
     for entry, run_cfg, ckpt_path in zip(model_entries, run_cfgs, ckpts):
-        probs = cached_probs(
-            out_dir / 'cache',
-            entry['label'],
-            ckpt_path,
-            test_file,
-            n_jets,
-            args.recompute,
-            compute=lambda: run_inference(
-                build_module(run_cfg, ckpt_path),
-                run_cfg,
+        ckpt_key = str(ckpt_path)
+        if ckpt_key in probs_by_ckpt:
+            probs = probs_by_ckpt[ckpt_key]
+        else:
+            probs = cached_probs(
+                out_dir / 'cache',
+                entry['label'],
+                ckpt_path,
                 test_file,
-                device,
-                inference_cfg.get('batch_size', 1024),
-                inference_cfg.get('num_workers', 4),
                 n_jets,
-                desc=entry['label'],
-            ),
-        )
+                args.recompute,
+                compute=lambda: run_inference(
+                    build_module(run_cfg, ckpt_path),
+                    run_cfg,
+                    test_file,
+                    device,
+                    inference_cfg.get('batch_size', 1024),
+                    inference_cfg.get('num_workers', 4),
+                    n_jets,
+                    desc=entry['label'],
+                ),
+            )
+            probs_by_ckpt[ckpt_key] = probs
         taggers.append(
             make_tagger(
                 entry['label'],
@@ -704,7 +714,7 @@ def main() -> None:
                 jets_main,
                 cuts,
                 signal,
-                fractions,
+                entry.get('fractions', fractions),
                 is_reference=(entry['label'] == reference_label),
             )
         )

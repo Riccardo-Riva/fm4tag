@@ -1,0 +1,102 @@
+# ROC comparison config for scripts/roc_comparison.py
+#
+# CutMix/Mixup lambda-scan runs (jet_contrastive 1.0, rowcol_concat, ddp2,
+# bs 1024, lr 3e-4, CE 1.0) plus their jet_contrastive-off reference — the same
+# set plotted together in val_loss_ce_lambda_scan.yaml (ten runs from
+# run_20260811_105149, one from run_20260807_162950) — against the 20260817
+# salt GN2 baselines, both trained on data_parallel_preprocess_251112_112022
+# and evaluated here on fm4tag's own test split so every tagger sees the same
+# jets. Colours follow the same blue -> purple -> red lambda gradient used by
+# plot_val_curves.py (uniform spacing by rank), with the jc=0 reference in
+# black and the two GN2 baselines in green / gold so they stand out against
+# the gradient.
+#
+#     python scripts/roc_comparison.py --config scripts/configs/roc_comparison_run_20260811_105149.yaml
+
+models:
+  # ── Reference: jet-contrastive off ─────────────────────────────────────────
+  - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch/run_20260807_162950/scratch_20260807_162950_rowcol_concat_ddp2_bs_1024_lr_3e-4_ce_1.0_jc_0.0_lam_0.03_0
+    label: 'no JC (λ = 0.03)'
+    colour: '#000000'
+
+  # ── jc = 1.0, lambda scan: run_20260811_105149, ascending lambda ──────────
+  - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch/run_20260811_105149/scratch_bs_1024_lr_3e-4_ce_1.0_jc_1.0_lam_0.15_0
+    label: 'λ = 0.15'
+    colour: '#1f3ecc'
+  - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch/run_20260811_105149/scratch_bs_1024_lr_3e-4_ce_1.0_jc_1.0_lam_0.2_1
+    label: 'λ = 0.2'
+    colour: '#3337c3'
+  - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch/run_20260811_105149/scratch_bs_1024_lr_3e-4_ce_1.0_jc_1.0_lam_0.25_2
+    label: 'λ = 0.25'
+    colour: '#4730ba'
+  - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch/run_20260811_105149/scratch_bs_1024_lr_3e-4_ce_1.0_jc_1.0_lam_0.35_3
+    label: 'λ = 0.35'
+    colour: '#5c29b0'
+  - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch/run_20260811_105149/scratch_bs_1024_lr_3e-4_ce_1.0_jc_1.0_lam_0.4_4
+    label: 'λ = 0.4'
+    colour: '#7023a7'
+  - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch/run_20260811_105149/scratch_bs_1024_lr_3e-4_ce_1.0_jc_1.0_lam_0.45_5
+    label: 'λ = 0.45'
+    colour: '#831f93'
+  - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch/run_20260811_105149/scratch_bs_1024_lr_3e-4_ce_1.0_jc_1.0_lam_0.5_6
+    label: 'λ = 0.5'
+    colour: '#951f76'
+  - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch/run_20260811_105149/scratch_bs_1024_lr_3e-4_ce_1.0_jc_1.0_lam_0.6_7
+    label: 'λ = 0.6'
+    colour: '#a81f59'
+  # - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch/run_20260811_105149/scratch_bs_1024_lr_3e-4_ce_1.0_jc_1.0_lam_0.75_8
+  #   label: 'λ = 0.75'
+  #   colour: '#ba1f3c'
+  # - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch/run_20260811_105149/scratch_bs_1024_lr_3e-4_ce_1.0_jc_1.0_lam_0.9_9
+  #   label: 'λ = 0.9'
+  #   colour: '#cc1f1f'
+
+reference_taggers:
+  - label: 'GN2 only-JT'
+    file: /storage3/DSIP/rriva/packages/salt-pt/salt/logs/GN2_only_jt_20260817-T134649/ckpts/epoch=015-val_loss=0.59814__test_pp_output_test.h5
+    probs: {b: GN2_only_jt_pb, c: GN2_only_jt_pc, u: GN2_only_jt_pu, tau: GN2_only_jt_ptau}
+    colour: '#228833'
+  # - label: 'GN2 open data'
+  #   file: /storage3/DSIP/rriva/packages/salt-pt/salt/logs/GN2_open_data_20260817-T121714/ckpts/epoch=015-val_loss=0.59115__test_pp_output_test.h5
+  #   probs: {b: GN2_open_data_pb, c: GN2_open_data_pc, u: GN2_open_data_pu, tau: GN2_open_data_ptau}
+  #   colour: '#CCBB44'
+
+# Label of the tagger used as the ratio-panel reference (the requested baseline).
+reference: 'GN2 only-JT'
+
+# ── Jets / discriminant ───────────────────────────────────────────────────────
+test_file: null  # null → test_dataset_path from the fm4tag runs' config (all agree)
+
+cuts:  # applied to all taggers (pt in MeV)
+  - [pt, '>', 20000]
+  - [pt, '<', 250000]
+  - [eta, '>', -2.5]
+  - [eta, '<', 2.5]
+
+signal: b
+backgrounds: [u, c, tau]
+fractions: {c: 0.2, tau: 0.01}  # f_c / f_tau of the D_b denominator (f_u = remainder)
+
+sig_eff: {min: 0.6, max: 1.0, num: 100}
+working_points: [0.70, 0.77, 0.85]
+
+# Background rejection / signal efficiency vs pT at a fixed working point.
+eff_vs_pt:
+  working_point: 0.77
+  bins_gev: [20, 30, 40, 60, 85, 110, 140, 175, 250]
+  flat_per_bin: false
+
+# ── Inference / plotting ──────────────────────────────────────────────────────
+inference:
+  batch_size: 1024
+  num_workers: 8
+
+plot:
+  out_dir: plots/roc_run_20260811_105149_lambda_scan_vs_salt_gn2_20260817
+  atlas_brand: ''
+  atlas_first_tag: 'Simulation Internal'
+  atlas_second_tag: "$\\sqrt{s} = 13$ TeV, $t\\bar{t}$\n$20 < p_T < 250$ GeV, $|\\eta| < 2.5$"
+  figsize: [7, 7]
+  y_scale: 1.3
+  dpi: 200
+  disc_plot: {bins: 50, range: [-10, 20], logy: false}

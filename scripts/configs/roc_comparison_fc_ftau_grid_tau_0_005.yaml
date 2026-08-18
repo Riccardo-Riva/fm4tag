@@ -1,0 +1,90 @@
+# ROC comparison config for scripts/roc_comparison.py
+#
+# 2D grid search over the D_b discriminant's background weights: this config
+# fixes f_tau = 0.005 and sweeps f_c over {0.05, 0.1, 0.15, 0.2, 0.3, 0.4, 0.5}, for the same
+# best-CE model as roc_comparison_fraction_scan_best_ce.yaml (run_20260804_165415,
+# lr 3e-4, CE-only, val/head/loss_ce = 0.59976 @ epoch 9). GN2 only-JT (at its
+# own ATLAS-default f_c=0.2/f_tau=0.01) is the ratio-panel reference in every
+# f_tau slice, so the panels are directly comparable to each other.
+#
+# All model entries share one checkpoint; their predictions were pre-copied
+# into the run_20260804_165415_vs_gn2_20260817.yaml cache under each entry's
+# own label, so this reads straight from disk with no GPU inference.
+#
+#     python scripts/roc_comparison.py --config scripts/configs/roc_comparison_fc_ftau_grid_tau_0_005.yaml
+
+models:
+  - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch/run_20260804_165415/scratch_20260804_165415_rowcol_ddp2_bs_1024_lr_3e-4_ce_1.0_jc_0.0_0
+    label: 'f_c = 0.05, f_tau = 0.005'
+    colour: '#1f3ecc'
+    fractions: {c: 0.05, tau: 0.005}
+  - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch/run_20260804_165415/scratch_20260804_165415_rowcol_ddp2_bs_1024_lr_3e-4_ce_1.0_jc_0.0_0
+    label: 'f_c = 0.1, f_tau = 0.005'
+    colour: '#3d34be'
+    fractions: {c: 0.1, tau: 0.005}
+  - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch/run_20260804_165415/scratch_20260804_165415_rowcol_ddp2_bs_1024_lr_3e-4_ce_1.0_jc_0.0_0
+    label: 'f_c = 0.15, f_tau = 0.005'
+    colour: '#5c29b0'
+    fractions: {c: 0.15, tau: 0.005}
+  - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch/run_20260804_165415/scratch_20260804_165415_rowcol_ddp2_bs_1024_lr_3e-4_ce_1.0_jc_0.0_0
+    label: 'f_c = 0.2, f_tau = 0.005'
+    colour: '#7a1fa1'
+    fractions: {c: 0.2, tau: 0.005}
+  - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch/run_20260804_165415/scratch_20260804_165415_rowcol_ddp2_bs_1024_lr_3e-4_ce_1.0_jc_0.0_0
+    label: 'f_c = 0.3, f_tau = 0.005'
+    colour: '#951f76'
+    fractions: {c: 0.3, tau: 0.005}
+  - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch/run_20260804_165415/scratch_20260804_165415_rowcol_ddp2_bs_1024_lr_3e-4_ce_1.0_jc_0.0_0
+    label: 'f_c = 0.4, f_tau = 0.005'
+    colour: '#b11f4a'
+    fractions: {c: 0.4, tau: 0.005}
+  - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch/run_20260804_165415/scratch_20260804_165415_rowcol_ddp2_bs_1024_lr_3e-4_ce_1.0_jc_0.0_0
+    label: 'f_c = 0.5, f_tau = 0.005'
+    colour: '#cc1f1f'
+    fractions: {c: 0.5, tau: 0.005}
+
+reference_taggers:
+  - label: 'GN2 only-JT (f_c = 0.2, f_tau = 0.01)'
+    file: /storage3/DSIP/rriva/packages/salt-pt/salt/logs/GN2_only_jt_20260817-T134649/ckpts/epoch=015-val_loss=0.59814__test_pp_output_test.h5
+    probs: {b: GN2_only_jt_pb, c: GN2_only_jt_pc, u: GN2_only_jt_pu, tau: GN2_only_jt_ptau}
+    colour: '#EE6677'
+
+# Label of the tagger used as the ratio-panel reference.
+reference: 'GN2 only-JT (f_c = 0.2, f_tau = 0.01)'
+
+# ── Jets / discriminant ───────────────────────────────────────────────────────
+test_file: null  # null → test_dataset_path from the run's config
+
+cuts:  # applied to all taggers (pt in MeV)
+  - [pt, '>', 20000]
+  - [pt, '<', 250000]
+  - [eta, '>', -2.5]
+  - [eta, '<', 2.5]
+
+signal: b
+backgrounds: [u, c, tau]
+fractions: {c: 0.2, tau: 0.005}  # fallback default (every entry above overrides it)
+
+sig_eff: {min: 0.6, max: 1.0, num: 100}
+working_points: [0.70, 0.77, 0.85]
+
+# Background rejection / signal efficiency vs pT at a fixed working point.
+eff_vs_pt:
+  working_point: 0.77
+  bins_gev: [20, 30, 40, 60, 85, 110, 140, 175, 250]
+  flat_per_bin: false
+
+# ── Inference / plotting ──────────────────────────────────────────────────────
+inference:
+  batch_size: 1024
+  num_workers: 8
+
+plot:
+  out_dir: plots/roc_fc_ftau_grid_tau_0_005
+  atlas_brand: ''
+  atlas_first_tag: 'Simulation Internal'
+  atlas_second_tag: "$\\sqrt{s} = 13$ TeV, $t\\bar{t}$\n$20 < p_T < 250$ GeV, $|\\eta| < 2.5$"
+  figsize: [7, 7]
+  y_scale: 1.3
+  dpi: 200
+  disc_plot: {bins: 50, range: [-10, 20], logy: false}

@@ -1,0 +1,75 @@
+# ROC comparison config for scripts/roc_comparison.py
+#
+# The best-CE model (run_20260804_165415, lr 3e-4, CE-only — lowest
+# val/head/loss_ce, 0.59976 @ epoch 9) evaluated at the (f_c, f_tau) point
+# found by scripts/fraction_grid_search.py to maximise c-jet rejection at
+# b-eff = 0.8 (f_c = 0.95, f_tau = 0.025 — see
+# scripts/plots/run_20260818_154637_fraction_grid_search_best_ce/best_point.yaml),
+# against both GN2 baselines, each evaluated at their own ATLAS-default
+# fractions (f_c = 0.2, f_tau = 0.01).
+#
+# Note: the grid search found c-rejection increasing almost monotonically
+# toward the f_c boundary rather than an interior optimum, so f_c = 0.95 is a
+# corner point of the search space, not a true interior trade-off — it comes
+# with a large drop in u-jet rejection (see the grid CSV). This plot shows
+# what that corner actually costs/gains against GN2.
+#
+#     python scripts/roc_comparison.py --config scripts/configs/roc_comparison_best_ce_optimal_fractions_vs_gn2.yaml
+
+models:
+  - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch/run_20260804_165415/scratch_20260804_165415_rowcol_ddp2_bs_1024_lr_3e-4_ce_1.0_jc_0.0_0
+    label: 'fm4tag best-CE (f_c = 0.95, f_tau = 0.025)'
+    fractions: {c: 0.95, tau: 0.025}
+    colour: '#4477AA'
+
+reference_taggers:
+  - label: 'GN2 only-JT (f_c = 0.2, f_tau = 0.01)'
+    file: /storage3/DSIP/rriva/packages/salt-pt/salt/logs/GN2_only_jt_20260817-T134649/ckpts/epoch=015-val_loss=0.59814__test_pp_output_test.h5
+    probs: {b: GN2_only_jt_pb, c: GN2_only_jt_pc, u: GN2_only_jt_pu, tau: GN2_only_jt_ptau}
+    fractions: {c: 0.2, tau: 0.01}
+    colour: '#EE6677'
+  - label: 'GN2 open data (f_c = 0.2, f_tau = 0.01)'
+    file: /storage3/DSIP/rriva/packages/salt-pt/salt/logs/GN2_open_data_20260817-T121714/ckpts/epoch=015-val_loss=0.59115__test_pp_output_test.h5
+    probs: {b: GN2_open_data_pb, c: GN2_open_data_pc, u: GN2_open_data_pu, tau: GN2_open_data_ptau}
+    fractions: {c: 0.2, tau: 0.01}
+    colour: '#AA3377'
+
+# Label of the tagger used as the ratio-panel reference.
+reference: 'GN2 only-JT (f_c = 0.2, f_tau = 0.01)'
+
+# ── Jets / discriminant ───────────────────────────────────────────────────────
+test_file: null  # null → test_dataset_path from the run's config
+
+cuts:  # applied to all taggers (pt in MeV)
+  - [pt, '>', 20000]
+  - [pt, '<', 250000]
+  - [eta, '>', -2.5]
+  - [eta, '<', 2.5]
+
+signal: b
+backgrounds: [u, c, tau]
+fractions: {c: 0.2, tau: 0.01}  # fallback default (every entry above overrides it)
+
+sig_eff: {min: 0.6, max: 1.0, num: 100}
+working_points: [0.70, 0.77, 0.80, 0.85]
+
+# Background rejection / signal efficiency vs pT at a fixed working point.
+eff_vs_pt:
+  working_point: 0.80
+  bins_gev: [20, 30, 40, 60, 85, 110, 140, 175, 250]
+  flat_per_bin: false
+
+# ── Inference / plotting ──────────────────────────────────────────────────────
+inference:
+  batch_size: 1024
+  num_workers: 8
+
+plot:
+  out_dir: plots/roc_best_ce_optimal_fractions_vs_gn2
+  atlas_brand: ''
+  atlas_first_tag: 'Simulation Internal'
+  atlas_second_tag: "$\\sqrt{s} = 13$ TeV, $t\\bar{t}$\n$20 < p_T < 250$ GeV, $|\\eta| < 2.5$"
+  figsize: [7, 7]
+  y_scale: 1.3
+  dpi: 200
+  disc_plot: {bins: 50, range: [-10, 20], logy: false}
