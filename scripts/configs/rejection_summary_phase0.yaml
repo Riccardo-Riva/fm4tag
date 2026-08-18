@@ -1,0 +1,92 @@
+# Phase-0 rejection summary for scripts/rejection_summary.py
+#
+# Every completed classify-from-scratch model with a prediction cache on disk
+# (the 2026-08-18 roc_comparison runs), scored on the campaign metric:
+# constrained fraction-optimised c-rejection at the 77% b-efficiency WP,
+# feasible = u-rej and tau-rej not below GN2 only-JT at its nominal fractions.
+#
+#   concat entries    — run_20260811_105149 lambda scan (jc=1.0, temp 0.1,
+#                       bs 1024, lr 3e-4) + the run_20260807_162950 jc=0
+#                       baseline (lambda inert there, hence lambda: null)
+#   per_token entries — run_20260804_165415 lr x jc grid (lambda 0.1 default)
+#
+#     python scripts/rejection_summary.py --config scripts/configs/rejection_summary_phase0.yaml
+
+working_point: 0.77
+signal: b
+target_background: c
+constraints: [u, tau]
+
+cuts:  # applied to all taggers (pt in MeV)
+  - [pt, '>', 20000]
+  - [pt, '<', 250000]
+  - [eta, '>', -2.5]
+  - [eta, '<', 2.5]
+
+test_file: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_112022/test/output/pp_output_test.h5
+
+# The constraint reference: bars are ITS rejections at ITS nominal fractions.
+reference:
+  label: 'GN2 only-JT'
+  file: /storage3/DSIP/rriva/packages/salt-pt/salt/logs/GN2_only_jt_20260817-T134649/ckpts/epoch=015-val_loss=0.59814__test_pp_output_test.h5
+  probs: {b: GN2_only_jt_pb, c: GN2_only_jt_pc, u: GN2_only_jt_pu, tau: GN2_only_jt_ptau}
+  fractions: {c: 0.2, tau: 0.01}
+
+extra_references:
+  - label: 'GN2 open data'
+    file: /storage3/DSIP/rriva/packages/salt-pt/salt/logs/GN2_open_data_20260817-T121714/ckpts/epoch=015-val_loss=0.59115__test_pp_output_test.h5
+    probs: {b: GN2_open_data_pb, c: GN2_open_data_pc, u: GN2_open_data_pu, tau: GN2_open_data_ptau}
+
+grid:
+  fc:   {min: 0.02, max: 0.95, num: 32}
+  ftau: {min: 0.00, max: 0.20, num: 21}
+
+entries:
+  # ── concat, jc = 1.0, temp 0.1, lambda scan (run_20260811_105149) ─────────
+  - {label: 'concat λ 0.15', cache: scripts/plots/run_20260818_115858/cache/probs_0_15.npz,
+     arch: concat, lambda: 0.15, jc: 1.0, temp: 0.1, lr: 3e-4}
+  - {label: 'concat λ 0.2',  cache: scripts/plots/run_20260818_115858/cache/probs_0_2.npz,
+     arch: concat, lambda: 0.2,  jc: 1.0, temp: 0.1, lr: 3e-4}
+  - {label: 'concat λ 0.25', cache: scripts/plots/run_20260818_115858/cache/probs_0_25.npz,
+     arch: concat, lambda: 0.25, jc: 1.0, temp: 0.1, lr: 3e-4}
+  - {label: 'concat λ 0.35', cache: scripts/plots/run_20260818_115858/cache/probs_0_35.npz,
+     arch: concat, lambda: 0.35, jc: 1.0, temp: 0.1, lr: 3e-4}
+  - {label: 'concat λ 0.4',  cache: scripts/plots/run_20260818_115858/cache/probs_0_4.npz,
+     arch: concat, lambda: 0.4,  jc: 1.0, temp: 0.1, lr: 3e-4}
+  - {label: 'concat λ 0.45', cache: scripts/plots/run_20260818_115858/cache/probs_0_45.npz,
+     arch: concat, lambda: 0.45, jc: 1.0, temp: 0.1, lr: 3e-4}
+  - {label: 'concat λ 0.5',  cache: scripts/plots/run_20260818_115858/cache/probs_0_5.npz,
+     arch: concat, lambda: 0.5,  jc: 1.0, temp: 0.1, lr: 3e-4}
+  - {label: 'concat λ 0.6',  cache: scripts/plots/run_20260818_115858/cache/probs_0_6.npz,
+     arch: concat, lambda: 0.6,  jc: 1.0, temp: 0.1, lr: 3e-4}
+  # lambda >= 0.75 diverged (best ckpt at epoch 0/1) — kept for completeness.
+  - {label: 'concat λ 0.75', cache: scripts/plots/run_20260818_115858/cache/probs_0_75.npz,
+     arch: concat, lambda: 0.75, jc: 1.0, temp: 0.1, lr: 3e-4}
+  - {label: 'concat λ 0.9',  cache: scripts/plots/run_20260818_115858/cache/probs_0_9.npz,
+     arch: concat, lambda: 0.9,  jc: 1.0, temp: 0.1, lr: 3e-4}
+
+  # ── concat, jc = 0 baseline (run_20260807_162950; lambda inert) ───────────
+  - {label: 'concat no JC', cache: scripts/plots/run_20260818_115858/cache/probs_no_jc_0_03.npz,
+     arch: concat, jc: 0.0, lr: 3e-4}
+
+  # ── per_token, lr x jc grid (run_20260804_165415; lambda 0.1 default) ─────
+  - {label: 'per_token lr 1e-4 no JC',  cache: scripts/plots/run_20260818_115859/cache/probs_lr_1e_4_no_jc.npz,
+     arch: per_token, jc: 0.0, lr: 1e-4}
+  - {label: 'per_token lr 1e-4 JC 0.3', cache: scripts/plots/run_20260818_115859/cache/probs_lr_1e_4_jc_0_3.npz,
+     arch: per_token, lambda: 0.1, jc: 0.3, temp: 0.1, lr: 1e-4}
+  - {label: 'per_token lr 1e-4 JC 1.0', cache: scripts/plots/run_20260818_115859/cache/probs_lr_1e_4_jc_1_0.npz,
+     arch: per_token, lambda: 0.1, jc: 1.0, temp: 0.1, lr: 1e-4}
+  - {label: 'per_token lr 1e-4 JC 3.0', cache: scripts/plots/run_20260818_115859/cache/probs_lr_1e_4_jc_3_0.npz,
+     arch: per_token, lambda: 0.1, jc: 3.0, temp: 0.1, lr: 1e-4}
+  - {label: 'per_token lr 3e-4 no JC',  cache: scripts/plots/run_20260818_115859/cache/probs_lr_3e_4_no_jc.npz,
+     arch: per_token, jc: 0.0, lr: 3e-4}
+  - {label: 'per_token lr 3e-4 JC 0.3', cache: scripts/plots/run_20260818_115859/cache/probs_lr_3e_4_jc_0_3.npz,
+     arch: per_token, lambda: 0.1, jc: 0.3, temp: 0.1, lr: 3e-4}
+  - {label: 'per_token lr 3e-4 JC 1.0', cache: scripts/plots/run_20260818_115859/cache/probs_lr_3e_4_jc_1_0.npz,
+     arch: per_token, lambda: 0.1, jc: 1.0, temp: 0.1, lr: 3e-4}
+  - {label: 'per_token lr 3e-4 JC 3.0', cache: scripts/plots/run_20260818_115859/cache/probs_lr_3e_4_jc_3_0.npz,
+     arch: per_token, lambda: 0.1, jc: 3.0, temp: 0.1, lr: 3e-4}
+
+plot:
+  out_dir: scripts/plots/rejection_summary_phase0
+  x: [lambda, jc]
