@@ -243,6 +243,17 @@ SCAN2_VALUES=(0.1)
 #   EXTRA_OVERRIDES=("finetune.warmup_frac=0.05" "trainer.gradient_clip_val=1.0")
 EXTRA_OVERRIDES=()
 
+# Nodes to keep every cell off, comma-separated (slurm --exclude syntax), e.g.
+#   EXCLUDE_NODES=node82 bash slurm/classify_param_scan.sh
+# Empty by default.  Existing for a known-bad node: slurm's own health check
+# does not always catch a GPU that has dropped off the bus (dead card still
+# enumerated as available), so a job can land on it and fail instantly
+# (Trainer construction: "No supported gpu backend found!") or partway through
+# (NCCL collective timeout / "CUDA error: unknown error" from the dead rank) —
+# see node82/GPU5, 2026-08-17, which produced exactly both symptoms depending on
+# whether the card had fully vanished from enumeration yet.
+EXCLUDE_NODES=${EXCLUDE_NODES:-}
+
 # DRY_RUN=1 writes every job script but submits nothing.
 DRY_RUN=${DRY_RUN:-0}
 
@@ -312,6 +323,7 @@ cat > "${CELL_DIR}/cell_job.sh" << EOF
 #!/bin/bash
 #SBATCH --job-name=${CELL_NAME}
 #SBATCH --partition=${GPU_NODE}
+$( [[ -n "${EXCLUDE_NODES}" ]] && echo "#SBATCH --exclude=${EXCLUDE_NODES}" )
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:${GPU_NUM}
 #SBATCH --ntasks-per-node=${GPU_NUM}
