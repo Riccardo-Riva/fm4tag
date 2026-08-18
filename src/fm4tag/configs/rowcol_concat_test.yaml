@@ -356,6 +356,18 @@ callbacks:
 # Staged unfreeze of the pretrained parts during finetuning is handled by
 # finetune.unfreeze_at_epoch (see the finetune block), not a callback.
 
+# Finetune-only overrides, merged onto `callbacks` by key (see runner/run.py)
+# when phase == finetune. Pretrain never logs head/loss_ce (only the
+# finetune module computes a classification loss), so pretrain keeps
+# tracking the plain val/loss above.
+callbacks_finetune:
+  model_checkpoint:
+    monitor:  val/head/loss_ce
+    filename: 'epoch{epoch:03d}-step{step}-val_loss_ce{val/head/loss_ce:.4f}'
+
+  early_stopping:
+    monitor:  val/head/loss_ce
+
 # ── Logger ────────────────────────────────────────────────────────────────────
 
 loggers:

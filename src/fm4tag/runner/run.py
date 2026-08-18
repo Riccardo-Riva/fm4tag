@@ -76,11 +76,16 @@ def run(
 
     # ── Trainer infrastructure ────────────────────────────────────────────
     logger = instantiate_loggers(cfg.get('loggers'))
-    # Shared callbacks + phase-specific extras (e.g. BackboneFinetuning
-    # requires ``module.backbone`` and must not be built during pretraining).
-    callbacks = instantiate_callbacks(cfg.get('callbacks'))
+    # Shared callbacks + phase-specific extras, merged in (not appended) so
+    # that reusing a shared callback's key (e.g. ``model_checkpoint``) patches
+    # its fields — such as ``monitor`` — instead of instantiating a second,
+    # competing callback. Genuinely new keys (e.g. BackboneFinetuning, which
+    # requires ``module.backbone`` and must not be built during pretraining)
+    # are still added as normal.
+    callbacks_cfg = cfg.get('callbacks')
     if _phase == 'finetune' and cfg.get('callbacks_finetune'):
-        callbacks.extend(instantiate_callbacks(cfg.callbacks_finetune))
+        callbacks_cfg = OmegaConf.merge(callbacks_cfg, cfg.callbacks_finetune)
+    callbacks = instantiate_callbacks(callbacks_cfg)
     if extra_callbacks:
         callbacks.extend(extra_callbacks)
 
