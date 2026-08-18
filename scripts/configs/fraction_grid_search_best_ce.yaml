@@ -1,0 +1,46 @@
+# Grid search config for scripts/fraction_grid_search.py
+#
+# Sweeps the D_b discriminant's f_c / f_tau background weights over the full
+# [0, 1] interval (f_u = 1 - f_c - f_tau, so points with f_c + f_tau >= 1 are
+# skipped) and finds the point that maximises c-jet rejection at b-eff = 0.8,
+# for the same best-CE model used in the earlier fraction-scan plots
+# (run_20260804_165415, lr 3e-4, CE-only — lowest val/head/loss_ce, 0.59976 @
+# epoch 9, across every classify_from_scratch run compared so far).
+#
+# The model label below matches predictions already cached from the
+# run_20260804_165415 vs GN2 comparison, so pointing --output at a directory
+# with that cache (see scripts/submit_fraction_grid_search.sh) skips
+# inference entirely.
+#
+#     python scripts/fraction_grid_search.py --config scripts/configs/fraction_grid_search_best_ce.yaml
+
+model:
+  dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch/run_20260804_165415/scratch_20260804_165415_rowcol_ddp2_bs_1024_lr_3e-4_ce_1.0_jc_0.0_0
+  label: 'lr 3e-4, no JC'
+  checkpoint: best
+
+test_file: null  # null -> test_dataset_path from the run's config
+
+cuts:  # applied before computing the discriminant (pt in MeV)
+  - [pt, '>', 20000]
+  - [pt, '<', 250000]
+  - [eta, '>', -2.5]
+  - [eta, '<', 2.5]
+
+signal: b
+target_background: c   # background whose rejection is maximised
+working_point: 0.8      # b-jet (signal) efficiency at which rejection is measured
+
+grid:
+  fc:   {min: 0.0, max: 1.0, num: 41}
+  ftau: {min: 0.0, max: 1.0, num: 41}
+
+inference:
+  batch_size: 1024
+  num_workers: 8
+
+plot:
+  out_dir: plots/fraction_grid_search_best_ce
+  figsize: [7.5, 6.0]
+  dpi: 200
+  cmap: viridis
