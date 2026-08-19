@@ -142,9 +142,11 @@ OUTPUT_BASE=${REPO}/slurm/classify_param_scan/run_${TIMESTAMP}
 
 # wandb: one group per invocation of this script; every training of every cell —
 # all cells, all seeds — clusters into one expandable row in the wandb UI.
+# Overridable so a later invocation can EXTEND an existing sweep's group (e.g.
+# adding grid points): WANDB_GROUP=scan_<TS-of-the-original-sweep>.
 # job_type is the fixed phase label ("scratch", not "finetune", even though the
 # underlying hydra phase is finetune).
-WANDB_GROUP="scan_${TIMESTAMP}"
+WANDB_GROUP=${WANDB_GROUP:-scan_${TIMESTAMP}}
 WANDB_JOB_TYPE="scratch"
 
 # ── Seed repetitions and the time budget ──────────────────────────────────────
