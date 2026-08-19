@@ -49,7 +49,9 @@
 #   bash slurm/classify_param_scan.sh            # submit
 #   DRY_RUN=1 bash slurm/classify_param_scan.sh  # write job scripts, submit nothing
 #
-# TRANSFORMER_TYPE, MAX_EPOCHS, WALLTIME, SEEDS and SCAN_VALUES can be overridden
+# TRANSFORMER_TYPE, MAX_EPOCHS, WALLTIME, SEEDS, SCAN_VALUES and JET_CONTRASTIVE
+# (a space-separated list — one cell per weight, same sweep and wandb group)
+# can be overridden
 # from the environment (defaults below are unchanged), which is how a short pilot
 # is run without editing this file.  Note the admission test needs
 # MAX_EPOCHS x EST_SECONDS_PER_EPOCH of headroom before it will start a seed, so
@@ -219,7 +221,11 @@ LR=3e-4
 # It is also cheaper per step: one encoder pass instead of two (see
 # EST_SECONDS_PER_EPOCH, which is calibrated for the jet_contrastive>0 path).
 CROSS_ENTROPY=${CROSS_ENTROPY:-1.0}
-JET_CONTRASTIVE=${JET_CONTRASTIVE:-1.0}
+# JET_CONTRASTIVE accepts a space-separated list ("0.0 0.3 1.0"): one cell per
+# value, crossed with axes A and B, all in the same sweep dir and wandb group —
+# so a jc comparison lands in one expandable wandb row instead of one group per
+# invocation.
+read -r -a JC_VALUES <<< "${JET_CONTRASTIVE:-1.0}"
 
 # ── Scan axis A (one slurm job per value, crossed with axis B) ────────────────
 # Any Hydra key.  SCAN_LABEL is the short tag used in directory and wandb names.
@@ -273,12 +279,12 @@ if (( ${#SEEDS[@]} == 0 )); then
     exit 1
 fi
 
-N_CELLS=$(( ${#SCAN_VALUES[@]} * ${#SCAN2_VALUES[@]} ))
+N_CELLS=$(( ${#JC_VALUES[@]} * ${#SCAN_VALUES[@]} * ${#SCAN2_VALUES[@]} ))
 MAX_SEEDS=${#SEEDS[@]}
 
 mkdir -pv "${OUTPUT_BASE}"
 
-echo "Grid: ${#SCAN_VALUES[@]} ${SCAN_PARAM} x ${#SCAN2_VALUES[@]} ${SCAN2_PARAM} = ${N_CELLS} cells"
+echo "Grid: ${#JC_VALUES[@]} jc x ${#SCAN_VALUES[@]} ${SCAN_PARAM} x ${#SCAN2_VALUES[@]} ${SCAN2_PARAM} = ${N_CELLS} cells"
 echo "      each cell = 1 job, ${GPU_NUM} GPUs, ${WALLTIME} walltime,"
 echo "      up to ${MAX_SEEDS} seeds run back-to-back (~$((EST_RUN_SECONDS / 3600)) h estimated each)"
 
@@ -295,7 +301,7 @@ SWEEP_INFO=${OUTPUT_BASE}/sweep_info.txt
     echo "max_epochs:   ${MAX_EPOCHS}"
     echo "batch_size:   ${BATCH_SIZE} per rank (gradient batch $((GPU_NUM * BATCH_SIZE)))"
     echo "lr:           ${LR}"
-    echo "loss:         cross_entropy=${CROSS_ENTROPY}  jet_contrastive=${JET_CONTRASTIVE}"
+    echo "loss:         cross_entropy=${CROSS_ENTROPY}  jet_contrastive=${JC_VALUES[*]}"
     echo "scan A:       ${SCAN_PARAM} = ${SCAN_VALUES[*]}"
     echo "scan B:       ${SCAN2_PARAM} = ${SCAN2_VALUES[*]}"
     echo "seeds:        ${SEEDS[*]}  (in order, until the walltime runs out)"
@@ -309,6 +315,7 @@ SWEEP_INFO=${OUTPUT_BASE}/sweep_info.txt
 
 CELL_ID=0
 
+for JET_CONTRASTIVE in "${JC_VALUES[@]}"; do
 for SCAN_VALUE in "${SCAN_VALUES[@]}"; do
 for SCAN2_VALUE in "${SCAN2_VALUES[@]}"; do
 
@@ -442,7 +449,7 @@ for SEED in "\${SEEDS[@]}"; do
         output_dir=\${RUN_DIR} \\
         loggers.wandb.group=${WANDB_GROUP} \\
         loggers.wandb.job_type=${WANDB_JOB_TYPE} \\
-        loggers.wandb.name=${SCAN_LABEL}${SCAN_VALUE}_${SCAN2_LABEL}${SCAN2_VALUE}_seed\${SEED} \\
+        loggers.wandb.name=jc${JET_CONTRASTIVE}_${SCAN_LABEL}${SCAN_VALUE}_${SCAN2_LABEL}${SCAN2_VALUE}_seed\${SEED} \\
         "\${EXTRA_OVERRIDES[@]}"
     RC=\$?
 
@@ -514,6 +521,7 @@ fi
 
 ((CELL_ID++))
 
+done
 done
 done
 
