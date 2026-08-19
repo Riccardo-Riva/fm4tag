@@ -16,6 +16,7 @@ global_encoder:
   dim:          16     # token width — the backbone runs at this width
   proj_hidden:  null   # null → auto (2 × dim × n_tokens)
   proj_out:     32    # projector output width — head only, never the backbone
+                       # (kept small: the dataset has only two global features)
   # num_features injected at runtime from variables.jets.inputs
   layers:
     - type:         rowcol
@@ -24,10 +25,10 @@ global_encoder:
       row_heads:    2
       dim_head:     8
       dim_row_head: 8
-      ff_mult:      2
+      ff_mult:      1
       attn_dropout: 0.0
       ff_dropout:   0.0
-      num_inds:     128      # null = all-pairs row attention over the batch
+      num_inds:     16      # null = all-pairs row attention over the batch
       row_mode:     per_token  # per_token = one ISAB per feature token (see
                                # rowcol_concat_v0 for the concat alternative)
 
@@ -46,10 +47,10 @@ constituents:
         row_heads:     2
         dim_head:      8
         dim_row_head:  8
-        ff_mult:       2
+        ff_mult:       1
         attn_dropout:  0.0
         ff_dropout:    0.0
-        num_inds:      128      # ISAB inducing points: row attention costs
+        num_inds:      16      # ISAB inducing points: row attention costs
                               # O(B*num_inds) per token instead of O(B^2), and
                               # runs N=19 independent per-token attentions.
                               # At dim=128 this was a throughput cliff (16->128
