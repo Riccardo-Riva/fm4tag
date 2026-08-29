@@ -9,6 +9,9 @@ slurm/**/
 outputs/
 plots/
 
+# generated per-model scratch configs (fraction_*_search auto-splits)
+scripts/configs/_tmp_*
+
 # claude stuff
 .claude/
 
