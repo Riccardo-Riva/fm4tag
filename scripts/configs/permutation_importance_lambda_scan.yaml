@@ -1,0 +1,106 @@
+# Permutation feature importance across the jc=1.0 λ scan
+# (slurm/classify_from_scratch/run_20260811_105149).
+#
+# One architecture, jc = 1.0, λ ∈ {0.15 … 0.5}.  λ ∈ {0.6, 0.75, 0.9} are
+# deliberately excluded: 0.75/0.9 diverged (best val CE 1.13 / 1.05 against
+# ~0.604 for the rest) and 0.6 sits visibly off the CE plateau (0.6112).
+#
+# All seven kept models land within a 0.0034 band of val CE, so the question is
+# not which is better but whether the *feature reliance* drifts with λ while the
+# performance does not.
+
+models:
+  - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch/run_20260811_105149/scratch_bs_1024_lr_3e-4_ce_1.0_jc_1.0_lam_0.15_0
+    label: λ = 0.15
+    lam: 0.15
+  - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch/run_20260811_105149/scratch_bs_1024_lr_3e-4_ce_1.0_jc_1.0_lam_0.2_1
+    label: λ = 0.2
+    lam: 0.2
+  - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch/run_20260811_105149/scratch_bs_1024_lr_3e-4_ce_1.0_jc_1.0_lam_0.25_2
+    label: λ = 0.25
+    lam: 0.25
+  - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch/run_20260811_105149/scratch_bs_1024_lr_3e-4_ce_1.0_jc_1.0_lam_0.35_3
+    label: λ = 0.35
+    lam: 0.35
+  - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch/run_20260811_105149/scratch_bs_1024_lr_3e-4_ce_1.0_jc_1.0_lam_0.4_4
+    label: λ = 0.4
+    lam: 0.4
+  - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch/run_20260811_105149/scratch_bs_1024_lr_3e-4_ce_1.0_jc_1.0_lam_0.45_5
+    label: λ = 0.45
+    lam: 0.45
+  - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch/run_20260811_105149/scratch_bs_1024_lr_3e-4_ce_1.0_jc_1.0_lam_0.5_6
+    label: λ = 0.5
+    lam: 0.5
+
+# Checkpoints are the runs' own best-by-val/loss (top-3 saved).  For λ ≥ 0.35
+# that selection was driven by the contrastive term — the runs hit the 50-epoch
+# cap and never early-stopped — but CE at those epochs is within 0.003 of each
+# run's own best CE, so the models being compared are the ones each run selected.
+checkpoint: best
+
+# Held out from the campaign's fraction optimisation (which used test).
+eval_file: null          # null -> each run's own val_dataset_path
+object: tracks
+
+n_jets: 200000
+repeats: 5
+seed: 12345
+include_global: true     # jet pt/eta, as a reference scale for the track features
+top_n: 8
+
+# Permuted jointly with a SHARED permutation, so intra-group correlation
+# survives and only the group↔rest association is destroyed.  These recover the
+# importance that single-feature permutation hides inside correlated blocks.
+groups:
+  impact_parameters:
+    - d0
+    - z0SinTheta
+    - lifetimeSignedD0Significance
+    - lifetimeSignedZ0SinThetaSignificance
+  track_kinematics:
+    - dphi
+    - deta
+  momentum:
+    - qOverP
+    - qOverPUncertainty
+  measurement_uncertainties:
+    - phiUncertainty
+    - thetaUncertainty
+    - qOverPUncertainty
+  hit_pattern:
+    - numberOfPixelHits
+    - numberOfSCTHits
+    - numberOfInnermostPixelLayerHits
+    - numberOfNextToInnermostPixelLayerHits
+    - numberOfInnermostPixelLayerSharedHits
+    - numberOfInnermostPixelLayerSplitHits
+    - numberOfPixelSharedHits
+    - numberOfPixelSplitHits
+    - numberOfSCTSharedHits
+  all_track_features:      # upper bound: how much do tracks matter at all
+    - d0
+    - z0SinTheta
+    - dphi
+    - deta
+    - qOverP
+    - lifetimeSignedD0Significance
+    - lifetimeSignedZ0SinThetaSignificance
+    - phiUncertainty
+    - thetaUncertainty
+    - qOverPUncertainty
+    - numberOfPixelHits
+    - numberOfSCTHits
+    - numberOfInnermostPixelLayerHits
+    - numberOfNextToInnermostPixelLayerHits
+    - numberOfInnermostPixelLayerSharedHits
+    - numberOfInnermostPixelLayerSplitHits
+    - numberOfPixelSharedHits
+    - numberOfPixelSplitHits
+    - numberOfSCTSharedHits
+
+inference:
+  batch_size: 1024
+  num_workers: 6
+
+plot:
+  out_dir: plots/permutation_importance_lambda_scan
