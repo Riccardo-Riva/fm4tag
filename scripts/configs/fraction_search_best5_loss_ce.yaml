@@ -1,0 +1,70 @@
+# Two-stage / constrained f_c / f_tau search config for the 5 best models
+# (by val/head/loss_ce, min over any epoch) across every classify_from_scratch
+# and classify_param_scan run from 2026-07-14 through 2026-08-20.
+#
+# Note: the top 5 by this metric are all jc=0.0 (no jet-contrastive loss)
+# CE-only baselines at essentially the same recipe (mostly lr=3e-4), each
+# from a different sweep date, converging to nearly identical epoch-9
+# val/head/loss_ce (0.5998-0.6008). They are near-duplicates, not diverse
+# architectures -- kept as-is per explicit request.
+#
+#     python scripts/fraction_two_stage_search.py \
+#         --config scripts/configs/fraction_search_best5_loss_ce.yaml \
+#         --workers 32
+#     python scripts/fraction_constrained_search.py \
+#         --config scripts/configs/fraction_search_best5_loss_ce.yaml \
+#         --floor-frac 0.95 --workers 32
+
+step: 0.002
+signal: b
+stage1_target: c
+stage2_target: u
+working_point: 0.8
+
+test_file: null  # null -> test_dataset_path from the runs' config (all agree)
+
+cuts:  # applied before computing the discriminant (pt in MeV)
+  - [pt, '>', 20000]
+  - [pt, '<', 250000]
+  - [eta, '>', -2.5]
+  - [eta, '<', 2.5]
+
+inference:
+  batch_size: 1024
+  num_workers: 8
+
+models:
+  - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch/run_20260804_165415/scratch_20260804_165415_rowcol_ddp2_bs_1024_lr_3e-4_ce_1.0_jc_0.0_0
+    label: 'best1 (run_20260804_165415, jc=0.0, lr=3e-4)'
+  - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch/run_20260720_192143/scratch_20260720_192143_rowcol_ddp2_bs_1024_lr_3e-4_ce_1.0_jc_0.0_6
+    label: 'best2 (run_20260720_192143, jc=0.0, lr=3e-4)'
+  - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch/run_20260723_000513/scratch_20260723_000513_rowcol_ddp2_bs_1024_lr_3e-4_ce_1.0_jc_0.0_0
+    label: 'best3 (run_20260723_000513, jc=0.0, lr=3e-4)'
+  - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch/run_20260803_172831/scratch_20260803_172831_rowcol_ddp2_bs_1024_lr_3e-4_ce_1.0_jc_0.0_0
+    label: 'best4 (run_20260803_172831, jc=0.0, lr=3e-4)'
+  - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch/run_20260804_165415/scratch_20260804_165415_rowcol_ddp2_bs_1024_lr_1e-4_ce_1.0_jc_0.0_4
+    label: 'best5 (run_20260804_165415, jc=0.0, lr=1e-4)'
+
+# Used only to build roc_comparison_config.yaml at the end.
+roc_comparison:
+  colours:
+    - '#4477AA'
+    - '#66CCEE'
+    - '#228833'
+    - '#CCBB44'
+    - '#EE6677'
+  reference_tagger:
+    label: 'GN2 only-JT'
+    file: /storage3/DSIP/rriva/packages/salt-pt/salt/logs/GN2_only_jt_20260817-T134649/ckpts/epoch=015-val_loss=0.59814__test_pp_output_test.h5
+    probs: {b: GN2_only_jt_pb, c: GN2_only_jt_pc, u: GN2_only_jt_pu, tau: GN2_only_jt_ptau}
+    fractions: {c: 0.2, tau: 0.01}
+    colour: '#AA3377'
+  plot:
+    out_dir: plots/roc_best5_loss_ce_optimal_fractions_vs_gn2_only_jt
+    atlas_brand: ''
+    atlas_first_tag: 'Simulation Internal'
+    atlas_second_tag: "$\\sqrt{s} = 13$ TeV, $t\\bar{t}$\n$20 < p_T < 250$ GeV, $|\\eta| < 2.5$"
+    figsize: [7, 7]
+    y_scale: 1.3
+    dpi: 200
+    disc_plot: {bins: 50, range: [-10, 20], logy: false}

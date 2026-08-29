@@ -1,0 +1,93 @@
+# Two-stage f_c / f_tau search config for scripts/fraction_two_stage_search.py
+#
+# The 11 lambda-scan models (10 jet_contrastive=1.0 runs of run_20260811_105149
+# plus the jet_contrastive=0 reference from run_20260807_162950 — same set as
+# scripts/configs/roc_comparison_run_20260811_105149.yaml). For EACH model
+# independently:
+#   stage 1 - grid-search (f_c, f_tau) over the full simplex at `step` to
+#             maximise c-jet rejection @ b-eff = working_point
+#   stage 2 - fix f_c at its stage-1 value, re-scan f_tau alone to maximise
+#             light(u)-jet rejection at the same working point
+#
+# Predictions for all 11 models are already cached (from the
+# roc_comparison_run_20260811_105149.yaml runs) — point --output at a
+# directory with that cache/ symlinked in and this never touches the GPU.
+#
+#     python scripts/fraction_two_stage_search.py \
+#         --config scripts/configs/fraction_two_stage_search_lambda_scan.yaml \
+#         --workers 32
+
+step: 0.002
+signal: b
+stage1_target: c
+stage2_target: u
+working_point: 0.8
+
+test_file: null  # null -> test_dataset_path from the runs' config (all agree)
+
+cuts:  # applied before computing the discriminant (pt in MeV)
+  - [pt, '>', 20000]
+  - [pt, '<', 250000]
+  - [eta, '>', -2.5]
+  - [eta, '<', 2.5]
+
+inference:
+  batch_size: 1024
+  num_workers: 8
+
+models:
+  - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch/run_20260807_162950/scratch_20260807_162950_rowcol_concat_ddp2_bs_1024_lr_3e-4_ce_1.0_jc_0.0_lam_0.03_0
+    label: 'no JC (λ = 0.03)'
+  - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch/run_20260811_105149/scratch_bs_1024_lr_3e-4_ce_1.0_jc_1.0_lam_0.15_0
+    label: 'λ = 0.15'
+  - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch/run_20260811_105149/scratch_bs_1024_lr_3e-4_ce_1.0_jc_1.0_lam_0.2_1
+    label: 'λ = 0.2'
+  - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch/run_20260811_105149/scratch_bs_1024_lr_3e-4_ce_1.0_jc_1.0_lam_0.25_2
+    label: 'λ = 0.25'
+  - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch/run_20260811_105149/scratch_bs_1024_lr_3e-4_ce_1.0_jc_1.0_lam_0.35_3
+    label: 'λ = 0.35'
+  - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch/run_20260811_105149/scratch_bs_1024_lr_3e-4_ce_1.0_jc_1.0_lam_0.4_4
+    label: 'λ = 0.4'
+  - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch/run_20260811_105149/scratch_bs_1024_lr_3e-4_ce_1.0_jc_1.0_lam_0.45_5
+    label: 'λ = 0.45'
+  - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch/run_20260811_105149/scratch_bs_1024_lr_3e-4_ce_1.0_jc_1.0_lam_0.5_6
+    label: 'λ = 0.5'
+  - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch/run_20260811_105149/scratch_bs_1024_lr_3e-4_ce_1.0_jc_1.0_lam_0.6_7
+    label: 'λ = 0.6'
+  - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch/run_20260811_105149/scratch_bs_1024_lr_3e-4_ce_1.0_jc_1.0_lam_0.75_8
+    label: 'λ = 0.75'
+  - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch/run_20260811_105149/scratch_bs_1024_lr_3e-4_ce_1.0_jc_1.0_lam_0.9_9
+    label: 'λ = 0.9'
+
+# Used only to build roc_comparison_config.yaml at the end. Colours are
+# assigned in model order (same order as `models:` above) — black for the
+# jc=0 baseline, then the same blue -> purple -> red gradient by lambda rank
+# used in the earlier lambda-scan ROC plots.
+roc_comparison:
+  colours:
+    - '#000000'
+    - '#1f3ecc'
+    - '#3337c3'
+    - '#4730ba'
+    - '#5c29b0'
+    - '#7023a7'
+    - '#831f93'
+    - '#951f76'
+    - '#a81f59'
+    - '#ba1f3c'
+    - '#cc1f1f'
+  reference_tagger:
+    label: 'GN2 only-JT'
+    file: /storage3/DSIP/rriva/packages/salt-pt/salt/logs/GN2_only_jt_20260817-T134649/ckpts/epoch=015-val_loss=0.59814__test_pp_output_test.h5
+    probs: {b: GN2_only_jt_pb, c: GN2_only_jt_pc, u: GN2_only_jt_pu, tau: GN2_only_jt_ptau}
+    fractions: {c: 0.2, tau: 0.01}
+    colour: '#EE6677'
+  plot:
+    out_dir: plots/roc_lambda_scan_optimal_fractions_vs_gn2_only_jt
+    atlas_brand: ''
+    atlas_first_tag: 'Simulation Internal'
+    atlas_second_tag: "$\\sqrt{s} = 13$ TeV, $t\\bar{t}$\n$20 < p_T < 250$ GeV, $|\\eta| < 2.5$"
+    figsize: [7, 7]
+    y_scale: 1.3
+    dpi: 200
+    disc_plot: {bins: 50, range: [-10, 20], logy: false}
