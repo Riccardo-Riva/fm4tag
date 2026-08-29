@@ -1,0 +1,133 @@
+models:
+- dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch/run_20260807_162950/scratch_20260807_162950_rowcol_concat_ddp2_bs_1024_lr_3e-4_ce_1.0_jc_0.0_lam_0.03_0
+  label: no JC (λ = 0.03) (f_c = 0.280, f_tau = 0.008)
+  fractions:
+    c: 0.28
+    tau: 0.008
+  colour: '#000000'
+- dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch/run_20260811_105149/scratch_bs_1024_lr_3e-4_ce_1.0_jc_1.0_lam_0.15_0
+  label: λ = 0.15 (f_c = 0.248, f_tau = 0.024)
+  fractions:
+    c: 0.248
+    tau: 0.024
+  colour: '#1f3ecc'
+- dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch/run_20260811_105149/scratch_bs_1024_lr_3e-4_ce_1.0_jc_1.0_lam_0.2_1
+  label: λ = 0.2 (f_c = 0.244, f_tau = 0.014)
+  fractions:
+    c: 0.244
+    tau: 0.014
+  colour: '#3337c3'
+- dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch/run_20260811_105149/scratch_bs_1024_lr_3e-4_ce_1.0_jc_1.0_lam_0.25_2
+  label: λ = 0.25 (f_c = 0.306, f_tau = 0.026)
+  fractions:
+    c: 0.306
+    tau: 0.026
+  colour: '#4730ba'
+- dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch/run_20260811_105149/scratch_bs_1024_lr_3e-4_ce_1.0_jc_1.0_lam_0.35_3
+  label: λ = 0.35 (f_c = 0.274, f_tau = 0.016)
+  fractions:
+    c: 0.274
+    tau: 0.016
+  colour: '#5c29b0'
+- dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch/run_20260811_105149/scratch_bs_1024_lr_3e-4_ce_1.0_jc_1.0_lam_0.4_4
+  label: λ = 0.4 (f_c = 0.280, f_tau = 0.014)
+  fractions:
+    c: 0.28
+    tau: 0.014
+  colour: '#7023a7'
+- dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch/run_20260811_105149/scratch_bs_1024_lr_3e-4_ce_1.0_jc_1.0_lam_0.45_5
+  label: λ = 0.45 (f_c = 0.318, f_tau = 0.014)
+  fractions:
+    c: 0.318
+    tau: 0.014
+  colour: '#831f93'
+- dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch/run_20260811_105149/scratch_bs_1024_lr_3e-4_ce_1.0_jc_1.0_lam_0.5_6
+  label: λ = 0.5 (f_c = 0.286, f_tau = 0.014)
+  fractions:
+    c: 0.286
+    tau: 0.014
+  colour: '#951f76'
+- dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_from_scratch/run_20260811_105149/scratch_bs_1024_lr_3e-4_ce_1.0_jc_1.0_lam_0.6_7
+  label: λ = 0.6 (f_c = 0.246, f_tau = 0.026)
+  fractions:
+    c: 0.246
+    tau: 0.026
+  colour: '#a81f59'
+reference_taggers:
+- label: GN2 only-JT (f_c = 0.2, f_tau = 0.01)
+  file: /storage3/DSIP/rriva/packages/salt-pt/salt/logs/GN2_only_jt_20260817-T134649/ckpts/epoch=015-val_loss=0.59814__test_pp_output_test.h5
+  probs:
+    b: GN2_only_jt_pb
+    c: GN2_only_jt_pc
+    u: GN2_only_jt_pu
+    tau: GN2_only_jt_ptau
+  fractions:
+    c: 0.2
+    tau: 0.01
+  colour: '#EE6677'
+reference: GN2 only-JT (f_c = 0.2, f_tau = 0.01)
+test_file: null
+cuts:
+- - pt
+  - '>'
+  - 20000
+- - pt
+  - <
+  - 250000
+- - eta
+  - '>'
+  - -2.5
+- - eta
+  - <
+  - 2.5
+signal: b
+backgrounds:
+- u
+- c
+- tau
+fractions:
+  c: 0.2
+  tau: 0.01
+sig_eff:
+  min: 0.6
+  max: 1.0
+  num: 100
+working_points:
+- 0.7
+- 0.77
+- 0.8
+- 0.85
+eff_vs_pt:
+  working_point: 0.8
+  bins_gev:
+  - 20
+  - 30
+  - 40
+  - 60
+  - 85
+  - 110
+  - 140
+  - 175
+  - 250
+  flat_per_bin: false
+inference:
+  batch_size: 1024
+  num_workers: 8
+plot:
+  out_dir: plots/roc_lambda_scan_optimal_fractions_vs_gn2_only_jt
+  atlas_brand: ''
+  atlas_first_tag: Simulation Internal
+  atlas_second_tag: '$\sqrt{s} = 13$ TeV, $t\bar{t}$
+
+    $20 < p_T < 250$ GeV, $|\eta| < 2.5$'
+  figsize:
+  - 7
+  - 7
+  y_scale: 1.3
+  dpi: 200
+  disc_plot:
+    bins: 50
+    range:
+    - -10
+    - 20
+    logy: false
