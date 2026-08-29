@@ -64,6 +64,7 @@ import pandas as pd
 import torch
 import yaml
 from ftag.utils import calculate_rejection
+from ftag.utils.metrics import weighted_percentile
 
 sys.path.insert(0, str(Path(__file__).parent))
 import roc_comparison as rc  # noqa: E402  -- checkpoint/model/inference/discriminant reuse
@@ -72,23 +73,46 @@ _G: dict = {}
 
 
 def _pool_init(
-    probs: dict[str, np.ndarray], sig_mask: np.ndarray, bkg_masks: dict[str, np.ndarray], signal: str
+    probs: dict[str, np.ndarray],
+    sig_mask: np.ndarray,
+    bkg_masks: dict[str, np.ndarray],
+    signal: str,
+    wp: float,
 ) -> None:
+    """Cache the per-model arrays every grid point needs.
+
+    The discriminant denominator is ``f_c p_c + f_tau p_tau + (1-f_c-f_tau) p_u
+    = p_u + f_c (p_c - p_u) + f_tau (p_tau - p_u)``, so ``p_c - p_u`` and
+    ``p_tau - p_u`` are precomputed here and each point is two scalar-weighted
+    adds.  The ``log`` in ``rc.discriminant`` is dropped: rejections and working
+    points are invariant under it (it is monotone), and skipping it saves an
+    N-element ``np.log`` per point.
+    """
     global _G
-    _G = {'probs': probs, 'sig': sig_mask, 'bkg': bkg_masks, 'signal': signal}
+    _G = {
+        'pb': probs[signal],
+        'pu': probs['u'],
+        'dc': probs['c'] - probs['u'],
+        'dtau': probs['tau'] - probs['u'],
+        'sig': sig_mask,
+        'bkg': bkg_masks,
+        'pct': np.array([1.0 - wp]),
+    }
 
 
-def _eval_point(point: tuple[float, float, float]) -> tuple[float, float, float, float, float]:
-    fc, ftau, wp = point
-    disc = rc.discriminant(_G['probs'], _G['signal'], {'c': fc, 'tau': ftau})
-    sig_disc = disc[_G['sig']]
-    return (
-        fc,
-        ftau,
-        float(calculate_rejection(sig_disc, disc[_G['bkg']['c']], target_eff=wp)),
-        float(calculate_rejection(sig_disc, disc[_G['bkg']['u']], target_eff=wp)),
-        float(calculate_rejection(sig_disc, disc[_G['bkg']['tau']], target_eff=wp)),
-    )
+def _eval_point(point: tuple[float, float]) -> tuple[float, float, float, float, float]:
+    fc, ftau = point
+    disc = _G['pb'] / (_G['pu'] + fc * _G['dc'] + ftau * _G['dtau'])
+    # Signal cut is the (1-wp) percentile of the signal discriminant — identical
+    # for all three backgrounds, so compute it once (was 3x inside
+    # calculate_rejection) and count each background above it directly.
+    cut = float(weighted_percentile(disc[_G['sig']], _G['pct'])[0])
+    rej = []
+    for b in ('c', 'u', 'tau'):
+        bd = disc[_G['bkg'][b]]
+        n_pass = int(np.count_nonzero(bd >= cut))
+        rej.append(bd.size / n_pass if n_pass else np.inf)
+    return (fc, ftau, rej[0], rej[1], rej[2])
 
 
 def sweep_joint(
@@ -96,11 +120,15 @@ def sweep_joint(
     sig_mask: np.ndarray,
     bkg_masks: dict[str, np.ndarray],
     signal: str,
-    points: list[tuple[float, float, float]],
+    points: list[tuple[float, float]],
+    wp: float,
     workers: int,
 ) -> pd.DataFrame:
-    """Evaluate c/u/tau rejection at every (f_c, f_tau, wp) in ``points``."""
-    with mp.Pool(workers, initializer=_pool_init, initargs=(probs, sig_mask, bkg_masks, signal)) as pool:
+    """Evaluate c/u/tau rejection at every (f_c, f_tau) in ``points`` (at ``wp``)."""
+    with mp.Pool(
+        workers, initializer=_pool_init,
+        initargs=(probs, sig_mask, bkg_masks, signal, wp),
+    ) as pool:
         chunksize = max(1, len(points) // (workers * 8))
         results = pool.map(_eval_point, points, chunksize=chunksize)
     return pd.DataFrame(results, columns=['f_c', 'f_tau', 'c_rejection', 'u_rejection', 'tau_rejection'])
@@ -181,7 +209,13 @@ def main() -> None:
     frac_u = args.floor_u if args.floor_u is not None else args.floor_frac
     frac_tau = args.floor_tau if args.floor_tau is not None else args.floor_frac
 
-    values = np.round(np.arange(0.0, 1.0, step), 10)
+    # The full (f_c, f_tau) simplex is 0..1 x 0..1, but every constrained optimum
+    # observed lands at f_c < 0.4, f_tau < 0.06.  Restrict the grid to a box that
+    # comfortably contains that (config-overridable) — it is the dominant cost.
+    fc_max = float(cfg.get('fc_max', 0.6))
+    ftau_max = float(cfg.get('ftau_max', 0.15))
+    fc_values = np.round(np.arange(0.0, fc_max, step), 10)
+    ftau_values = np.round(np.arange(0.0, ftau_max, step), 10)
 
     floor = gn2_floor(cfg, wp)
     floor_u, floor_tau = frac_u * floor['u'], frac_tau * floor['tau']
@@ -224,7 +258,16 @@ def main() -> None:
     # ── Per-model constrained search ────────────────────────────────────────
     summary_rows = []
     model_results = []  # (entry, fc, ftau)
-    points = [(fc, ftau, wp) for ftau in values for fc in values if fc + ftau < 1.0]
+    points = [
+        (fc, ftau)
+        for ftau in ftau_values
+        for fc in fc_values
+        if fc + ftau < 1.0
+    ]
+    print(
+        f'grid: f_c in [0, {fc_max}) x f_tau in [0, {ftau_max}) at step {step} '
+        f'-> {len(points)} points'
+    )
 
     grid_dir = args.grid_dir or out_dir
     grid_dir.mkdir(parents=True, exist_ok=True)
@@ -260,7 +303,9 @@ def main() -> None:
                 ),
             )
             probs_masked = {f: probs[:, i][mask] for i, f in enumerate(rc.FLAVOURS)}
-            df = sweep_joint(probs_masked, sig_mask, bkg_masks, signal, points, workers)
+            df = sweep_joint(
+                probs_masked, sig_mask, bkg_masks, signal, points, wp, workers
+            )
             tmp = shared_grid.with_name(f'.{shared_grid.name}.{os.getpid()}')
             df.to_csv(tmp, index=False)
             os.replace(tmp, shared_grid)  # atomic — concurrent floor jobs may race
@@ -282,6 +327,11 @@ def main() -> None:
             f'  chosen: f_c={fc:.4f}  f_tau={ftau:.4f}  feasible={is_feasible}  '
             f'c_rej={best.c_rejection:.3f}  u_rej={best.u_rejection:.3f}  tau_rej={best.tau_rejection:.3f}'
         )
+        if fc >= fc_max - 2 * step or ftau >= ftau_max - 2 * step:
+            print(
+                f'  WARNING: optimum for {label} is at the grid edge '
+                f'(f_c_max={fc_max}, f_tau_max={ftau_max}) — widen fc_max/ftau_max'
+            )
 
         summary_rows.append({
             'label': label,
