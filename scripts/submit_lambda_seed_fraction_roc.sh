@@ -42,7 +42,7 @@ CPUS=64
 TS=$(date +%Y%m%d_%H%M%S)
 ROOT=$REPO/scripts/plots/lambda_seed_bestval_$TS
 CACHE=$ROOT/_cache
-GRID=$ROOT/_grid
+GRID=${GRID_DIR:-$ROOT/_grid}
 LOG=$REPO/scripts/logs/lambda_seed_bestval
 mkdir -p "$ROOT" "$CACHE" "$GRID" "$LOG"
 echo "Pipeline root: $ROOT"
@@ -113,11 +113,11 @@ for wp in "${WPS[@]}"; do
   for u in "${FLOOR_U[@]}"; do
   for t in "${FLOOR_TAU[@]}"; do
     if [[ $first -eq 1 ]]; then
-      primer_jid=$(submit_combo "$wp" "$u" "$t" "$DEP0" "12:00:00")
+      primer_jid=$(submit_combo "$wp" "$u" "$t" "$DEP0" "${PRIMER_WALL:-24:00:00}")
       echo "  grid-primer wp=$wp -> job $primer_jid  (u=$u tau=$t)"
       first=0
     else
-      jid=$(submit_combo "$wp" "$u" "$t" "--dependency=afterok:$primer_jid" "03:00:00")
+      jid=$(submit_combo "$wp" "$u" "$t" "--dependency=afterok:$primer_jid" "${COMBO_WALL:-06:00:00}")
       echo "    combo wp=$wp u=$u tau=$t -> job $jid"
     fi
   done
