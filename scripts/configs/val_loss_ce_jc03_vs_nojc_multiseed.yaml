@@ -1,0 +1,60 @@
+# Best val CE comparison — per-token rowcol, jc=0.3 CutMix/Mixup lambda scan
+# vs the no-contrastive (jc=0.0) baseline.  ONLY the cells with > 2 completed
+# seeds are kept, so every curve has a real seed-mean band and every star a real
+# across-seed error bar.
+#
+#     python scripts/plot_val_curves.py --config scripts/configs/val_loss_ce_jc03_vs_nojc_multiseed.yaml
+#
+# Cells and seed counts (2026-08-28):
+#   jc 0.0  lam 0.1   n = 8   (no contrastive; lambda is inert here)
+#   jc 0.3  lam 0.05  n = 6
+#   jc 0.3  lam 0.1   n = 5
+#   jc 0.3  lam 0.25  n = 4
+#   jc 0.3  lam 0.3   n = 4
+# lam 0.35 / 0.4 / 0.5 are excluded (n = 2 / 1 / 1); the 2026-08-28 reseed
+# (run_20260828_153214, max_epochs 100) will fill them in.
+#
+# All cells: classify-from-scratch, per-token rowcol_v0, ddp2, bs 1024/rank
+# (grad batch 2048), lr 3e-4, ce 1.0, temp 0.1, max_epochs 50.
+
+metric: val/head/loss_ce
+
+# std    — honest run-to-run scatter (ddof=1); switch to `sem` for the
+#          uncertainty on the MEAN best value, or `minmax` for the full range.
+error: std
+seed_status: [completed]
+
+paths:
+  root: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_param_scan
+  r44: ${paths.root}/run_20260819_134452/scratch_bs_1024_lr_3e-4_ce_1.0
+  r57: ${paths.root}/run_20260819_135557/scratch_bs_1024_lr_3e-4_ce_1.0_jc_0.3
+  r09: ${paths.root}/run_20260819_135709/scratch_bs_1024_lr_3e-4_ce_1.0_jc_0.3
+
+color:
+  cmap: ['#1f3ecc', '#7a1fa2', '#cc1f1f']  # blue -> purple -> red, by lambda rank
+  scale: uniform
+  vmin: 0.0
+  vmax: 0.3
+  baseline_color: black                    # the jc == 0 entry
+  colorbar: false
+
+plot:
+  out_dir: plots/val_loss_ce
+  filename: val_loss_ce_jc03_vs_nojc_multiseed.png
+  title: 'Best val CE — per-token, JC 0.3 $\lambda$ scan vs no contrastive (n > 2 seeds)'
+  ylabel: Validation cross-entropy (val/head/loss_ce)
+  legend_title: 'configuration'
+  legend_outside: true
+  figsize: [8.5, 5.0]
+  band: true
+  band_alpha: 0.15
+  show_n: true
+  ylim: [0.5985, 0.6165]
+
+models:
+  - cell: ${paths.r44}_jc_0.0_lam_0.1_temp_0.1
+    label: 'no contrastive (JC 0.0)'
+  - cell: ${paths.r57}_lam_0.05_temp_0.1
+  - cell: ${paths.r44}_jc_0.3_lam_0.1_temp_0.1
+  - cell: ${paths.r57}_lam_0.25_temp_0.1
+  - cell: ${paths.r09}_lam_0.3_temp_0.1

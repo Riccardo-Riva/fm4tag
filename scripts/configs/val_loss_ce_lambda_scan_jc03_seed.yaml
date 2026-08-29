@@ -1,0 +1,66 @@
+# Validation cross-entropy vs epoch for the seed-repeated CutMix/Mixup lambda
+# ("noise strength") scan at jet_contrastive = 0.3.
+#
+# All cells are classify-from-scratch, per-token rowcol_v0 (the reverted Aug-4
+# architecture), ddp2, bs 1024/rank (gradient batch 2048), lr 3e-4,
+# cross_entropy 1.0, jet_contrastive 0.3, temp 0.1, MAX_EPOCHS 50.
+# wandb group scan_20260819_135557.  The lambda points are spread over three
+# sweep directories:
+#   run_20260819_134452 : lambda 0.1   (jc=0.3 cell), plus the jc 0.0 reference
+#   run_20260819_135557 : lambda 0.05, 0.25, 0.4
+#   run_20260819_135709 : lambda 0.3, 0.35, 0.5
+#
+#     python scripts/plot_val_curves.py --config scripts/configs/val_loss_ce_lambda_scan_jc03_seed.yaml
+#
+# Each curve is the seed MEAN with a ±std band; each star is the mean best value
+# with the across-seed std as an error bar.  ce / jc / lambda are read from each
+# run's own .hydra/config.yaml; per-entry keys are only overrides.
+#
+# CAVEAT: lambda 0.4 / 0.5 have a single completed seed AND their best epoch is
+# 48-49 of 50 — early stopping never fired, so those points are NOT converged
+# and sit below the others partly for that reason.  lambda 0.35 has 2 seeds.
+
+metric: val/head/loss_ce
+error: std
+seed_status: [completed]
+
+paths:
+  root: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_param_scan
+  r0819a: ${paths.root}/run_20260819_134452/scratch_bs_1024_lr_3e-4_ce_1.0
+  r55:    ${paths.root}/run_20260819_135557/scratch_bs_1024_lr_3e-4_ce_1.0_jc_0.3
+  r09:    ${paths.root}/run_20260819_135709/scratch_bs_1024_lr_3e-4_ce_1.0_jc_0.3
+
+color:
+  cmap: ['#1f3ecc', '#7a1fa2', '#cc1f1f']  # blue -> purple -> red
+  scale: uniform                           # by rank in the list
+  vmin: 0.0
+  vmax: 0.5
+  baseline_color: black                    # every entry with jc == 0
+  colorbar: false
+
+plot:
+  out_dir: plots/val_loss_ce
+  filename: val_loss_ce_lambda_scan_jc03_seed.png
+  title: 'Validation CE — noise ($\lambda$) scan, per-token, CE 1.0 / JC 0.3'
+  ylabel: Validation cross-entropy (val/head/loss_ce)
+  legend_title: 'augmentation strength $\lambda$'
+  legend_outside: true
+  figsize: [8.5, 5.0]
+  band: true
+  band_alpha: 0.15
+  show_n: true
+  ylim: [0.5990, 0.6130]
+
+models:
+  # ── Reference: jet-contrastive off (lambda inert here), 8 seeds ────────────
+  - cell: ${paths.r0819a}_jc_0.0_lam_0.1_temp_0.1
+    label: 'JC 0.0 (reference)'
+
+  # ── jc = 0.3, lambda ladder ───────────────────────────────────────────────
+  - cell: ${paths.r55}_lam_0.05_temp_0.1
+  - cell: ${paths.r0819a}_jc_0.3_lam_0.1_temp_0.1
+  - cell: ${paths.r55}_lam_0.25_temp_0.1
+  - cell: ${paths.r09}_lam_0.3_temp_0.1
+  - cell: ${paths.r09}_lam_0.35_temp_0.1
+  - cell: ${paths.r55}_lam_0.4_temp_0.1
+  - cell: ${paths.r09}_lam_0.5_temp_0.1
