@@ -279,20 +279,46 @@ def cached_probs(
     recompute: bool,
     compute,
 ) -> np.ndarray:
-    """Load cached predictions if they match ckpt/test-file, else recompute."""
+    """Load cached predictions if they match ckpt/test-file, else recompute.
+
+    The cache file is named after the entry label, but predictions depend only
+    on the checkpoint + test file + size, so if the label-named file is missing
+    or stale we also accept any other ``probs_*.npz`` in the directory whose
+    stored ``ckpt_path``/``test_file`` match and that is at least ``n_jets``
+    long.  This lets a downstream run (e.g. a fraction search that relabels
+    entries with their optimal f_c/f_tau) reuse a cache populated under the
+    original labels instead of re-running inference.
+    """
     slug = re.sub(r'[^A-Za-z0-9]+', '_', label).strip('_').lower()
     cache_file = cache_dir / f'probs_{slug}.npz'
 
-    if cache_file.is_file() and not recompute:
-        cached = np.load(cache_file, allow_pickle=False)
+    def _usable(path: Path) -> np.ndarray | None:
+        try:
+            cached = np.load(path, allow_pickle=False)
+        except (OSError, ValueError):
+            return None
         if (
             str(cached['ckpt_path']) == str(ckpt_path)
             and str(cached['test_file']) == str(test_file)
             and cached['probs'].shape[0] >= n_jets
         ):
-            print(f'  using cached predictions: {cache_file}')
             return cached['probs'][:n_jets]
-        print('  cache stale (different checkpoint/test file/size) — recomputing')
+        return None
+
+    if not recompute:
+        hit = _usable(cache_file) if cache_file.is_file() else None
+        if hit is not None:
+            print(f'  using cached predictions: {cache_file}')
+            return hit
+        for other in sorted(cache_dir.glob('probs_*.npz')) if cache_dir.is_dir() else []:
+            if other == cache_file:
+                continue
+            hit = _usable(other)
+            if hit is not None:
+                print(f'  using cached predictions (matched by checkpoint): {other}')
+                return hit
+        if cache_file.is_file():
+            print('  cache stale (different checkpoint/test file/size) — recomputing')
 
     probs = compute()
     cache_dir.mkdir(parents=True, exist_ok=True)
