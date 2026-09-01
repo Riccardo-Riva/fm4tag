@@ -310,7 +310,9 @@ def cached_probs(
         if hit is not None:
             print(f'  using cached predictions: {cache_file}')
             return hit
-        for other in sorted(cache_dir.glob('probs_*.npz')) if cache_dir.is_dir() else []:
+        for other in (
+            sorted(cache_dir.glob('probs_*.npz')) if cache_dir.is_dir() else []
+        ):
             if other == cache_file:
                 continue
             hit = _usable(other)
@@ -629,7 +631,7 @@ def main() -> None:
         '--max-jets', type=int, default=None, help='Truncate the test set (smoke test)'
     )
     parser.add_argument(
-        '--device', default=None, help="Inference device (default: cuda if available)"
+        '--device', default=None, help='Inference device (default: cuda if available)'
     )
     args = parser.parse_args()
 
@@ -655,7 +657,9 @@ def main() -> None:
         args.device or ('cuda' if torch.cuda.is_available() else 'cpu')
     )
     if device.type == 'cpu':
-        print('WARNING: running inference on CPU — use a GPU node for the full test set')
+        print(
+            'WARNING: running inference on CPU — use a GPU node for the full test set'
+        )
     torch.set_float32_matmul_precision('high')
 
     # ── Resolve runs and the shared test file ─────────────────────────────
@@ -775,7 +779,9 @@ def main() -> None:
     plot_rocs(taggers, signal, backgrounds, sig_eff, plot_cfg, out_dir)
     plot_disc_distributions(taggers, signal, plot_cfg, out_dir)
     if cfg.get('eff_vs_pt'):
-        plot_eff_vs_pt(taggers, signal, backgrounds, cfg['eff_vs_pt'], plot_cfg, out_dir)
+        plot_eff_vs_pt(
+            taggers, signal, backgrounds, cfg['eff_vs_pt'], plot_cfg, out_dir
+        )
     working_point_table(
         taggers, signal, backgrounds, cfg.get('working_points', [0.70, 0.77]), out_dir
     )

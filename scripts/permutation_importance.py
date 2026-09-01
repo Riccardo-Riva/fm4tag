@@ -140,7 +140,9 @@ def build_variants(
     if include_global:
         g_obj = run_cfg.global_object
         for i, name in enumerate(run_cfg.variables[g_obj].inputs):
-            variants.append(Variant(f'{g_obj}:{name}', 'global', glob=[i], members=[name]))
+            variants.append(
+                Variant(f'{g_obj}:{name}', 'global', glob=[i], members=[name])
+            )
 
     return variants
 
@@ -264,7 +266,9 @@ def evaluate_model(
                 'label': batch['label'].to(device, non_blocking=True),
                 'global': batch['global'].to(device, non_blocking=True),
                 'constituents': {
-                    name: {k: v.to(device, non_blocking=True) for k, v in fields.items()}
+                    name: {
+                        k: v.to(device, non_blocking=True) for k, v in fields.items()
+                    }
                     for name, fields in batch['constituents'].items()
                 },
             }
@@ -279,7 +283,9 @@ def evaluate_model(
                 generator = torch.Generator(device=device)
                 generator.manual_seed(batch_seed(base_seed, repeat, batch_idx))
                 track_perm = torch.randperm(n_valid, generator=generator, device=device)
-                global_perm = torch.randperm(n_batch, generator=generator, device=device)
+                global_perm = torch.randperm(
+                    n_batch, generator=generator, device=device
+                )
 
                 for variant in variants:
                     permuted = permuted_batch(
@@ -319,8 +325,12 @@ def plot_heatmap(summary: pd.DataFrame, order: list[str], out: Path) -> None:
             value = table.values[i, j]
             if np.isfinite(value):
                 ax.text(
-                    j, i, f'{100 * value:.1f}',
-                    ha='center', va='center', fontsize=6.5,
+                    j,
+                    i,
+                    f'{100 * value:.1f}',
+                    ha='center',
+                    va='center',
+                    fontsize=6.5,
                     color='white' if value > 0.55 * hi else 'black',
                 )
     fig.colorbar(image, ax=ax, label='fraction of summed single-feature ΔCE')
@@ -342,15 +352,23 @@ def plot_profile(summary: pd.DataFrame, order: list[str], out: Path, top: int) -
             ax.set_visible(False)
             continue
         ranked = (
-            subset.groupby('variant')['delta_ce_mean'].mean().sort_values(ascending=False)
+            subset.groupby('variant')['delta_ce_mean']
+            .mean()
+            .sort_values(ascending=False)
         )
         names = list(ranked.index[:top] if kind == 'single' else ranked.index)
         x = np.arange(len(order))
         for name in names:
             rows = subset[subset['variant'] == name].set_index('model').loc[order]
             ax.errorbar(
-                x, rows['delta_ce_mean'], yerr=rows['delta_ce_std'],
-                marker='o', ms=4, capsize=2, lw=1.4, label=name,
+                x,
+                rows['delta_ce_mean'],
+                yerr=rows['delta_ce_std'],
+                marker='o',
+                ms=4,
+                capsize=2,
+                lw=1.4,
+                label=name,
             )
         ax.set_xticks(x, order, rotation=45, ha='right')
         ax.set_ylabel('ΔCE (permuted − baseline)')
@@ -366,7 +384,9 @@ def plot_profile(summary: pd.DataFrame, order: list[str], out: Path, top: int) -
 def plot_drift(summary: pd.DataFrame, order: list[str], out: Path) -> pd.DataFrame:
     """Spearman correlation of each model's single-feature profile with the first."""
     singles = summary[summary['kind'] == 'single']
-    table = singles.pivot(index='variant', columns='model', values='delta_ce_mean')[order]
+    table = singles.pivot(index='variant', columns='model', values='delta_ce_mean')[
+        order
+    ]
     reference = table[order[0]].values
 
     rho = [spearmanr(reference, table[m].values).statistic for m in order]
@@ -392,14 +412,20 @@ def plot_drift(summary: pd.DataFrame, order: list[str], out: Path) -> pd.DataFra
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config', required=True, type=Path)
-    parser.add_argument('--output', type=Path, default=None, help='overrides plot.out_dir')
+    parser.add_argument(
+        '--output', type=Path, default=None, help='overrides plot.out_dir'
+    )
     parser.add_argument('--max-jets', type=int, default=None, help='overrides n_jets')
     parser.add_argument('--repeats', type=int, default=None, help='overrides repeats')
-    parser.add_argument('--device', default='cuda' if torch.cuda.is_available() else 'cpu')
+    parser.add_argument(
+        '--device', default='cuda' if torch.cuda.is_available() else 'cpu'
+    )
     args = parser.parse_args()
 
     cfg = yaml.safe_load(args.config.read_text())
-    out_dir = args.output or Path(cfg.get('plot', {}).get('out_dir', 'plots/permutation_importance'))
+    out_dir = args.output or Path(
+        cfg.get('plot', {}).get('out_dir', 'plots/permutation_importance')
+    )
     out_dir.mkdir(parents=True, exist_ok=True)
 
     n_jets = args.max_jets or cfg.get('n_jets')
@@ -430,49 +456,66 @@ def main() -> None:
         )
         if variants is None:
             variants, obj = this_variants, this_obj
-            print(f'  variants: {len(variants)} '
-                  f'({sum(v.kind == "single" for v in variants)} single, '
-                  f'{sum(v.kind == "group" for v in variants)} group, '
-                  f'{sum(v.kind == "global" for v in variants)} global)')
+            print(
+                f'  variants: {len(variants)} '
+                f'({sum(v.kind == "single" for v in variants)} single, '
+                f'{sum(v.kind == "group" for v in variants)} group, '
+                f'{sum(v.kind == "global" for v in variants)} global)'
+            )
         elif [v.name for v in this_variants] != [v.name for v in variants]:
             raise ValueError(
                 f'{label} defines different features than the first model — the '
                 'importance profiles would not be comparable'
             )
 
-        eval_file = Path(
-            cfg.get('eval_file') or run_cfg.get('val_dataset_path')
-        )
+        eval_file = Path(cfg.get('eval_file') or run_cfg.get('val_dataset_path'))
         ce, baseline, n_used = evaluate_model(
-            module, run_cfg, eval_file, variants, obj, device,
-            batch_size, num_workers, n_jets, repeats, base_seed, desc=label,
+            module,
+            run_cfg,
+            eval_file,
+            variants,
+            obj,
+            device,
+            batch_size,
+            num_workers,
+            n_jets,
+            repeats,
+            base_seed,
+            desc=label,
         )
         print(f'  baseline CE = {baseline:.5f} on {n_used} jets from {eval_file.name}')
 
         for variant in variants:
             for repeat in range(repeats):
-                records.append({
-                    'model': label,
-                    'lam': entry.get('lam'),
-                    'variant': variant.name,
-                    'kind': variant.kind,
-                    'members': ' '.join(variant.members),
-                    'repeat': repeat,
-                    'checkpoint': ckpt.name,
-                    'n_jets': n_used,
-                    'baseline_ce': baseline,
-                    'permuted_ce': ce[(variant.name, repeat)],
-                    'delta_ce': ce[(variant.name, repeat)] - baseline,
-                })
+                records.append(
+                    {
+                        'model': label,
+                        'lam': entry.get('lam'),
+                        'variant': variant.name,
+                        'kind': variant.kind,
+                        'members': ' '.join(variant.members),
+                        'repeat': repeat,
+                        'checkpoint': ckpt.name,
+                        'n_jets': n_used,
+                        'baseline_ce': baseline,
+                        'permuted_ce': ce[(variant.name, repeat)],
+                        'delta_ce': ce[(variant.name, repeat)] - baseline,
+                    }
+                )
         del module
 
     raw = pd.DataFrame(records)
     raw.to_csv(out_dir / 'importance_raw.csv', index=False)
 
     summary = (
-        raw.groupby(['model', 'lam', 'variant', 'kind', 'members', 'baseline_ce'],
-                    dropna=False)['delta_ce']
-        .agg(delta_ce_mean='mean', delta_ce_std='std', delta_ce_sem=lambda s: s.std() / np.sqrt(len(s)))
+        raw.groupby(
+            ['model', 'lam', 'variant', 'kind', 'members', 'baseline_ce'], dropna=False
+        )['delta_ce']
+        .agg(
+            delta_ce_mean='mean',
+            delta_ce_std='std',
+            delta_ce_sem=lambda s: s.std() / np.sqrt(len(s)),
+        )
         .reset_index()
     )
     # Normalise within (model, single features) so profile SHAPE is comparable
@@ -489,12 +532,21 @@ def main() -> None:
     drift.to_csv(out_dir / 'profile_drift.csv', index=False)
 
     print(f'\nWrote {out_dir}/')
-    for name in ('importance_raw.csv', 'importance_summary.csv', 'profile_drift.csv',
-                 'heatmap.png', 'profile.png', 'drift.png'):
+    for name in (
+        'importance_raw.csv',
+        'importance_summary.csv',
+        'profile_drift.csv',
+        'heatmap.png',
+        'profile.png',
+        'drift.png',
+    ):
         print(f'  {name}')
 
     ranking = (
-        summary[singles].groupby('variant')['delta_ce_mean'].mean().sort_values(ascending=False)
+        summary[singles]
+        .groupby('variant')['delta_ce_mean']
+        .mean()
+        .sort_values(ascending=False)
     )
     print('\nMean ΔCE across models, top 10 single features:')
     for name, value in ranking.head(10).items():

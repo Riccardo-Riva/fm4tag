@@ -60,7 +60,10 @@ _G: dict = {}
 
 
 def _pool_init(
-    probs: dict[str, np.ndarray], sig_mask: np.ndarray, tgt_mask: np.ndarray, signal: str
+    probs: dict[str, np.ndarray],
+    sig_mask: np.ndarray,
+    tgt_mask: np.ndarray,
+    signal: str,
 ) -> None:
     global _G
     _G = {'probs': probs, 'sig': sig_mask, 'tgt': tgt_mask, 'signal': signal}
@@ -94,7 +97,9 @@ def sweep(
     tgt_local = target_mask[relevant]
 
     with mp.Pool(
-        workers, initializer=_pool_init, initargs=(probs_relevant, sig_local, tgt_local, signal)
+        workers,
+        initializer=_pool_init,
+        initargs=(probs_relevant, sig_local, tgt_local, signal),
     ) as pool:
         chunksize = max(1, len(points) // (workers * 8))
         results = pool.map(_eval_point, points, chunksize=chunksize)
@@ -108,25 +113,38 @@ def main() -> None:
     )
     parser.add_argument('--config', type=Path, required=True, help='YAML config file')
     parser.add_argument('--output', type=Path, default=None, help='Output directory')
-    parser.add_argument('--recompute', action='store_true', help='Ignore cached predictions')
-    parser.add_argument('--max-jets', type=int, default=None, help='Truncate the test set')
-    parser.add_argument('--device', default=None, help='Inference device for cache misses')
     parser.add_argument(
-        '--workers', type=int, default=None, help='CPU worker processes (default: all allocated)'
+        '--recompute', action='store_true', help='Ignore cached predictions'
+    )
+    parser.add_argument(
+        '--max-jets', type=int, default=None, help='Truncate the test set'
+    )
+    parser.add_argument(
+        '--device', default=None, help='Inference device for cache misses'
+    )
+    parser.add_argument(
+        '--workers',
+        type=int,
+        default=None,
+        help='CPU worker processes (default: all allocated)',
     )
     args = parser.parse_args()
 
     with open(args.config) as f:
         cfg = yaml.safe_load(f)
 
-    out_dir = args.output or Path(cfg.get('plot', {}).get('out_dir', 'plots/fraction_two_stage_search'))
+    out_dir = args.output or Path(
+        cfg.get('plot', {}).get('out_dir', 'plots/fraction_two_stage_search')
+    )
     out_dir.mkdir(parents=True, exist_ok=True)
     print(f'Output directory: {out_dir}')
 
     workers = args.workers or len(os.sched_getaffinity(0))
     print(f'CPU workers: {workers}')
 
-    device = torch.device(args.device or ('cuda' if torch.cuda.is_available() else 'cpu'))
+    device = torch.device(
+        args.device or ('cuda' if torch.cuda.is_available() else 'cpu')
+    )
     torch.set_float32_matmul_precision('high')
 
     signal = cfg.get('signal', 'b')
@@ -146,14 +164,18 @@ def main() -> None:
         run_dir = Path(entry['dir'])
         run_cfg = rc.find_run_config(run_dir)
         run_cfgs.append(run_cfg)
-        ckpts.append(rc.resolve_checkpoint(run_dir, run_cfg, entry.get('checkpoint', 'best')))
+        ckpts.append(
+            rc.resolve_checkpoint(run_dir, run_cfg, entry.get('checkpoint', 'best'))
+        )
 
     if cfg.get('test_file'):
         test_file = Path(cfg['test_file'])
     else:
         test_files = {str(c.test_dataset_path) for c in run_cfgs}
         if len(test_files) > 1:
-            raise ValueError(f'Runs used different test files {test_files}; set test_file explicitly')
+            raise ValueError(
+                f'Runs used different test files {test_files}; set test_file explicitly'
+            )
         test_file = Path(test_files.pop())
     print(f'Test file: {test_file}')
 
@@ -196,9 +218,16 @@ def main() -> None:
         probs_masked = {f: probs[:, i][mask] for i, f in enumerate(rc.FLAVOURS)}
 
         # Stage 1: full (f_c, f_tau) grid, maximise stage1_target rejection.
-        points1 = [(fc, ftau, wp) for ftau in values for fc in values if fc + ftau < 1.0]
+        points1 = [
+            (fc, ftau, wp) for ftau in values for fc in values if fc + ftau < 1.0
+        ]
         df1 = sweep(
-            probs_masked, sig_mask, flavour_masks[stage1_target], signal, points1, workers,
+            probs_masked,
+            sig_mask,
+            flavour_masks[stage1_target],
+            signal,
+            points1,
+            workers,
             f'{stage1_target}_rejection',
         )
         df1.to_csv(out_dir / f'{slug}_stage1_grid.csv', index=False)
@@ -212,7 +241,12 @@ def main() -> None:
         # Stage 2: fix f_c = f_c0, scan f_tau alone, maximise stage2_target rejection.
         points2 = [(fc0, ftau, wp) for ftau in values if fc0 + ftau < 1.0]
         df2 = sweep(
-            probs_masked, sig_mask, flavour_masks[stage2_target], signal, points2, workers,
+            probs_masked,
+            sig_mask,
+            flavour_masks[stage2_target],
+            signal,
+            points2,
+            workers,
             f'{stage2_target}_rejection',
         )
         df2.to_csv(out_dir / f'{slug}_stage2_scan.csv', index=False)
@@ -228,7 +262,9 @@ def main() -> None:
         disc_final = rc.discriminant(probs_masked, signal, {'c': fc0, 'tau': ftau1})
         for bkg in (f for f in rc.FLAVOURS if f != signal):
             final[f'{bkg}_rejection'] = float(
-                calculate_rejection(disc_final[sig_mask], disc_final[flavour_masks[bkg]], target_eff=wp)
+                calculate_rejection(
+                    disc_final[sig_mask], disc_final[flavour_masks[bkg]], target_eff=wp
+                )
             )
         summary_rows.append(final)
         model_results.append((entry, fc0, ftau1))
@@ -253,25 +289,29 @@ def build_roc_config(cfg: dict, model_results: list) -> dict:
     models = []
     for (entry, fc, ftau), colour in zip(model_results, palette):
         base_label = entry.get('base_label', entry['label'])
-        models.append({
-            'dir': entry['dir'],
-            'label': f'{base_label} (f_c = {fc:.3f}, f_tau = {ftau:.3f})',
-            'fractions': {'c': round(fc, 6), 'tau': round(ftau, 6)},
-            **({'colour': colour} if colour else {}),
-        })
+        models.append(
+            {
+                'dir': entry['dir'],
+                'label': f'{base_label} (f_c = {fc:.3f}, f_tau = {ftau:.3f})',
+                'fractions': {'c': round(fc, 6), 'tau': round(ftau, 6)},
+                **({'colour': colour} if colour else {}),
+            }
+        )
 
     gn2 = roc_cfg['reference_tagger']
     gn2_label = f'{gn2["label"]} (f_c = {gn2["fractions"]["c"]:g}, f_tau = {gn2["fractions"]["tau"]:g})'
 
     return {
         'models': models,
-        'reference_taggers': [{
-            'label': gn2_label,
-            'file': gn2['file'],
-            'probs': gn2['probs'],
-            'fractions': gn2['fractions'],
-            'colour': gn2.get('colour', '#EE6677'),
-        }],
+        'reference_taggers': [
+            {
+                'label': gn2_label,
+                'file': gn2['file'],
+                'probs': gn2['probs'],
+                'fractions': gn2['fractions'],
+                'colour': gn2.get('colour', '#EE6677'),
+            }
+        ],
         'reference': gn2_label,
         'test_file': cfg.get('test_file'),
         'cuts': cfg.get('cuts', []),

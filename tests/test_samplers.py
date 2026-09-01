@@ -59,9 +59,7 @@ def test_reads_per_batch_ignored_when_sequential():
 
 
 def test_shuffled_batches_have_the_right_shape():
-    sampler = BatchSliceSampler(
-        10_000, 1000, shuffle=True, reads_per_batch=8, seed=0
-    )
+    sampler = BatchSliceSampler(10_000, 1000, shuffle=True, reads_per_batch=8, seed=0)
     batches = list(sampler)
 
     assert len(sampler) == len(batches)
@@ -147,9 +145,7 @@ def test_batch_larger_than_dataset_rejected():
 def _worker_disjoint_shards(rank, world_size):
     import torch.distributed as dist
 
-    sampler = BatchSliceSampler(
-        100_000, 1000, shuffle=True, reads_per_batch=8, seed=0
-    )
+    sampler = BatchSliceSampler(100_000, 1000, shuffle=True, reads_per_batch=8, seed=0)
     batches = list(sampler)
 
     # Every rank must run the same number of steps or DDP deadlocks at the

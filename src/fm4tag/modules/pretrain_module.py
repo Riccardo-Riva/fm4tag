@@ -157,7 +157,7 @@ class PretrainModule(L.LightningModule):
                 'views',
                 'contrastive_loss',
                 'jet_contrastive_loss',
-                'constituent_objects', #TODO: remove when hparams conflicct with DataModule is resolved
+                'constituent_objects',  # TODO: remove when hparams conflicct with DataModule is resolved
             ]
         )
 
@@ -354,12 +354,12 @@ class PretrainModule(L.LightningModule):
                 sync_dist=True,
             )
         return loss
-    
-#    def on_after_backward(self):
-#        for name, p in self.named_parameters():
-#            if p.requires_grad and p.grad is None:
-#                print(f"NO GRAD: {name}")
-#
+
+    #    def on_after_backward(self):
+    #        for name, p in self.named_parameters():
+    #            if p.requires_grad and p.grad is None:
+    #                print(f"NO GRAD: {name}")
+    #
     def training_step(self, batch: dict, batch_idx: int) -> torch.Tensor:
         return self._step(batch, 'train')
 

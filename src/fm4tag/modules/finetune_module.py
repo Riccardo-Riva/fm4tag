@@ -205,8 +205,7 @@ class FinetuneModule(L.LightningModule):
         """
         views = list(self.views)
         todo = [
-            v for v, view in enumerate(views)
-            if z_clean is None or not view.is_identity
+            v for v, view in enumerate(views) if z_clean is None or not view.is_identity
         ]
         if not todo:
             return [z_clean for _ in views]
@@ -293,9 +292,7 @@ class FinetuneModule(L.LightningModule):
             )
 
         acc = (logits.argmax(dim=-1) == labels).float().mean()
-        self.log(
-            f'{split}/head/acc', acc, on_step=False, on_epoch=True, sync_dist=True
-        )
+        self.log(f'{split}/head/acc', acc, on_step=False, on_epoch=True, sync_dist=True)
 
         if split == 'val':
             self.val_auroc.update(logits.softmax(dim=-1), labels)
@@ -390,7 +387,11 @@ class FinetuneModule(L.LightningModule):
             [
                 # 'name' labels the LearningRateMonitor series (lr-AdamW/backbone,
                 # lr-AdamW/head) so the staged unfreeze is visible in the logs.
-                {'params': pretrained_params, 'lr': self.backbone_lr, 'name': 'backbone'},
+                {
+                    'params': pretrained_params,
+                    'lr': self.backbone_lr,
+                    'name': 'backbone',
+                },
                 {'params': list(self.head.parameters()), 'lr': self.lr, 'name': 'head'},
             ],
             weight_decay=self.weight_decay,

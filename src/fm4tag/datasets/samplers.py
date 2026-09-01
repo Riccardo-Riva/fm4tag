@@ -136,15 +136,15 @@ class BatchSliceSampler(Sampler):
         # reshaping keeps each batch's runs independent of each other, so a batch
         # is stitched from regions spread across the whole file.
         offsets = rng.integers(
-            0, self.dataset_len - run + 1,
+            0,
+            self.dataset_len - run + 1,
             size=(self._n_batches, self.reads_per_batch),
         )
         # Sort within a batch only: the reads of one batch then walk the file
         # forwards, without correlating which regions land in the same batch.
         offsets.sort(axis=1)
         return [
-            [(int(o), int(o) + run) for o in batch_offsets]
-            for batch_offsets in offsets
+            [(int(o), int(o) + run) for o in batch_offsets] for batch_offsets in offsets
         ]
 
     def __iter__(self):

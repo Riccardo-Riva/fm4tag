@@ -222,9 +222,7 @@ def _attach_trainer(module, *, steps=100, max_epochs=10):
     )
 
 
-def test_optimizer_has_backbone_and_head_groups(
-    encoders, aggregator, head, two_views
-):
+def test_optimizer_has_backbone_and_head_groups(encoders, aggregator, head, two_views):
     module = _make_module(encoders, aggregator, head, two_views, backbone_lr=1e-5)
     _attach_trainer(module)
     opt = module.configure_optimizers()['optimizer']
@@ -255,13 +253,13 @@ def test_staged_unfreeze_holds_backbone_at_zero_lr(
     opt = cfg['optimizer']
     scheduler = cfg['lr_scheduler']['scheduler']
 
-    assert opt.param_groups[0]['lr'] == 0.0    # backbone frozen at step 0
-    assert opt.param_groups[1]['lr'] > 0.0     # head warming up
+    assert opt.param_groups[0]['lr'] == 0.0  # backbone frozen at step 0
+    assert opt.param_groups[1]['lr'] > 0.0  # head warming up
     for _ in range(49):
         scheduler.step()
-    assert opt.param_groups[0]['lr'] == 0.0    # still frozen at step 49
-    scheduler.step()                            # step 50 == unfreeze_at_epoch
-    assert opt.param_groups[0]['lr'] > 0.0     # backbone now training
+    assert opt.param_groups[0]['lr'] == 0.0  # still frozen at step 49
+    scheduler.step()  # step 50 == unfreeze_at_epoch
+    assert opt.param_groups[0]['lr'] > 0.0  # backbone now training
 
 
 def test_unfreeze_at_epoch_zero_trains_backbone_from_start(
@@ -272,7 +270,7 @@ def test_unfreeze_at_epoch_zero_trains_backbone_from_start(
     )
     _attach_trainer(module)
     opt = module.configure_optimizers()['optimizer']
-    assert opt.param_groups[0]['lr'] > 0.0     # trained from step 0
+    assert opt.param_groups[0]['lr'] > 0.0  # trained from step 0
 
 
 # ---------------------------------------------------------------------------

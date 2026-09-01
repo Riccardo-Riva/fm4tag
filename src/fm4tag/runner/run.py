@@ -104,7 +104,9 @@ def run(
         cfg.datamodule,
         _convert_='all',
         train_dataset_path=(
-            cfg.pretrain_dataset_path if _phase == 'pretrain' else cfg.train_dataset_path
+            cfg.pretrain_dataset_path
+            if _phase == 'pretrain'
+            else cfg.train_dataset_path
         ),
     )
 

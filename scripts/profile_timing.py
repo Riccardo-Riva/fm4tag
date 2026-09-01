@@ -186,7 +186,9 @@ def synthetic_batch(cfg, B: int) -> dict:
     g = len(cfg.variables[cfg.global_object].inputs)
     batch: dict = {
         'global': torch.randn(B, g),
-        'label': torch.randint(0, len(cfg.variables[cfg.global_object].unique_labels), (B,)),
+        'label': torch.randint(
+            0, len(cfg.variables[cfg.global_object].unique_labels), (B,)
+        ),
         'constituents': {},
     }
     for obj in cfg.constituent_objects:
@@ -197,7 +199,8 @@ def synthetic_batch(cfg, B: int) -> dict:
         valid[:, 0] = True
         batch['constituents'][obj] = {
             'categorical': torch.stack(
-                [torch.randint(0, len(c), (B, C)) for c in v.cat_classes.values()], dim=-1
+                [torch.randint(0, len(c), (B, C)) for c in v.cat_classes.values()],
+                dim=-1,
             ),
             'continuous': torch.randn(B, C, n_con),
             'valid': valid,
@@ -215,31 +218,49 @@ def main() -> None:
     ap.add_argument('--phase', choices=['pretrain', 'finetune'], required=True)
     ap.add_argument('--steps', type=int, default=30, help='measured steps')
     ap.add_argument('--warmup', type=int, default=10, help='untimed warmup steps')
-    ap.add_argument('--data-batches', type=int, default=50, help='batches for the dataloader benchmark')
+    ap.add_argument(
+        '--data-batches',
+        type=int,
+        default=50,
+        help='batches for the dataloader benchmark',
+    )
     ap.add_argument('--device', default='cuda' if torch.cuda.is_available() else 'cpu')
-    ap.add_argument('--synthetic', action='store_true', help='synthetic batches; skips the real dataloader')
+    ap.add_argument(
+        '--synthetic',
+        action='store_true',
+        help='synthetic batches; skips the real dataloader',
+    )
     ap.add_argument('--out', default=None, help='output dir for the JSON report')
     ap.add_argument(
-        '--kernel-census', type=int, default=0, metavar='STEPS',
+        '--kernel-census',
+        type=int,
+        default=0,
+        metavar='STEPS',
         help='after the timing loop, profile this many extra steps with '
-             'torch.profiler and print the top CUDA kernels by device time. '
-             'Names the SDPA backend actually selected (flash/cutlass/bmm+softmax) '
-             'and exposes launch-bound-ness: total device time well below the '
-             'measured wall time means the GPU is idling between tiny kernels.',
+        'torch.profiler and print the top CUDA kernels by device time. '
+        'Names the SDPA backend actually selected (flash/cutlass/bmm+softmax) '
+        'and exposes launch-bound-ness: total device time well below the '
+        'measured wall time means the GPU is idling between tiny kernels.',
     )
     ap.add_argument(
-        '--sdpa-backend', choices=['auto', *_SDPA_BACKENDS], default='auto',
+        '--sdpa-backend',
+        choices=['auto', *_SDPA_BACKENDS],
+        default='auto',
         help='diagnostic: force one torch SDPA backend instead of letting it '
-             'auto-select (CUDA only; no-op on CPU). Use to separate backend '
-             'choice from backend cost, e.g. to check whether a recompute-based '
-             'backward (efficient/flash) explains a high backward/forward ratio '
-             'vs the cache-based math backend.',
+        'auto-select (CUDA only; no-op on CPU). Use to separate backend '
+        'choice from backend cost, e.g. to check whether a recompute-based '
+        'backward (efficient/flash) explains a high backward/forward ratio '
+        'vs the cache-based math backend.',
     )
-    ap.add_argument('overrides', nargs='*', help='hydra overrides, e.g. encoders=col_v0')
+    ap.add_argument(
+        'overrides', nargs='*', help='hydra overrides, e.g. encoders=col_v0'
+    )
     args = ap.parse_args()
 
     with initialize_config_dir(version_base=None, config_dir=CONFIG_DIR):
-        cfg = compose(config_name='default', overrides=[f'phase={args.phase}', *args.overrides])
+        cfg = compose(
+            config_name='default', overrides=[f'phase={args.phase}', *args.overrides]
+        )
 
     device = args.device
     torch.set_float32_matmul_precision(cfg.get('float32_matmul_precision', 'high'))
@@ -251,21 +272,32 @@ def main() -> None:
     views = [hydra_instantiate(v) for v in cfg.get('views', [])]
     if args.phase == 'pretrain':
         module = hydra_instantiate(
-            cfg.pretrain, encoders=encoders, aggregator=aggregator, views=views, _convert_='all'
+            cfg.pretrain,
+            encoders=encoders,
+            aggregator=aggregator,
+            views=views,
+            _convert_='all',
         )
     else:
         head = build_head(cfg, aggregator)
         n_classes = len(cfg.variables[cfg.global_object].unique_labels)
         module = hydra_instantiate(
-            cfg.finetune, encoders=encoders, aggregator=aggregator, head=head,
-            views=views, n_classes=n_classes, _convert_='all',
+            cfg.finetune,
+            encoders=encoders,
+            aggregator=aggregator,
+            head=head,
+            views=views,
+            n_classes=n_classes,
+            _convert_='all',
         )
     module = module.to(device).train()
     params = [p for p in module.parameters() if p.requires_grad]
     optimizer = torch.optim.AdamW(params, lr=1e-4)
 
     n_params = sum(p.numel() for p in module.parameters()) / 1e6
-    print(f'phase={args.phase}  device={device}  batch_size={B}  params={n_params:.2f}M')
+    print(
+        f'phase={args.phase}  device={device}  batch_size={B}  params={n_params:.2f}M'
+    )
     print(f'overrides: {args.overrides or "(none)"}\n')
 
     # ── Dataloader benchmark (real data only) ───────────────────────────
@@ -276,14 +308,21 @@ def main() -> None:
         # inside the measured step, swamping the compute it is meant to isolate.
         _synth = [synthetic_batch(cfg, B) for _ in range(2)]
         batch_source = lambda: _synth[torch.randint(0, len(_synth), (1,)).item()]  # noqa: E731
-        n_valid = int(_synth[0]['constituents'][cfg.constituent_objects[0]]['valid'].sum())
-        print(f'[data] synthetic batches, cached (dataloader benchmark skipped); '
-              f'{n_valid} packed valid constituents\n')
+        n_valid = int(
+            _synth[0]['constituents'][cfg.constituent_objects[0]]['valid'].sum()
+        )
+        print(
+            f'[data] synthetic batches, cached (dataloader benchmark skipped); '
+            f'{n_valid} packed valid constituents\n'
+        )
     else:
         dm = hydra_instantiate(
-            cfg.datamodule, _convert_='all',
+            cfg.datamodule,
+            _convert_='all',
             train_dataset_path=(
-                cfg.pretrain_dataset_path if args.phase == 'pretrain' else cfg.train_dataset_path
+                cfg.pretrain_dataset_path
+                if args.phase == 'pretrain'
+                else cfg.train_dataset_path
             ),
         )
         dm.setup('fit')
@@ -309,9 +348,11 @@ def main() -> None:
             'fetch_ms': fetch_ms,
         }
         print(f'[data] cold first batch : {cold:9.1f} ms   (worker startup)')
-        print(f'[data] steady fetch     : {data_report["steady_mean_ms"]:9.1f} ms/batch '
-              f'± {data_report["steady_stdev_ms"]:.1f}  (max {data_report["steady_max_ms"]:.1f}, '
-              f'{data_report["batches_per_s"]:.1f} batches/s)\n')
+        print(
+            f'[data] steady fetch     : {data_report["steady_mean_ms"]:9.1f} ms/batch '
+            f'± {data_report["steady_stdev_ms"]:.1f}  (max {data_report["steady_max_ms"]:.1f}, '
+            f'{data_report["batches_per_s"]:.1f} batches/s)\n'
+        )
 
         if len(fetch_ms) >= 10:
             half = len(fetch_ms) // 2
@@ -322,12 +363,16 @@ def main() -> None:
             p95 = sorted_ms[int(len(sorted_ms) * 0.95)]
             worst = sorted(range(len(fetch_ms)), key=lambda i: -fetch_ms[i])[:5]
             print(f'[data] median {median:.1f} ms   p95 {p95:.1f} ms')
-            print(f'[data] first-half mean {first_half_mean:.1f} ms   '
-                  f'second-half mean {second_half_mean:.1f} ms   '
-                  f'(ratio {second_half_mean / first_half_mean:.2f}x — '
-                  f'>>1 suggests drift/degradation, ~1 suggests random stalls)')
-            print(f'[data] slowest batch indices (of {len(fetch_ms)}): '
-                  f'{[(i, round(fetch_ms[i])) for i in worst]}\n')
+            print(
+                f'[data] first-half mean {first_half_mean:.1f} ms   '
+                f'second-half mean {second_half_mean:.1f} ms   '
+                f'(ratio {second_half_mean / first_half_mean:.2f}x — '
+                f'>>1 suggests drift/degradation, ~1 suggests random stalls)'
+            )
+            print(
+                f'[data] slowest batch indices (of {len(fetch_ms)}): '
+                f'{[(i, round(fetch_ms[i])) for i in worst]}\n'
+            )
         cached = [first, batch]
         batch_source = lambda: cached[torch.randint(0, len(cached), (1,)).item()]  # noqa: E731
 
@@ -335,7 +380,8 @@ def main() -> None:
     timer = _Timer(device)
     autocast = (
         torch.autocast('cuda', dtype=torch.bfloat16)
-        if device.startswith('cuda') and str(cfg.trainer.get('precision', '')).startswith('bf16')
+        if device.startswith('cuda')
+        and str(cfg.trainer.get('precision', '')).startswith('bf16')
         else contextlib.nullcontext()
     )
     clip_val = cfg.trainer.get('gradient_clip_val', None)
@@ -347,8 +393,11 @@ def main() -> None:
         else contextlib.nullcontext
     )
     if args.sdpa_backend != 'auto':
-        print(f'[sdpa] forcing backend: {args.sdpa_backend}'
-              + ('' if device.startswith('cuda') else '  (no-op off-CUDA)') + '\n')
+        print(
+            f'[sdpa] forcing backend: {args.sdpa_backend}'
+            + ('' if device.startswith('cuda') else '  (no-op off-CUDA)')
+            + '\n'
+        )
 
     def one_step(record: ModuleTimers | None, segs: dict | None) -> None:
         marks = {}
@@ -357,7 +406,9 @@ def main() -> None:
         batch = batch_source()
         marks['data_fetch'] = (time.perf_counter() - t) * 1e3
 
-        s = timer.start(); batch = to_device(batch, device); marks['h2d_copy'] = timer.stop(s)
+        s = timer.start()
+        batch = to_device(batch, device)
+        marks['h2d_copy'] = timer.stop(s)
         s = timer.start()
         with autocast, sdpa_ctx():
             out = module._compute_loss(batch)
@@ -371,7 +422,9 @@ def main() -> None:
             s = timer.start()
             torch.nn.utils.clip_grad_norm_(params, clip_val)
             marks['grad_clip'] = timer.stop(s)
-        s = timer.start(); optimizer.step(); marks['optimizer_step'] = timer.stop(s)
+        s = timer.start()
+        optimizer.step()
+        marks['optimizer_step'] = timer.stop(s)
         optimizer.zero_grad(set_to_none=True)
 
         if device.startswith('cuda'):
@@ -403,12 +456,17 @@ def main() -> None:
     # ── Report ───────────────────────────────────────────────────────────
     seg_mean = {k: statistics.mean(v) for k, v in segs.items()}
     total = sum(seg_mean.values())
-    print(f'── Step segments (mean over {args.steps} steps; total {total:.1f} ms/step) ' + '─' * 20)
+    print(
+        f'── Step segments (mean over {args.steps} steps; total {total:.1f} ms/step) '
+        + '─' * 20
+    )
     for k, v in sorted(seg_mean.items(), key=lambda kv: -kv[1]):
         sd = statistics.stdev(segs[k]) if len(segs[k]) > 1 else 0.0
         print(f'  {k:16s} {v:9.2f} ms  ± {sd:7.2f}   {100 * v / total:5.1f} %')
-    print(f'\n  SUMMARY  {1e3 / total:6.2f} it/s   {total:7.2f} ms/step   '
-          f'peak GPU mem {peak_mem_gb:6.3f} GiB   params {n_params:.2f}M')
+    print(
+        f'\n  SUMMARY  {1e3 / total:6.2f} it/s   {total:7.2f} ms/step   '
+        f'peak GPU mem {peak_mem_gb:6.3f} GiB   params {n_params:.2f}M'
+    )
 
     fwd_bwd = seg_mean.get('forward+loss', 0.0) + seg_mean.get('backward', 0.0)
     rows = []
@@ -420,17 +478,28 @@ def main() -> None:
         rows.append((name, mt.classes[name], mt.calls[name] // args.steps, f, b))
     rows.sort(key=lambda r: -(r[3] + r[4]))
 
-    print('\n── Per-module time (ms/step; nested modules overlap their parents) ' + '─' * 10)
-    print(f'  {"module":52s} {"class":22s} {"calls":>5s} {"fwd":>9s} {"bwd":>9s} {"f+b":>9s} {"%":>6s}')
+    print(
+        '\n── Per-module time (ms/step; nested modules overlap their parents) '
+        + '─' * 10
+    )
+    print(
+        f'  {"module":52s} {"class":22s} {"calls":>5s} {"fwd":>9s} {"bwd":>9s} {"f+b":>9s} {"%":>6s}'
+    )
     max_rows = 35
     for name, cls, calls, f, b in rows[:max_rows]:
-        print(f'  {name:52s} {cls:22s} {calls:5d} {f:9.2f} {b:9.2f} {f + b:9.2f} '
-              f'{100 * (f + b) / fwd_bwd if fwd_bwd else 0:5.1f} %')
+        print(
+            f'  {name:52s} {cls:22s} {calls:5d} {f:9.2f} {b:9.2f} {f + b:9.2f} '
+            f'{100 * (f + b) / fwd_bwd if fwd_bwd else 0:5.1f} %'
+        )
     if len(rows) > max_rows:
-        print(f'  ... {len(rows) - max_rows} smaller modules omitted (all in the JSON report)')
+        print(
+            f'  ... {len(rows) - max_rows} smaller modules omitted (all in the JSON report)'
+        )
 
-    print('\nNotes: single process — DDP all-reduce and cross-rank SupCon gather are NOT '
-          'included; nested rows (deep module names) are subsets of their parents.')
+    print(
+        '\nNotes: single process — DDP all-reduce and cross-rank SupCon gather are NOT '
+        'included; nested rows (deep module names) are subsets of their parents.'
+    )
 
     # ── CUDA kernel census ───────────────────────────────────────────────
     census = {}
@@ -452,7 +521,8 @@ def main() -> None:
         from torch.autograd import DeviceType
 
         kernels = [
-            e for e in prof.key_averages()
+            e
+            for e in prof.key_averages()
             if getattr(e, 'self_device_time_total', 0) > 0
             and getattr(e, 'device_type', None) == DeviceType.CUDA
         ]
@@ -460,36 +530,53 @@ def main() -> None:
         dev_total_ms = sum(e.self_device_time_total for e in kernels) / 1e3 / n_census
         launches = sum(e.count for e in kernels) / n_census
 
-        print(f'\n── Top CUDA kernels (mean per step over {n_census} steps) ' + '─' * 22)
+        print(
+            f'\n── Top CUDA kernels (mean per step over {n_census} steps) ' + '─' * 22
+        )
         print(f'  {"kernel":76s} {"launches":>9s} {"ms/step":>9s} {"% dev":>7s}')
         for e in kernels[:25]:
             ms = e.self_device_time_total / 1e3 / n_census
-            print(f'  {e.key[:76]:76s} {e.count / n_census:9.1f} {ms:9.3f} '
-                  f'{100 * ms / dev_total_ms if dev_total_ms else 0:6.1f} %')
-        print(f'\n  device-busy {dev_total_ms:.2f} ms/step of {total:.2f} ms/step wall '
-              f'({100 * dev_total_ms / total:.0f}% busy) across {launches:.0f} kernel '
-              f'launches/step ({1e3 * total / launches:.1f} us of wall time per launch)')
-        print('  A low busy-% with many launches = launch-latency bound: the fix is '
-              'fewer/larger kernels, not fewer FLOPs.')
+            print(
+                f'  {e.key[:76]:76s} {e.count / n_census:9.1f} {ms:9.3f} '
+                f'{100 * ms / dev_total_ms if dev_total_ms else 0:6.1f} %'
+            )
+        print(
+            f'\n  device-busy {dev_total_ms:.2f} ms/step of {total:.2f} ms/step wall '
+            f'({100 * dev_total_ms / total:.0f}% busy) across {launches:.0f} kernel '
+            f'launches/step ({1e3 * total / launches:.1f} us of wall time per launch)'
+        )
+        print(
+            '  A low busy-% with many launches = launch-latency bound: the fix is '
+            'fewer/larger kernels, not fewer FLOPs.'
+        )
         census = {
             'steps': n_census,
             'device_busy_ms_per_step': dev_total_ms,
             'launches_per_step': launches,
             'kernels': [
-                {'name': e.key, 'launches_per_step': e.count / n_census,
-                 'ms_per_step': e.self_device_time_total / 1e3 / n_census}
+                {
+                    'name': e.key,
+                    'launches_per_step': e.count / n_census,
+                    'ms_per_step': e.self_device_time_total / 1e3 / n_census,
+                }
                 for e in kernels[:40]
             ],
         }
 
     if args.out:
-        out = Path(args.out); out.mkdir(parents=True, exist_ok=True)
+        out = Path(args.out)
+        out.mkdir(parents=True, exist_ok=True)
         report = {
-            'phase': args.phase, 'overrides': args.overrides, 'batch_size': B,
-            'params_M': n_params, 'sdpa_backend': args.sdpa_backend,
-            'peak_mem_gb': peak_mem_gb, 'it_per_s': 1e3 / total,
+            'phase': args.phase,
+            'overrides': args.overrides,
+            'batch_size': B,
+            'params_M': n_params,
+            'sdpa_backend': args.sdpa_backend,
+            'peak_mem_gb': peak_mem_gb,
+            'it_per_s': 1e3 / total,
             'total_ms_per_step': total,
-            'dataloader': data_report, 'kernel_census': census,
+            'dataloader': data_report,
+            'kernel_census': census,
             'segments_ms': seg_mean,
             'modules': [
                 {'name': n, 'class': c, 'calls_per_step': k, 'fwd_ms': f, 'bwd_ms': b}

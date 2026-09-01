@@ -64,7 +64,10 @@ def _worker_gathered_metrics(rank: int, world_size: int) -> None:
     cb.on_validation_epoch_end(trainer, pl_module)
 
     for name, z_full in all_embs.items():
-        for metric, fn in (('uniformity', uniformity), ('effective_rank', effective_rank)):
+        for metric, fn in (
+            ('uniformity', uniformity),
+            ('effective_rank', effective_rank),
+        ):
             key = f'val/{name}/{metric}'
             expected = float(fn(z_full))
             assert key in logged, f'{key} was not logged'

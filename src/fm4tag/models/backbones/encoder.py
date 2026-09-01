@@ -230,7 +230,7 @@ class Encoder(nn.Module):
         categories_offset = categories_offset.cumsum(dim=-1)[:-1]
         self.register_buffer('categories_offset', categories_offset)
 
-        #self.norm = nn.LayerNorm(num_continuous)
+        # self.norm = nn.LayerNorm(num_continuous)
         self.num_continuous = num_continuous
         self.dim = dim
         self.cont_embeddings = cont_embeddings

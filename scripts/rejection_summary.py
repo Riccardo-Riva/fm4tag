@@ -126,9 +126,7 @@ def scan_grid(
     of np.percentile's interpolated value — a sub-single-jet difference).
     """
     bkg = [f for f in rc.FLAVOURS if f != signal]
-    pts = [
-        (fc, ftau) for ftau in ftau_vals for fc in fc_vals if fc + ftau < 1.0
-    ]
+    pts = [(fc, ftau) for ftau in ftau_vals for fc in fc_vals if fc + ftau < 1.0]
     # Weight matrix (n_bkg, n_points); row order must match ``bkg``.
     w_all = np.empty((len(bkg), len(pts)), dtype=np.float32)
     for col, (fc, ftau) in enumerate(pts):
@@ -136,9 +134,7 @@ def scan_grid(
         w_all[:, col] = [weights[b] for b in bkg]
 
     sig = np.ascontiguousarray(by_flavour[signal][signal], dtype=np.float32)
-    sig_bkg = np.stack(
-        [by_flavour[signal][b] for b in bkg], axis=1
-    ).astype(np.float32)
+    sig_bkg = np.stack([by_flavour[signal][b] for b in bkg], axis=1).astype(np.float32)
     bkg_cols = {
         f: (
             np.ascontiguousarray(by_flavour[f][signal], dtype=np.float32),
@@ -211,7 +207,8 @@ def meta_from_hydra(run_dir: Path, entry: dict) -> dict:
         'jc': jc,
         'temp': (
             float(OmegaConf.select(cfg, 'finetune.jet_contrastive_loss.temperature'))
-            if jc > 0 else None
+            if jc > 0
+            else None
         ),
         'lr': float(cfg.optimizer.lr),
         'seed': int(cfg.get('seed', 0)),
@@ -230,7 +227,9 @@ def meta_from_hydra(run_dir: Path, entry: dict) -> dict:
     return meta
 
 
-def load_entry_probs(entry: dict, n_jets: int, device_arg: str | None) -> tuple[np.ndarray, Path]:
+def load_entry_probs(
+    entry: dict, n_jets: int, device_arg: str | None
+) -> tuple[np.ndarray, Path]:
     """Class probabilities + run dir for one entry: cached npz, or inference."""
     if entry.get('cache'):
         cached = np.load(entry['cache'], allow_pickle=False)
@@ -283,22 +282,37 @@ def plot_heatmap(
     pivot = grid.pivot(index='f_tau', columns='f_c', values=f'rej_{target}')
     feasible = np.ones_like(pivot.values, dtype=bool)
     for bkg, bar in bars.items():
-        feasible &= grid.pivot(index='f_tau', columns='f_c', values=f'rej_{bkg}').values >= bar
+        feasible &= (
+            grid.pivot(index='f_tau', columns='f_c', values=f'rej_{bkg}').values >= bar
+        )
 
     fig, ax = plt.subplots(figsize=(7.0, 5.5))
     mesh = ax.pcolormesh(
-        pivot.columns, pivot.index, np.where(feasible, pivot.values, np.nan),
-        shading='auto', cmap='viridis',
+        pivot.columns,
+        pivot.index,
+        np.where(feasible, pivot.values, np.nan),
+        shading='auto',
+        cmap='viridis',
     )
     ax.pcolormesh(
-        pivot.columns, pivot.index, np.where(feasible, np.nan, pivot.values),
-        shading='auto', cmap='Greys', alpha=0.35,
+        pivot.columns,
+        pivot.index,
+        np.where(feasible, np.nan, pivot.values),
+        shading='auto',
+        cmap='Greys',
+        alpha=0.35,
     )
     fig.colorbar(mesh, ax=ax, label=f'{target}-rejection @ {signal}-eff = {wp:g}')
     if best is not None:
         ax.scatter(
-            [best.f_c], [best.f_tau], marker='*', s=250, color='red',
-            edgecolor='white', linewidth=0.8, zorder=5,
+            [best.f_c],
+            [best.f_tau],
+            marker='*',
+            s=250,
+            color='red',
+            edgecolor='white',
+            linewidth=0.8,
+            zorder=5,
             label=f'best feasible: f_c={best.f_c:.3f}, f_tau={best.f_tau:.3f}',
         )
         ax.legend(loc='upper right', fontsize=9)
@@ -327,26 +341,39 @@ def plot_crej_vs(
     fig, ax = plt.subplots(figsize=(7.5, 5.0))
     # One series per combination of the meta columns not on the x axis, so
     # e.g. the per_token lr x jc points never join the concat lambda-scan line.
-    group_cols = [c for c in META_COLUMNS if c != x and models[c].nunique(dropna=False) > 1]
-    for key, group in models.groupby(group_cols, dropna=False) if group_cols else [((), models)]:
+    group_cols = [
+        c for c in META_COLUMNS if c != x and models[c].nunique(dropna=False) > 1
+    ]
+    for key, group in (
+        models.groupby(group_cols, dropna=False) if group_cols else [((), models)]
+    ):
         key = key if isinstance(key, tuple) else (key,)
         name = ', '.join(f'{c}={v}' for c, v in zip(group_cols, key) if pd.notna(v))
         style = '-' if len(group) > 1 else 'none'
         ax.errorbar(
-            group[x], group[f'best_rej_{target}'],
+            group[x],
+            group[f'best_rej_{target}'],
             yerr=group[f'best_rej_{target}_err'],
-            marker='o', linestyle=style, capsize=3,
+            marker='o',
+            linestyle=style,
+            capsize=3,
             label=f'constrained-best  {name}'.strip(),
         )
         ax.errorbar(
-            group[x], group[f'nominal_rej_{target}'],
+            group[x],
+            group[f'nominal_rej_{target}'],
             yerr=group[f'nominal_rej_{target}_err'],
-            marker='s', linestyle='--' if len(group) > 1 else 'none',
-            capsize=3, alpha=0.5, label=f'nominal fractions  {name}'.strip(),
+            marker='s',
+            linestyle='--' if len(group) > 1 else 'none',
+            capsize=3,
+            alpha=0.5,
+            label=f'nominal fractions  {name}'.strip(),
         )
     if ref_row is not None:
         ax.axhline(
-            ref_row[f'nominal_rej_{target}'], color='crimson', linestyle=':',
+            ref_row[f'nominal_rej_{target}'],
+            color='crimson',
+            linestyle=':',
             label=f'{ref_row["label"]} (nominal)',
         )
     ax.set_xlabel(x)
@@ -393,7 +420,9 @@ def main() -> None:
         grid_cfg['ftau']['min'], grid_cfg['ftau']['max'], int(grid_cfg['ftau']['num'])
     )
 
-    out_dir = args.output or Path(cfg.get('plot', {}).get('out_dir', 'plots/rejection_summary'))
+    out_dir = args.output or Path(
+        cfg.get('plot', {}).get('out_dir', 'plots/rejection_summary')
+    )
     out_dir.mkdir(parents=True, exist_ok=True)
     print(f'Output directory: {out_dir}')
 
@@ -470,7 +499,8 @@ def main() -> None:
         state = (
             f'best feasible {target}-rej = {best[f"rej_{target}"]:.2f} at '
             f'f_c={best.f_c:.3f}, f_tau={best.f_tau:.3f}'
-            if best is not None else 'NO feasible point'
+            if best is not None
+            else 'NO feasible point'
         )
         print(f'  nominal {target}-rej = {nominal_rejs[target]:.2f};  {state}')
 
@@ -492,8 +522,10 @@ def main() -> None:
 
     print(f'\nReference: {ref_cfg["label"]}')
     scan_tagger(
-        ref_cfg['label'], ref_by_flavour,
-        {k: None for k in META_COLUMNS}, is_reference=True,
+        ref_cfg['label'],
+        ref_by_flavour,
+        {k: None for k in META_COLUMNS},
+        is_reference=True,
     )
     for extra in cfg.get('extra_references', []):
         print(f'\nReference: {extra["label"]}')
@@ -504,8 +536,10 @@ def main() -> None:
             [ex_jets[extra['probs'][f]][ex_mask] for f in rc.FLAVOURS], axis=1
         )
         scan_tagger(
-            extra['label'], split_by_flavour(ex_probs, ex_truth),
-            {k: None for k in META_COLUMNS}, is_reference=True,
+            extra['label'],
+            split_by_flavour(ex_probs, ex_truth),
+            {k: None for k in META_COLUMNS},
+            is_reference=True,
         )
 
     # ── Outputs ────────────────────────────────────────────────────────────
@@ -521,8 +555,10 @@ def main() -> None:
         f'best_rej_{b}' for b in bkg
     ]
     cols = [c for c in cols if c in table.columns]
-    print(f'\nSummary ({target}-rej @ {wp:g} WP, constraints: '
-          f'{", ".join(f"{b} ≥ {v:.1f}" for b, v in bars.items())}):')
+    print(
+        f'\nSummary ({target}-rej @ {wp:g} WP, constraints: '
+        f'{", ".join(f"{b} ≥ {v:.1f}" for b, v in bars.items())}):'
+    )
     print(table[cols].to_string(index=False, float_format=lambda v: f'{v:.2f}'))
 
 

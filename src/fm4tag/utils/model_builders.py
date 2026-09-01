@@ -38,6 +38,7 @@ def build_encoders(cfg: DictConfig) -> torch.nn.ModuleDict:
 
     return torch.nn.ModuleDict(encoders)
 
+
 def build_aggregator(
     cfg: DictConfig,
     encoders: torch.nn.ModuleDict,
@@ -68,6 +69,7 @@ def build_aggregator(
         const_dims=const_dims,
     )
 
+
 def build_head(
     cfg: DictConfig,
     aggregator: torch.nn.Module,
@@ -81,8 +83,4 @@ def build_head(
     jet_dim = aggregator.out_dim
     y_dim = len(cfg.variables[cfg.global_object].unique_labels)
 
-    return hydra_instantiate(
-        cfg.head,
-        jet_dim=jet_dim,
-        y_dim=y_dim
-    )
+    return hydra_instantiate(cfg.head, jet_dim=jet_dim, y_dim=y_dim)

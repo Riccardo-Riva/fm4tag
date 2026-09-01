@@ -126,12 +126,15 @@ def sweep_joint(
 ) -> pd.DataFrame:
     """Evaluate c/u/tau rejection at every (f_c, f_tau) in ``points`` (at ``wp``)."""
     with mp.Pool(
-        workers, initializer=_pool_init,
+        workers,
+        initializer=_pool_init,
         initargs=(probs, sig_mask, bkg_masks, signal, wp),
     ) as pool:
         chunksize = max(1, len(points) // (workers * 8))
         results = pool.map(_eval_point, points, chunksize=chunksize)
-    return pd.DataFrame(results, columns=['f_c', 'f_tau', 'c_rejection', 'u_rejection', 'tau_rejection'])
+    return pd.DataFrame(
+        results, columns=['f_c', 'f_tau', 'c_rejection', 'u_rejection', 'tau_rejection']
+    )
 
 
 def gn2_floor(cfg: dict, wp: float) -> dict[str, float]:
@@ -146,7 +149,9 @@ def gn2_floor(cfg: dict, wp: float) -> dict[str, float]:
     disc = rc.discriminant(probs, signal, ref['fractions'])
     sig_disc = disc[flavour_masks[signal]]
     return {
-        bkg: float(calculate_rejection(sig_disc, disc[flavour_masks[bkg]], target_eff=wp))
+        bkg: float(
+            calculate_rejection(sig_disc, disc[flavour_masks[bkg]], target_eff=wp)
+        )
         for bkg in ('u', 'tau')
     }
 
@@ -157,54 +162,80 @@ def main() -> None:
     )
     parser.add_argument('--config', type=Path, required=True, help='YAML config file')
     parser.add_argument('--output', type=Path, default=None, help='Output directory')
-    parser.add_argument('--recompute', action='store_true', help='Ignore cached predictions')
-    parser.add_argument('--max-jets', type=int, default=None, help='Truncate the test set')
-    parser.add_argument('--device', default=None, help='Inference device for cache misses')
     parser.add_argument(
-        '--workers', type=int, default=None, help='CPU worker processes (default: all allocated)'
+        '--recompute', action='store_true', help='Ignore cached predictions'
     )
     parser.add_argument(
-        '--floor-frac', type=float, default=0.95,
+        '--max-jets', type=int, default=None, help='Truncate the test set'
+    )
+    parser.add_argument(
+        '--device', default=None, help='Inference device for cache misses'
+    )
+    parser.add_argument(
+        '--workers',
+        type=int,
+        default=None,
+        help='CPU worker processes (default: all allocated)',
+    )
+    parser.add_argument(
+        '--floor-frac',
+        type=float,
+        default=0.95,
         help='Required fraction of GN2 u- AND tau-rejection (default: 0.95). '
-             'Overridden per background by --floor-u / --floor-tau.',
+        'Overridden per background by --floor-u / --floor-tau.',
     )
     parser.add_argument(
-        '--floor-u', type=float, default=None,
+        '--floor-u',
+        type=float,
+        default=None,
         help='Required fraction of GN2 u-rejection (default: --floor-frac).',
     )
     parser.add_argument(
-        '--floor-tau', type=float, default=None,
+        '--floor-tau',
+        type=float,
+        default=None,
         help='Required fraction of GN2 tau-rejection (default: --floor-frac).',
     )
     parser.add_argument(
-        '--working-point', type=float, default=None,
+        '--working-point',
+        type=float,
+        default=None,
         help='Signal-efficiency working point (default: config working_point, else 0.8).',
     )
     parser.add_argument(
-        '--grid-dir', type=Path, default=None,
+        '--grid-dir',
+        type=Path,
+        default=None,
         help='Shared directory for per-model <slug>_grid_wp<wp>.csv. The joint '
-             '(f_c, f_tau) rejection grid depends only on the checkpoint + wp, '
-             'not on the floors, so runs that vary only --floor-u / --floor-tau '
-             'reuse it here instead of recomputing the sweep. Default: --output.',
+        '(f_c, f_tau) rejection grid depends only on the checkpoint + wp, '
+        'not on the floors, so runs that vary only --floor-u / --floor-tau '
+        'reuse it here instead of recomputing the sweep. Default: --output.',
     )
     args = parser.parse_args()
 
     with open(args.config) as f:
         cfg = yaml.safe_load(f)
 
-    out_dir = args.output or Path(cfg.get('plot', {}).get('out_dir', 'plots/fraction_constrained_search'))
+    out_dir = args.output or Path(
+        cfg.get('plot', {}).get('out_dir', 'plots/fraction_constrained_search')
+    )
     out_dir.mkdir(parents=True, exist_ok=True)
     print(f'Output directory: {out_dir}')
 
     workers = args.workers or len(os.sched_getaffinity(0))
     print(f'CPU workers: {workers}')
 
-    device = torch.device(args.device or ('cuda' if torch.cuda.is_available() else 'cpu'))
+    device = torch.device(
+        args.device or ('cuda' if torch.cuda.is_available() else 'cpu')
+    )
     torch.set_float32_matmul_precision('high')
 
     signal = cfg.get('signal', 'b')
-    wp = float(args.working_point if args.working_point is not None
-               else cfg.get('working_point', 0.8))
+    wp = float(
+        args.working_point
+        if args.working_point is not None
+        else cfg.get('working_point', 0.8)
+    )
     step = float(cfg['step'])
     frac_u = args.floor_u if args.floor_u is not None else args.floor_frac
     frac_tau = args.floor_tau if args.floor_tau is not None else args.floor_frac
@@ -233,14 +264,18 @@ def main() -> None:
         run_dir = Path(entry['dir'])
         run_cfg = rc.find_run_config(run_dir)
         run_cfgs.append(run_cfg)
-        ckpts.append(rc.resolve_checkpoint(run_dir, run_cfg, entry.get('checkpoint', 'best')))
+        ckpts.append(
+            rc.resolve_checkpoint(run_dir, run_cfg, entry.get('checkpoint', 'best'))
+        )
 
     if cfg.get('test_file'):
         test_file = Path(cfg['test_file'])
     else:
         test_files = {str(c.test_dataset_path) for c in run_cfgs}
         if len(test_files) > 1:
-            raise ValueError(f'Runs used different test files {test_files}; set test_file explicitly')
+            raise ValueError(
+                f'Runs used different test files {test_files}; set test_file explicitly'
+            )
         test_file = Path(test_files.pop())
     print(f'Test file: {test_file}')
 
@@ -258,12 +293,7 @@ def main() -> None:
     # ── Per-model constrained search ────────────────────────────────────────
     summary_rows = []
     model_results = []  # (entry, fc, ftau)
-    points = [
-        (fc, ftau)
-        for ftau in ftau_values
-        for fc in fc_values
-        if fc + ftau < 1.0
-    ]
+    points = [(fc, ftau) for ftau in ftau_values for fc in fc_values if fc + ftau < 1.0]
     print(
         f'grid: f_c in [0, {fc_max}) x f_tau in [0, {ftau_max}) at step {step} '
         f'-> {len(points)} points'
@@ -320,7 +350,9 @@ def main() -> None:
             score = np.minimum(df.u_rejection / floor_u, df.tau_rejection / floor_tau)
             best = df.loc[score.idxmax()]
             is_feasible = False
-            print(f'  WARNING: no point meets both floors for {label} — reporting closest approach')
+            print(
+                f'  WARNING: no point meets both floors for {label} — reporting closest approach'
+            )
 
         fc, ftau = float(best.f_c), float(best.f_tau)
         print(
@@ -333,15 +365,17 @@ def main() -> None:
                 f'(f_c_max={fc_max}, f_tau_max={ftau_max}) — widen fc_max/ftau_max'
             )
 
-        summary_rows.append({
-            'label': label,
-            'f_c': fc,
-            'f_tau': ftau,
-            'c_rejection': float(best.c_rejection),
-            'u_rejection': float(best.u_rejection),
-            'tau_rejection': float(best.tau_rejection),
-            'feasible': is_feasible,
-        })
+        summary_rows.append(
+            {
+                'label': label,
+                'f_c': fc,
+                'f_tau': ftau,
+                'c_rejection': float(best.c_rejection),
+                'u_rejection': float(best.u_rejection),
+                'tau_rejection': float(best.tau_rejection),
+                'feasible': is_feasible,
+            }
+        )
         model_results.append((entry, fc, ftau))
 
     summary = pd.DataFrame(summary_rows)

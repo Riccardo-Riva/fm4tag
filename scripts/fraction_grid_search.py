@@ -86,7 +86,9 @@ def main() -> None:
         args.device or ('cuda' if torch.cuda.is_available() else 'cpu')
     )
     if device.type == 'cpu':
-        print('WARNING: running inference on CPU — use a GPU node for the full test set')
+        print(
+            'WARNING: running inference on CPU — use a GPU node for the full test set'
+        )
     torch.set_float32_matmul_precision('high')
 
     # ── Resolve the run and the test file ──────────────────────────────────
@@ -94,10 +96,14 @@ def main() -> None:
     run_dir = Path(model_cfg['dir'])
     label = model_cfg.get('label', run_dir.name)
     run_cfg = rc.find_run_config(run_dir)
-    ckpt_path = rc.resolve_checkpoint(run_dir, run_cfg, model_cfg.get('checkpoint', 'best'))
+    ckpt_path = rc.resolve_checkpoint(
+        run_dir, run_cfg, model_cfg.get('checkpoint', 'best')
+    )
 
-    test_file = Path(cfg['test_file']) if cfg.get('test_file') else Path(
-        str(run_cfg.test_dataset_path)
+    test_file = (
+        Path(cfg['test_file'])
+        if cfg.get('test_file')
+        else Path(str(run_cfg.test_dataset_path))
     )
     print(f'Model: {label} ({run_dir.name})\nTest file: {test_file}')
 
@@ -158,7 +164,9 @@ def main() -> None:
             sig_disc = disc[sig_mask]
             row = {'f_c': fc, 'f_tau': ftau}
             for bkg in backgrounds:
-                rej = calculate_rejection(sig_disc, disc[flavour_masks[bkg]], target_eff=wp)
+                rej = calculate_rejection(
+                    sig_disc, disc[flavour_masks[bkg]], target_eff=wp
+                )
                 row[f'{bkg}_rejection'] = float(rej)
             rows.append(row)
             rej_grid[i, j] = row[f'{target}_rejection']
@@ -189,7 +197,9 @@ def main() -> None:
                 'working_point': wp,
                 'f_c': float(best.f_c),
                 'f_tau': float(best.f_tau),
-                **{f'{b}_rejection': float(best[f'{b}_rejection']) for b in backgrounds},
+                **{
+                    f'{b}_rejection': float(best[f'{b}_rejection']) for b in backgrounds
+                },
             },
             f,
             sort_keys=False,
@@ -199,7 +209,11 @@ def main() -> None:
     # ── Heatmap ─────────────────────────────────────────────────────────────
     fig, ax = plt.subplots(figsize=tuple(plot_cfg.get('figsize', [7.0, 6.0])))
     mesh = ax.pcolormesh(
-        fc_vals, ftau_vals, rej_grid, shading='auto', cmap=plot_cfg.get('cmap', 'viridis')
+        fc_vals,
+        ftau_vals,
+        rej_grid,
+        shading='auto',
+        cmap=plot_cfg.get('cmap', 'viridis'),
     )
     fig.colorbar(mesh, ax=ax, label=f'{target}-jet rejection @ {signal}-eff = {wp:g}')
     ax.scatter(

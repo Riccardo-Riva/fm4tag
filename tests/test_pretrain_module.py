@@ -122,16 +122,12 @@ def test_missing_weight_keys_default_to_zero(encoders, aggregator, two_views):
 
 def test_unknown_weight_key_raises(encoders, aggregator, two_views):
     with pytest.raises(ValueError, match='Unknown loss_weights'):
-        _make_module(
-            encoders, aggregator, two_views, loss_weights={'contrastve': 1.0}
-        )
+        _make_module(encoders, aggregator, two_views, loss_weights={'contrastve': 1.0})
 
 
 def test_all_zero_weights_raise(encoders, aggregator, two_views):
     with pytest.raises(ValueError, match='At least one'):
-        _make_module(
-            encoders, aggregator, two_views, loss_weights={'contrastive': 0.0}
-        )
+        _make_module(encoders, aggregator, two_views, loss_weights={'contrastive': 0.0})
 
 
 def test_requires_two_views_when_contrastive(encoders, aggregator):
@@ -178,9 +174,7 @@ def test_log_dict_uses_component_nomenclature(encoders, aggregator, two_views):
     }
 
 
-def test_zero_weight_components_not_computed_or_logged(
-    encoders, aggregator, two_views
-):
+def test_zero_weight_components_not_computed_or_logged(encoders, aggregator, two_views):
     module = _make_module(
         encoders,
         aggregator,

@@ -157,7 +157,8 @@ def test_gradients_still_reach_the_backbone(finetune_setup):
     sum(z.pow(2).mean() for z in z_views).backward()
 
     with_grad = [
-        p for p in module.backbone.parameters()
+        p
+        for p in module.backbone.parameters()
         if p.grad is not None and p.grad.abs().sum() > 0
     ]
     assert with_grad, 'reusing the clean tensor detached the backbone'

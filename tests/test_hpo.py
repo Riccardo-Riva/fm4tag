@@ -31,9 +31,7 @@ def _fresh_trial(**study_kwargs) -> optuna.Trial:
 
 def test_suggest_param_float_int_categorical():
     trial = _fresh_trial()
-    v = suggest_param(
-        trial, {'param': 'a', 'type': 'float', 'low': 0.1, 'high': 0.5}
-    )
+    v = suggest_param(trial, {'param': 'a', 'type': 'float', 'low': 0.1, 'high': 0.5})
     assert 0.1 <= v <= 0.5
     v = suggest_param(
         trial, {'param': 'b', 'type': 'float', 'low': 1e-5, 'high': 1e-2, 'log': True}
@@ -41,9 +39,7 @@ def test_suggest_param_float_int_categorical():
     assert 1e-5 <= v <= 1e-2
     v = suggest_param(trial, {'param': 'c', 'type': 'int', 'low': 1, 'high': 3})
     assert v in (1, 2, 3)
-    v = suggest_param(
-        trial, {'param': 'd', 'type': 'categorical', 'choices': [2, 4]}
-    )
+    v = suggest_param(trial, {'param': 'd', 'type': 'categorical', 'choices': [2, 4]})
     assert v in (2, 4)
 
 
@@ -101,7 +97,12 @@ def test_trial_config_applies_overrides_and_keeps_interpolation():
                 'search_space': {
                     'finetune': [
                         # degenerate range → deterministic suggestion
-                        {'param': 'optimizer.lr', 'type': 'float', 'low': 0.5, 'high': 0.5},
+                        {
+                            'param': 'optimizer.lr',
+                            'type': 'float',
+                            'low': 0.5,
+                            'high': 0.5,
+                        },
                     ]
                 }
             },

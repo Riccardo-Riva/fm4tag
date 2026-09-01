@@ -142,15 +142,23 @@ def plot_seed_curves(entries, colors, cfg, metric, out_path: Path) -> Path:
     for entry, color in zip(entries, colors):
         for curve in entry.curves:
             ax.plot(
-                curve['epoch'], curve['value'],
-                color=color, linewidth=0.8, alpha=p.get('curve_alpha', 0.65),
+                curve['epoch'],
+                curve['value'],
+                color=color,
+                linewidth=0.8,
+                alpha=p.get('curve_alpha', 0.65),
             )
             imin = curve['value'].idxmin()
             ax.plot(
-                curve.loc[imin, 'epoch'], curve.loc[imin, 'value'],
-                marker='*', markersize=star_ms, color=color,
-                markeredgecolor='white', markeredgewidth=0.3,
-                linestyle='none', zorder=5,
+                curve.loc[imin, 'epoch'],
+                curve.loc[imin, 'value'],
+                marker='*',
+                markersize=star_ms,
+                color=color,
+                markeredgecolor='white',
+                markeredgewidth=0.3,
+                linestyle='none',
+                zorder=5,
             )
 
     _apply_axes(ax, cfg, metric)
@@ -171,9 +179,14 @@ def plot_seed_markers(entries, colors, cfg, metric, out_path: Path) -> Path:
     for entry, color in zip(entries, colors):
         for be, bv in zip(entry.best_epochs, entry.best_values):
             ax.plot(
-                be, bv,
-                marker='s', markersize=sq_ms, color=color,
-                markeredgewidth=0, linestyle='none', zorder=5,
+                be,
+                bv,
+                marker='s',
+                markersize=sq_ms,
+                color=color,
+                markeredgewidth=0,
+                linestyle='none',
+                zorder=5,
             )
 
     _apply_axes(ax, cfg, metric)
@@ -204,7 +217,9 @@ def main() -> None:
             + ' '.join(f'{v:.5f}' for v in entry.best_values)
         )
 
-    out_dir = args.output or Path(cfg.get('plot', {}).get('out_dir', 'plots/val_curves'))
+    out_dir = args.output or Path(
+        cfg.get('plot', {}).get('out_dir', 'plots/val_curves')
+    )
     fname = cfg.get('plot', {}).get('filename', 'seed_curves.png')
     stem = Path(fname).stem
     suffix = Path(fname).suffix or '.png'
