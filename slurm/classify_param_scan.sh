@@ -96,7 +96,7 @@ GPU_NODE=${GPU_NODE:-gpu-L40S-open}
 #   * keeps the gradient batch at GPU_NUM x BATCH_SIZE = 2048, identical to the
 #     earlier scans (run_20260811_105149 et al.), so the new points are directly
 #     comparable to them.
-GPU_NUM=2
+GPU_NUM=${GPU_NUM:-2}
 
 # Dataloader workers PER RANK (see classify_from_scratch.sh for the profiling
 # that sets this: a lone job is already data-bound at 12 workers, and 10 trades a
