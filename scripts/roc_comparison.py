@@ -424,6 +424,7 @@ def plot_rocs(
 ) -> None:
     roc_plot = RocPlot(
         n_ratio_panels=len(backgrounds),
+        title=plot_cfg.get('title', ''),
         ylabel='Background rejection',
         xlabel=f'${signal}$-jet efficiency',
         figsize=tuple(plot_cfg.get('figsize', (7, 7))),
