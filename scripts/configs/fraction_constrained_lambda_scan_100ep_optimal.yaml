@@ -1,0 +1,98 @@
+# Constrained f_c / f_tau search for the current jc=0.3 lambda ladder
+# (max_epochs=100 sources + the reinstated max_epochs=50 seeds whose minimum
+# was reached well inside their budget — see scripts/configs/
+# val_loss_ce_seed_curves.yaml for the exact inclusion/exclusion rule).
+#
+# One model per lambda: the single seed across ALL available sources (old
+# 50-epoch sweeps, the 828/903 100-epoch reseeds, and this week's rescued
+# run_20260915_133955) with the lowest val/head/loss_ce for that lambda, plus
+# the JC=0.0 baseline's best seed. F2@d6 (architecture scan, not the lambda
+# ladder) is excluded. For each model, grid-search the (f_c, f_tau) simplex
+# and pick the point maximising c-rejection subject to
+#   u_rejection   >= floor_u   * GN2_only_JT u_rejection
+#   tau_rejection >= floor_tau * GN2_only_JT tau_rejection
+# at the signal-efficiency working point. floor_u / floor_tau / working_point
+# are set on the CLI; the values here are only fallbacks.
+#
+#   python scripts/fraction_constrained_search.py \
+#       --config scripts/configs/fraction_constrained_lambda_scan_100ep_optimal.yaml \
+#       --floor-u 0.95 --floor-tau 0.90 --working-point 0.77 --workers 32
+#
+# Config is parsed as plain YAML (no ${..} interpolation) — dirs are absolute.
+
+step: 0.002
+signal: b
+working_point: 0.77         # campaign's constrained c-rej@0.77 metric; CLI --working-point overrides
+test_file: null             # -> test_dataset_path from the runs' own config (all agree)
+
+cuts:                       # pt in MeV
+  - [pt, '>', 20000]
+  - [pt, '<', 250000]
+  - [eta, '>', -2.5]
+  - [eta, '<', 2.5]
+
+inference:
+  batch_size: 1024
+  num_workers: 8
+
+models:
+  - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_param_scan/run_20260819_134452/scratch_bs_1024_lr_3e-4_ce_1.0_jc_0.0_lam_0.1_temp_0.1/seed_4242424
+    label: 'no JC'
+  - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_param_scan/run_20260819_135557/scratch_bs_1024_lr_3e-4_ce_1.0_jc_0.3_lam_0.05_temp_0.1/seed_4242424
+    label: 'λ = 0.05'
+  - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_param_scan/run_20260819_134452/scratch_bs_1024_lr_3e-4_ce_1.0_jc_0.3_lam_0.1_temp_0.1/seed_424242
+    label: 'λ = 0.1'
+  - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_param_scan/run_20260903_155735/scratch_bs_2048_lr_3e-4_ce_1.0_jc_0.3_lam_0.2_temp_0.1/seed_42
+    label: 'λ = 0.2'
+  - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_param_scan/run_20260819_135557/scratch_bs_1024_lr_3e-4_ce_1.0_jc_0.3_lam_0.25_temp_0.1/seed_42424
+    label: 'λ = 0.25'
+  - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_param_scan/run_20260819_135709/scratch_bs_1024_lr_3e-4_ce_1.0_jc_0.3_lam_0.3_temp_0.1/seed_42424
+    label: 'λ = 0.3'
+  - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_param_scan/run_20260819_135709/scratch_bs_1024_lr_3e-4_ce_1.0_jc_0.3_lam_0.35_temp_0.1/seed_424
+    label: 'λ = 0.35'
+  - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_param_scan/run_20260915_133955/scratch_bs_2048_lr_3e-4_ce_1.0_jc_0.3_lam_0.4_temp_0.1/seed_42
+    label: 'λ = 0.4'
+  - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_param_scan/run_20260903_155735/scratch_bs_2048_lr_3e-4_ce_1.0_jc_0.3_lam_0.45_temp_0.1/seed_42
+    label: 'λ = 0.45'
+  - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_param_scan/run_20260903_155735/scratch_bs_2048_lr_3e-4_ce_1.0_jc_0.3_lam_0.5_temp_0.1/seed_42
+    label: 'λ = 0.5'
+  - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_param_scan/run_20260903_155735/scratch_bs_2048_lr_3e-4_ce_1.0_jc_0.3_lam_0.55_temp_0.1/seed_42
+    label: 'λ = 0.55'
+  - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_param_scan/run_20260903_155735/scratch_bs_2048_lr_3e-4_ce_1.0_jc_0.3_lam_0.6_temp_0.1/seed_42
+    label: 'λ = 0.6'
+  - dir: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_param_scan/run_20260903_155735/scratch_bs_2048_lr_3e-4_ce_1.0_jc_0.3_lam_0.65_temp_0.1/seed_42
+    label: 'λ = 0.65'
+
+roc_comparison:
+  # Sasha Trubetskoy's "20 simple, distinct colors" (saturated subset — see
+  # scripts/configs/val_loss_ce_seed_curves.yaml for the same palette used
+  # there, kept consistent across both plots).
+  colours:
+    - '#000000'  # no JC
+    - '#e6194b'  # 0.05  red
+    - '#0082c8'  # 0.1   blue
+    - '#f58231'  # 0.2   orange
+    - '#911eb4'  # 0.25  purple
+    - '#46f0f0'  # 0.3   cyan
+    - '#f032e6'  # 0.35  magenta
+    - '#3cb44b'  # 0.4   green
+    - '#008080'  # 0.45  teal
+    - '#800000'  # 0.5   maroon
+    - '#808000'  # 0.55  olive
+    - '#000080'  # 0.6   navy
+    - '#aa6e28'  # 0.65  brown
+  reference_tagger:
+    label: 'GN2 only-JT'
+    file: /storage3/DSIP/rriva/packages/salt-pt/salt/logs/GN2_only_jt_20260817-T134649/ckpts/epoch=015-val_loss=0.59814__test_pp_output_test.h5
+    probs: {b: GN2_only_jt_pb, c: GN2_only_jt_pc, u: GN2_only_jt_pu, tau: GN2_only_jt_ptau}
+    fractions: {c: 0.2, tau: 0.01}
+    colour: '#EE6677'
+  plot:
+    out_dir: plots/roc_lambda_scan_100ep_optimal_vs_gn2
+    atlas_brand: ''
+    atlas_first_tag: 'Simulation Internal'
+    atlas_second_tag: "$\\sqrt{s} = 13$ TeV, $t\\bar{t}$\n$20 < p_T < 250$ GeV, $|\\eta| < 2.5$"
+    figsize: [7, 7]
+    y_scale: 1.3
+    dpi: 200
+    disc_plot: {bins: 50, range: [-10, 20], logy: false}
