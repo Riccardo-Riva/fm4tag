@@ -9,13 +9,26 @@
 #                                          each seed's best value
 #
 # One colour per lambda (blue -> purple -> red by rank); the no-contrastive
-# (jc = 0) cell is black.  Full jc=0.3 lambda grid — n completed seeds per cell
-# (0.05: 6, 0.1: 5, 0.25: 4, 0.3: 4, 0.35: 3, 0.4: 1, 0.5: 2); the individual
-# seed curves are shown regardless of count.  All cells: classify-from-scratch,
-# per-token rowcol_v0, ddp2, bs 1024/rank, lr 3e-4, ce 1.0, temp 0.1.
-# lambda 0.35 / 0.5 pool the original run_20260819_135709 seeds (max_epochs 50)
-# with the run_20260828_153214 reseed (max_epochs 100); loss-curve comparison is
-# hardware/schedule independent so the pooled seeds are directly comparable.
+# (jc = 0) cell is black.  Mixes max_epochs=50 and max_epochs=100 sources —
+# loss-curve comparison is hardware/schedule independent, so pooling seeds
+# across epoch budgets is fine PROVIDED the 50-epoch seed's minimum was
+# actually reached, not just where the cap cut it off.  Checked every
+# max_epochs=50 seed's best_epoch: all of them settle by epoch 30 (the run
+# early-stops on its own well inside the 50-epoch budget) EXCEPT two, which
+# were still improving when the hard cap ended them —
+# run_20260819_135557 lambda=0.4 seed_42 (best at epoch 48/49) and
+# run_20260819_135709 lambda=0.5 seed_42 (best at epoch 49/49) — those two are
+# dropped; every other 50-epoch seed is kept.
+# n completed seeds per cell: 0.0 (no JC): 8, 0.05: 6, 0.1: 5, 0.2: 3, 0.25: 4,
+# 0.3: 5, 0.35: 5, 0.4: 3, 0.45: 1, 0.5: 4, 0.55: 1, 0.6: 2, 0.65: 1.
+# All cells: classify-from-scratch, per-token rowcol_v0, ddp2, bs 1024/rank,
+# lr 3e-4, ce 1.0, temp 0.1.
+# lambda 0.4 and 0.5 additionally pool run_20260915_133955's seed_42 (this
+# week's rescued lambda ladder — see slurm/gpu_preflight.sh for why that run
+# needed rescuing). F2@d6 (run_20260915_134020, architecture scan, not the
+# lambda ladder) is intentionally excluded throughout.
+# lambda=0.4/0.5/0.6/0.65/0.7/0.75/0.8 seed_424 of run_20260915_133955 and the
+# lambda=0.75/0.8 cells are still training/queued and are excluded.
 
 metric: val/head/loss_ce
 seed_status: [completed]
@@ -26,18 +39,35 @@ paths:
   r57: ${paths.root}/run_20260819_135557/scratch_bs_1024_lr_3e-4_ce_1.0_jc_0.3
   r09: ${paths.root}/run_20260819_135709/scratch_bs_1024_lr_3e-4_ce_1.0_jc_0.3
   r28: ${paths.root}/run_20260828_153214/scratch_bs_1024_lr_3e-4_ce_1.0_jc_0.3  # high-lambda reseed, max_epochs 100
+  r36: ${paths.root}/run_20260828_163630/scratch_bs_1024_lr_3e-4_ce_1.0_jc_0.3  # lambda 0.2 fill-in, max_epochs 100
+  r03: ${paths.root}/run_20260903_155735/scratch_bs_2048_lr_3e-4_ce_1.0_jc_0.3  # full 0.2-0.65 ladder, max_epochs 100
+  r95: ${paths.root}/run_20260915_133955/scratch_bs_2048_lr_3e-4_ce_1.0_jc_0.3  # rescued ladder, max_epochs 100
 
 color:
   # categorical (default): one wholly distinct hue per lambda, by lambda rank.
   # Override the hues with `palette: [ ... ]`; set `categorical: false` to use
   # the cmap/scale ramp instead (shaded).
+  # 13 lambda values exceed the 9-colour qualitative default, and a
+  # blue->purple->red ramp made adjacent lambdas too similar to tell apart.
+  # Explicit palette instead: Sasha Trubetskoy's "20 simple, distinct colors"
+  # (https://sashamaps.net/docs/resources/20-colors/), the saturated subset
+  # (dropping the pale ones — beige/mint/lavender/pink/coral — that don't
+  # show up as thin lines on white).
   categorical: true
-  # palette: ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2']
   baseline_color: black                    # every jc == 0 entry
-  cmap: ['#1f3ecc', '#7a1fa2', '#cc1f1f']  # only used when categorical: false
-  scale: uniform
-  vmin: 0.0
-  vmax: 0.5
+  palette:
+    - '#e6194b'  # red
+    - '#0082c8'  # blue
+    - '#f58231'  # orange
+    - '#911eb4'  # purple
+    - '#46f0f0'  # cyan
+    - '#f032e6'  # magenta
+    - '#3cb44b'  # green
+    - '#008080'  # teal
+    - '#800000'  # maroon
+    - '#808000'  # olive
+    - '#000080'  # navy
+    - '#aa6e28'  # brown
 
 plot:
   out_dir: plots/val_loss_ce
@@ -52,19 +82,42 @@ plot:
   marker_size: 6      # markers plot: per-seed borderless square
   curve_alpha: 0.6
   ylim: [0.599, 0.620]
+  xlim: [0, 80]
 
 models:
   - cell: ${paths.r44}_jc_0.0_lam_0.1_temp_0.1
     label: 'no contrastive (JC 0.0)'
   - cell: ${paths.r57}_lam_0.05_temp_0.1
   - cell: ${paths.r44}_jc_0.3_lam_0.1_temp_0.1
+  - dirs:
+      - ${paths.r36}_lam_0.2_temp_0.1/seed_42
+      - ${paths.r36}_lam_0.2_temp_0.1/seed_424
+      - ${paths.r03}_lam_0.2_temp_0.1/seed_42
   - cell: ${paths.r57}_lam_0.25_temp_0.1
-  - cell: ${paths.r09}_lam_0.3_temp_0.1
-  - dirs:                                   # 2 orig seeds + 1 reseed
+  - dirs:                                   # 4 orig seeds (ep20-26, well inside budget) + 1 reseed
+      - ${paths.r09}_lam_0.3_temp_0.1/seed_42
+      - ${paths.r09}_lam_0.3_temp_0.1/seed_424
+      - ${paths.r09}_lam_0.3_temp_0.1/seed_4242
+      - ${paths.r09}_lam_0.3_temp_0.1/seed_42424
+      - ${paths.r03}_lam_0.3_temp_0.1/seed_42
+  - dirs:                                   # 2 orig seeds (ep23/30, well inside budget) + 2 reseeds + 1 new
       - ${paths.r09}_lam_0.35_temp_0.1/seed_42
       - ${paths.r09}_lam_0.35_temp_0.1/seed_424
       - ${paths.r28}_lam_0.35_temp_0.1/seed_42
-  - cell: ${paths.r57}_lam_0.4_temp_0.1
-  - dirs:                                   # 1 orig seed + 1 reseed
-      - ${paths.r09}_lam_0.5_temp_0.1/seed_42
+      - ${paths.r28}_lam_0.35_temp_0.1/seed_424
+      - ${paths.r03}_lam_0.35_temp_0.1/seed_42
+  - dirs:                                   # orig seed_42 dropped: best at epoch 48/49, still improving
+      - ${paths.r28}_lam_0.4_temp_0.1/seed_42
+      - ${paths.r03}_lam_0.4_temp_0.1/seed_42
+      - ${paths.r95}_lam_0.4_temp_0.1/seed_42
+  - cell: ${paths.r03}_lam_0.45_temp_0.1
+  - dirs:                                   # orig seed_42 dropped: best at epoch 49/49, still improving
       - ${paths.r28}_lam_0.5_temp_0.1/seed_42
+      - ${paths.r28}_lam_0.5_temp_0.1/seed_424
+      - ${paths.r03}_lam_0.5_temp_0.1/seed_42
+      - ${paths.r95}_lam_0.5_temp_0.1/seed_42
+  - cell: ${paths.r03}_lam_0.55_temp_0.1
+  - dirs:
+      - ${paths.r28}_lam_0.6_temp_0.1/seed_42
+      - ${paths.r03}_lam_0.6_temp_0.1/seed_42
+  - cell: ${paths.r03}_lam_0.65_temp_0.1
