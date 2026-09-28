@@ -186,7 +186,23 @@ TAIL_MARGIN_SECONDS=1800
 
 # A training that exits non-zero faster than this is a configuration error, not a
 # transient one: aborting the cell avoids burning the whole seed list on it.
-MIN_SANE_SECONDS=600
+#
+# This has to sit ABOVE the NCCL watchdog (1800 s), not below it.  When one rank
+# dies at startup — a CUDA OOM on a card a shard tenant is already holding, say —
+# the surviving rank does not exit with it: it blocks on the next collective
+# until the watchdog fires, so the cell sees a 31-minute failure and reads it as
+# plausible.  At 600 s the guard never tripped and run_20260915_110720 ate five
+# seeds in two hours, each a 31 min rc-134 with nothing written.
+MIN_SANE_SECONDS=${MIN_SANE_SECONDS:-2400}
+
+# Free memory a card must have before a seed is allowed to start on it, and how
+# long to wait for a squatter to leave.  See slurm/gpu_preflight.sh for why this
+# is necessary at all (gres.conf publishes every L40S both whole and as shards,
+# so --gres=gpu:N does not mean the card is empty).  On a timeout the cell asks
+# the scheduler for a different allocation, up to GPU_MAX_REQUEUES times.
+GPU_FREE_MIB_REQUIRED=${GPU_FREE_MIB_REQUIRED:-20480}
+GPU_WAIT_SECONDS=${GPU_WAIT_SECONDS:-1800}
+GPU_MAX_REQUEUES=${GPU_MAX_REQUEUES:-3}
 
 # 1 = a resubmitted cell skips seeds whose run_info.yaml says `status: completed`.
 RESUME_SKIP_COMPLETED=${RESUME_SKIP_COMPLETED:-1}
@@ -382,6 +398,10 @@ SEEDS=(${SEEDS[*]})
 EXTRA_OVERRIDES=(${EXTRA_OVERRIDES[*]-})
 RESUME_SKIP_COMPLETED=${RESUME_SKIP_COMPLETED}
 
+# Read by slurm/gpu_preflight.sh, which runs as a child of this script.
+export GPU_FREE_MIB_REQUIRED=${GPU_FREE_MIB_REQUIRED}
+export GPU_WAIT_SECONDS=${GPU_WAIT_SECONDS}
+
 # Per-training duration estimate.  Starts at the prior from the submitter and is
 # raised — never lowered — by what the completed trainings of this cell actually
 # took, so a run longer than expected tightens the admission test for the next.
@@ -400,6 +420,22 @@ for SEED in "\${SEEDS[@]}"; do
         echo "[budget] seed \${SEED}: already completed in a previous job — skipping"
         COMPLETED=\$((COMPLETED + 1))
         continue
+    fi
+
+    # Do not start a seed on a card someone else is already filling: the rank
+    # that lands there OOMs, its peer hangs on the watchdog, and the seed is
+    # gone.  Waiting costs minutes; starting anyway costs the seed.  Run this
+    # BEFORE the admission test so the time spent waiting is charged against the
+    # budget rather than hidden from it.
+    if ! bash ${REPO}/slurm/gpu_preflight.sh; then
+        if (( \${SLURM_RESTART_COUNT:-0} < ${GPU_MAX_REQUEUES} )); then
+            echo "[gpu] requeueing the cell to ask for a different allocation" \\
+                 "(attempt \$(( \${SLURM_RESTART_COUNT:-0} + 2 )) of $(( ${GPU_MAX_REQUEUES} + 1 )))"
+            scontrol requeue "\${SLURM_JOB_ID}" && sleep 600
+        fi
+        echo "[gpu] giving up: the allocated cards stayed occupied and the" \\
+             "requeue budget is spent. No seed was consumed." >&2
+        exit 1
     fi
 
     USABLE=\$(( DEADLINE - \$(date +%s) - ${TAIL_MARGIN_SECONDS} ))
