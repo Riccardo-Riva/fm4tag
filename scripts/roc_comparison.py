@@ -453,6 +453,46 @@ def plot_rocs(
     for panel, bkg in enumerate(backgrounds, start=1):
         roc_plot.set_ratio_class(panel, Flavours[PUMA_CLASS[bkg]])
     roc_plot.draw()
+
+    if plot_cfg.get('legend_outside'):
+        # Keep the plot panels at their original width and grow the figure to the
+        # right to host the tagger legend outside the axes.
+        leg = roc_plot.axis_top.get_legend()
+        if leg is not None:
+            fig = roc_plot.fig
+            axes = [roc_plot.axis_top, *roc_plot.ratio_axes]
+            try:
+                fig.set_layout_engine('none')  # so set_position() sticks
+            except Exception:
+                pass
+            fig.canvas.draw()  # settle positions before snapshotting
+            w_in, h_in = fig.get_size_inches()
+            abs_boxes = [
+                (p.x0 * w_in, p.y0 * h_in, p.width * w_in, p.height * h_in)
+                for p in (ax.get_position() for ax in axes)
+            ]
+            extra = float(plot_cfg.get('legend_width_in', 4.3))
+            new_w = w_in + extra
+            fig.set_size_inches(new_w, h_in)
+            for ax, (x0, y0, w, h) in zip(axes, abs_boxes):
+                ax.set_position([x0 / new_w, y0 / h_in, w / new_w, h / h_in])
+
+            plot_right = (abs_boxes[0][0] + abs_boxes[0][2]) / new_w
+            handles = list(leg.legend_handles)
+            labels = [t.get_text() for t in leg.get_texts()]
+            leg.remove()
+            roc_plot.axis_top.legend(
+                handles=handles,
+                labels=labels,
+                loc='upper left',
+                bbox_to_anchor=(plot_right + 0.02, 1.0),
+                bbox_transform=fig.transFigure,
+                borderaxespad=0.0,
+                fontsize=roc_plot.leg_fontsize,
+                ncol=roc_plot.leg_ncol,
+                frameon=False,
+            )
+
     roc_plot.savefig(str(out_dir / 'roc.png'), transparent=False)
     print(f'Saved {out_dir / "roc.png"}')
 
