@@ -350,7 +350,7 @@ callbacks:
     _target_: lightning.pytorch.callbacks.EarlyStopping
     monitor:  val/loss
     min_delta: 0. # minimum change in the monitored quantity to qualify as an improvement
-    patience: 15
+    patience: 12
     mode:     min
 
 # Staged unfreeze of the pretrained parts during finetuning is handled by
