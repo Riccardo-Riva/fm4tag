@@ -1,0 +1,62 @@
+# Train / validation CE + an embedding-quality metric per epoch, for the best run of each kind
+# (scripts/plot_ce_and_embedding.py).  This file is an OVERLAY: it holds only the embedding_curves: block and is
+# merged on top of the config that defines the trainings and, between them, the overlay that defines the pool:
+#
+#   .venv/bin/python scripts/plot_ce_and_embedding.py --config \
+#       scripts/configs/val_loss_ce_seed_curves_cmap.yaml \
+#       scripts/configs/val_loss_ce_best_vs_lambda_no_dropout_min2.yaml \
+#       scripts/configs/ce_and_embedding_curves.yaml
+#
+# The pool is then exactly the trainings behind val_loss_ce_best_vs_lambda_no_dropout_min2*.png (stuck runs and
+# baseline outliers left out, no "no JC + dropout" baseline, only lambdas with >= 2 usable seeds):
+#   ce_only = the jc == 0 training with the lowest best validation CE   -> the "no JC" baseline
+#   cl      = the jc != 0 training with the lowest best validation CE   -> any lambda of the pool
+# To draw the "no JC + dropout" baseline as the cross-entropy-only run instead, hide the other baseline in an overlay
+# (best_vs_lambda.hide_references: ['no contrastive (JC 0.0)']) and put that overlay in place of the no_dropout_min2 one.
+#
+# Four figures are written to out_dir: {role}_{metric}.png for the 2 roles x the 2 metrics, plus run_selection.csv
+# (every competing training, ranked, and the picked one with its directory).
+
+embedding_curves:
+  out_dir: plots/ce_vs_embedding
+  filename: '{role}_{metric}.png'     # {role} = ce_only | cl, {metric} = an entry of `metrics`
+
+  # Which embedding the right axis shows (column val/<embedding>/<metric> of metrics.csv):
+  #   aggregator        the single jet embedding z_jet: what the classifier head reads and the jet-contrastive loss acts on
+  #   jets_embedding    projection of the jet-level (global) features only
+  #   tracks_embedding  projection of the individual tracks
+  # The EmbeddingMetrics callback logs these on the VALIDATION split only (clean embeddings, up to 8192 jets).
+  embedding: aggregator
+  metrics: [uniformity, effective_rank]     # one figure per entry per role; each needs texts.ylabel_right / texts.metric
+  train_metric: train/head/loss_ce_epoch    # the training CE (epoch mean); the validation CE is the config's top-level `metric:`
+
+  figsize: [8.0, 5.0]
+  linewidth: 1.6
+  colors: {train_ce: '#1f77b4', val_ce: '#ff7f0e', metric: '#2ca02c'}   # the right axis takes the colour of `metric`
+  linestyles: {train_ce: '-', val_ce: '-', metric: '--'}
+  best_marker: true                         # star on the validation CE curve at its minimum (the checkpoint that is evaluated)
+  # xlim: [0, 100]                          # default: each figure fits its own run (the cross-entropy-only run stops early)
+  # ylim_left: [0.58, 0.68]                 # left axis (both CE curves)
+  ylim_right: {uniformity: null, effective_rank: null}   # per metric, [lo, hi] or null = automatic
+  legend: {loc: upper center, anchor: [0.5, -0.15], ncol: 2, fontsize: 9, frame: false}   # anchor: null = place by `loc` inside the axes
+
+  # ---- ALL the wording of the figures lives here: edit freely --------------------------------------------------
+  # Single-quoted strings are literal, so $\lambda$ needs no escaping.  A {name} that is not one of the placeholders
+  # below is printed as typed.  Placeholders of `title` and `best`: {lam} = lambda of the picked training, {jc},
+  # {seed}, {run} = its sweep directory, {best} = its best validation CE, {epoch} = the epoch of that best value.
+  # A title set to null (or '') draws no title; best: null (or '') keeps the star but drops its legend entry.
+  texts:
+    title:                                  # one per kind of run
+      ce_only: 'Cross-entropy only'
+      cl: 'Cross-entropy + jet-contrastive loss, $\lambda$ = {lam:g}'
+    xlabel: 'Epoch'
+    ylabel_left: 'Cross-entropy loss'
+    ylabel_right:                           # one per metric
+      uniformity: 'Uniformity of the global jet embedding'
+      effective_rank: 'Effective rank of the global jet embedding'
+    train_ce: 'Training CE'                 # legend entries
+    val_ce: 'Validation CE'
+    metric:                                 # legend entry of the right-axis curve, one per metric
+      uniformity: 'Uniformity (validation)'
+      effective_rank: 'Effective rank (validation)'
+    best: 'Best validation CE: {best:.5f} (epoch {epoch})'
