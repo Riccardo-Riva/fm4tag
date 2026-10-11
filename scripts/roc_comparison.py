@@ -414,6 +414,56 @@ def make_tagger(
 # ---------------------------------------------------------------------------
 
 
+def _legend_outside(plot, plot_cfg: dict) -> None:
+    """Move a puma plot's tagger legend to the right of the figure.
+
+    The plot panels keep their width; the figure grows to the right to host the
+    legend (``plot.legend_width_in``, default 4.3 in).
+
+    The legend has to leave the axes BEFORE the layout is frozen.  puma lays the
+    figure out with a constrained layout that reserves room for everything inside
+    the axes, so with ~18 taggers the legend hangs far below the (short) main panel
+    and the layout answers by opening a gap above the first ratio panel.  Taking it
+    out first and re-solving the layout keeps the panels contiguous.
+    """
+    leg = plot.axis_top.get_legend()
+    if leg is None:
+        return
+    fig = plot.fig
+    axes = [plot.axis_top, *plot.ratio_axes]
+    handles = list(leg.legend_handles)
+    labels = [t.get_text() for t in leg.get_texts()]
+    leg.remove()
+
+    fig.draw_without_rendering()  # constrained layout re-solves without the legend
+    try:
+        fig.set_layout_engine('none')  # freeze it, so set_position() below sticks
+    except Exception:
+        pass
+    w_in, h_in = fig.get_size_inches()
+    abs_boxes = [
+        (p.x0 * w_in, p.y0 * h_in, p.width * w_in, p.height * h_in)
+        for p in (ax.get_position() for ax in axes)
+    ]
+    new_w = w_in + float(plot_cfg.get('legend_width_in', 4.3))
+    fig.set_size_inches(new_w, h_in)
+    for ax, (x0, y0, w, h) in zip(axes, abs_boxes):
+        ax.set_position([x0 / new_w, y0 / h_in, w / new_w, h / h_in])
+
+    plot_right = (abs_boxes[0][0] + abs_boxes[0][2]) / new_w
+    plot.axis_top.legend(
+        handles=handles,
+        labels=labels,
+        loc='upper left',
+        bbox_to_anchor=(plot_right + 0.02, 1.0),
+        bbox_transform=fig.transFigure,
+        borderaxespad=0.0,
+        fontsize=plot.leg_fontsize,
+        ncol=plot.leg_ncol,
+        frameon=False,
+    )
+
+
 def plot_rocs(
     taggers: list[Tagger],
     signal: str,
@@ -455,43 +505,7 @@ def plot_rocs(
     roc_plot.draw()
 
     if plot_cfg.get('legend_outside'):
-        # Keep the plot panels at their original width and grow the figure to the
-        # right to host the tagger legend outside the axes.
-        leg = roc_plot.axis_top.get_legend()
-        if leg is not None:
-            fig = roc_plot.fig
-            axes = [roc_plot.axis_top, *roc_plot.ratio_axes]
-            try:
-                fig.set_layout_engine('none')  # so set_position() sticks
-            except Exception:
-                pass
-            fig.canvas.draw()  # settle positions before snapshotting
-            w_in, h_in = fig.get_size_inches()
-            abs_boxes = [
-                (p.x0 * w_in, p.y0 * h_in, p.width * w_in, p.height * h_in)
-                for p in (ax.get_position() for ax in axes)
-            ]
-            extra = float(plot_cfg.get('legend_width_in', 4.3))
-            new_w = w_in + extra
-            fig.set_size_inches(new_w, h_in)
-            for ax, (x0, y0, w, h) in zip(axes, abs_boxes):
-                ax.set_position([x0 / new_w, y0 / h_in, w / new_w, h / h_in])
-
-            plot_right = (abs_boxes[0][0] + abs_boxes[0][2]) / new_w
-            handles = list(leg.legend_handles)
-            labels = [t.get_text() for t in leg.get_texts()]
-            leg.remove()
-            roc_plot.axis_top.legend(
-                handles=handles,
-                labels=labels,
-                loc='upper left',
-                bbox_to_anchor=(plot_right + 0.02, 1.0),
-                bbox_transform=fig.transFigure,
-                borderaxespad=0.0,
-                fontsize=roc_plot.leg_fontsize,
-                ncol=roc_plot.leg_ncol,
-                frameon=False,
-            )
+        _legend_outside(roc_plot, plot_cfg)
 
     roc_plot.savefig(str(out_dir / 'roc.png'), transparent=False)
     print(f'Saved {out_dir / "roc.png"}')
@@ -536,8 +550,18 @@ def plot_disc_distributions(
         print(f'Saved {out_dir / f"disc_{slug}.png"}')
 
     # Signal-jet discriminant, all taggers overlaid (ratio wrt the reference).
+    # With the legend outside the figure is also made as tall as the other
+    # multi-tagger plots: puma's default (3.7 in) is shorter than a 18-entry legend.
+    overlay_size = (
+        {'figsize': tuple(plot_cfg.get('figsize', (7, 7)))}
+        if plot_cfg.get('legend_outside')
+        else {}
+    )
     hist_plot = HistogramPlot(
-        n_ratio_panels=1, atlas_second_tag=f'{second_tag}\n${signal}$-jets', **common
+        n_ratio_panels=1,
+        atlas_second_tag=f'{second_tag}\n${signal}$-jets',
+        **overlay_size,
+        **common,
     )
     for tagger in taggers:
         hist_plot.add(
@@ -550,6 +574,8 @@ def plot_disc_distributions(
             reference=tagger.is_reference,
         )
     hist_plot.draw()
+    if plot_cfg.get('legend_outside'):
+        _legend_outside(hist_plot, plot_cfg)
     hist_plot.savefig(str(out_dir / 'disc_signal.png'), transparent=False)
     print(f'Saved {out_dir / "disc_signal.png"}')
 
@@ -608,6 +634,8 @@ def plot_eff_vs_pt(
         for curve, is_reference in curves(bkg):
             eff_plot.add(curve, reference=is_reference)
         eff_plot.draw()
+        if plot_cfg.get('legend_outside'):
+            _legend_outside(eff_plot, plot_cfg)
         eff_plot.savefig(str(out_dir / f'rej_vs_pt_{bkg}.png'), transparent=False)
         print(f'Saved {out_dir / f"rej_vs_pt_{bkg}.png"}')
 
@@ -618,6 +646,8 @@ def plot_eff_vs_pt(
     for curve, is_reference in curves(backgrounds[0]):
         eff_plot.add(curve, reference=is_reference)
     eff_plot.draw()
+    if plot_cfg.get('legend_outside'):
+        _legend_outside(eff_plot, plot_cfg)
     eff_plot.savefig(str(out_dir / 'sig_eff_vs_pt.png'), transparent=False)
     print(f'Saved {out_dir / "sig_eff_vs_pt.png"}')
 
