@@ -1,0 +1,190 @@
+# Per-seed val CE plots for scripts/plot_seed_curves.py.
+#
+#   python scripts/plot_seed_curves.py --config scripts/configs/val_loss_ce_seed_curves_xlim80.yaml
+#
+# Writes two files under plot.out_dir:
+#   val_loss_ce_seed_curves.png          — one thin curve per seed, small star
+#                                          on each seed's best value
+#   val_loss_ce_seed_curves_markers.png  — no curves; a borderless square at
+#                                          each seed's best value
+#
+# DEFINITIVE pool, regenerated after every fm4tag run finished (2026-09-30).
+# Every entry lists its seed directories explicitly: a bare `cell:` would also
+# pick up a seed dir that has no run_info.yaml yet (unfinished), so only seeds
+# with `status: completed` are named here.
+#
+# n completed seeds per lambda — jc0: 8, 0.05: 6, 0.1: 5, 0.2: 3, 0.25: 4, 0.3: 5, 0.35: 5, 0.4: 4, 0.45: 2, 0.5: 5, 0.55: 2, 0.6: 3, 0.64: 1, 0.65: 2, 0.7: 2, 0.75: 1, 0.8: 2
+#
+# Colour: one explicit hue per lambda (per-entry `color:`), so a lambda keeps its
+# colour when lambdas are added.  The first 12 are Sasha Trubetskoy's "20 simple,
+# distinct colors" (saturated subset, https://sashamaps.net/docs/resources/20-colors/);
+# lambda 0.64 / 0.7 / 0.75 / 0.8 use four more picked by farthest-point search in
+# CIELAB against everything already in use.  jc = 0 baseline: black.
+#
+# jc = 0 + dropout 0.1 (run_20260915_134011, 7 seeds, regime C) is a different
+# configuration from the no-contrastive baseline (no dropout) and is drawn as its
+# own grey entry — it is never pooled with the baseline.
+#
+# Sources span THREE batch regimes (datamodule.batch_size is PER RANK):
+#   A = 1024/rank x 2 GPUs  run_20260819_*, run_20260828_*   (Aug sweeps)
+#   B = 2048/rank x 1 GPU   run_20260903_155735              (Sep-3 ladder)
+#   C = 2048/rank x 2 GPUs  run_20260915_133955, run_20260922_*  (Sep-15+ runs)
+# Per-rank batch is a model hyper-parameter for row attention, so pooled seeds are
+# not strictly like-for-like.  Where regimes overlap at the same lambda the
+# seed-to-seed spread is of the same size as the regime offset (see the report in
+# the chat), which is why the pool follows the established practice of overlaying
+# them; the regime of each source is listed above so it can be split if needed.
+#
+# Excluded:
+#   * max_epochs=50 seeds that were still improving when the cap ended them —
+#     run_20260819_135557 lambda=0.4 seed_42 (best @ epoch 48) and
+#     run_20260819_135709 lambda=0.5 seed_42 (best @ epoch 49)
+#   * F2@d6 (run_20260915_134020, run_20260922_095153) — architecture variant
+#   * failed runs (run_20260915_110720) and unfinished pilots (no run_info.yaml)
+#   * run_20260818_172348 seed_42 — same config AND seed as run_20260819_134452
+#     seed_42, so it would count one training twice
+# NOTE several 100-epoch seeds (lambda 0.55 / 0.6 / 0.64 / 0.7) reach their
+# minimum at epochs 95-99, i.e. they are still improving when max_epochs=100 ends
+# them; their stars are lower bounds on what those lambdas can reach.
+
+metric: val/head/loss_ce
+seed_status: [completed]
+
+paths:
+  root: /storage3/DSIP/rriva/research/fm4tag/slurm/classify_param_scan
+  r0819_1344: ${paths.root}/run_20260819_134452
+  r0819_1355: ${paths.root}/run_20260819_135557
+  r0819_1357: ${paths.root}/run_20260819_135709
+  r0828_1532: ${paths.root}/run_20260828_153214
+  r0828_1636: ${paths.root}/run_20260828_163630
+  r0903_1557: ${paths.root}/run_20260903_155735
+  r0915_1339: ${paths.root}/run_20260915_133955
+  r0915_1340: ${paths.root}/run_20260915_134011
+  r0922_0945: ${paths.root}/run_20260922_094553
+  r0922_0951: ${paths.root}/run_20260922_095140
+
+color:
+  categorical: true           # per-entry `color:` below wins; this only matters as a fallback
+  baseline_color: black
+
+plot:
+  out_dir: plots/val_loss_ce/xlim80
+  filename: val_loss_ce_seed_curves.png
+  title: 'Cross-Entropy, noise parameter $\lambda$ scan with $\alpha_{{Agg}} = 0.3$'
+  ylabel: Validation Cross-Entropy Loss
+  legend_title: 'augmentation strength $\lambda$'
+  legend_outside: true
+  figsize: [9.0, 5.6]
+  show_n: true
+  star_size: 9        # curves plot: per-seed star
+  marker_size: 6      # markers plot: per-seed borderless square
+  curve_alpha: 0.6
+  ylim: [0.598, 0.620]
+  xlim: [0, 80]
+
+models:
+  - label: 'no contrastive (JC 0.0)'
+    color: '#000000'
+    dirs:
+      - ${paths.r0819_1344}/scratch_bs_1024_lr_3e-4_ce_1.0_jc_0.0_lam_0.1_temp_0.1/seed_42    # A, best 0.60368 @ep5
+      - ${paths.r0819_1344}/scratch_bs_1024_lr_3e-4_ce_1.0_jc_0.0_lam_0.1_temp_0.1/seed_424    # A, best 0.61263 @ep7
+      - ${paths.r0819_1344}/scratch_bs_1024_lr_3e-4_ce_1.0_jc_0.0_lam_0.1_temp_0.1/seed_4242    # A, best 0.60402 @ep7
+      - ${paths.r0819_1344}/scratch_bs_1024_lr_3e-4_ce_1.0_jc_0.0_lam_0.1_temp_0.1/seed_42424    # A, best 0.61310 @ep6
+      - ${paths.r0819_1344}/scratch_bs_1024_lr_3e-4_ce_1.0_jc_0.0_lam_0.1_temp_0.1/seed_424242    # A, best 0.61258 @ep9
+      - ${paths.r0819_1344}/scratch_bs_1024_lr_3e-4_ce_1.0_jc_0.0_lam_0.1_temp_0.1/seed_4242424    # A, best 0.60298 @ep7
+      - ${paths.r0819_1344}/scratch_bs_1024_lr_3e-4_ce_1.0_jc_0.0_lam_0.1_temp_0.1/seed_42424242    # A, best 0.60613 @ep9
+      - ${paths.r0819_1344}/scratch_bs_1024_lr_3e-4_ce_1.0_jc_0.0_lam_0.1_temp_0.1/seed_424242424    # A, best 0.60312 @ep10
+  - label: 'no contrastive + dropout 0.1 (JC 0.0)'
+    color: '#808080'
+    dirs:
+      - ${paths.r0915_1340}/scratch_bs_2048_lr_3e-4_ce_1.0_jc_0.0_lam_0.1_temp_0.1/seed_42    # C, best 0.60213 @ep10
+      - ${paths.r0915_1340}/scratch_bs_2048_lr_3e-4_ce_1.0_jc_0.0_lam_0.1_temp_0.1/seed_424    # C, best 0.60243 @ep25
+      - ${paths.r0915_1340}/scratch_bs_2048_lr_3e-4_ce_1.0_jc_0.0_lam_0.1_temp_0.1/seed_4242    # C, best 0.60207 @ep14
+      - ${paths.r0915_1340}/scratch_bs_2048_lr_3e-4_ce_1.0_jc_0.0_lam_0.1_temp_0.1/seed_42424    # C, best 0.60745 @ep34
+      - ${paths.r0915_1340}/scratch_bs_2048_lr_3e-4_ce_1.0_jc_0.0_lam_0.1_temp_0.1/seed_424242    # C, best 0.60182 @ep22
+      - ${paths.r0915_1340}/scratch_bs_2048_lr_3e-4_ce_1.0_jc_0.0_lam_0.1_temp_0.1/seed_4242424    # C, best 0.60151 @ep20
+      - ${paths.r0915_1340}/scratch_bs_2048_lr_3e-4_ce_1.0_jc_0.0_lam_0.1_temp_0.1/seed_42424242    # C, best 0.59977 @ep35
+  - color: '#e6194b'
+    dirs:
+      - ${paths.r0819_1355}/scratch_bs_1024_lr_3e-4_ce_1.0_jc_0.3_lam_0.05_temp_0.1/seed_42    # A, best 0.60803 @ep11
+      - ${paths.r0819_1355}/scratch_bs_1024_lr_3e-4_ce_1.0_jc_0.3_lam_0.05_temp_0.1/seed_424    # A, best 0.60777 @ep8
+      - ${paths.r0819_1355}/scratch_bs_1024_lr_3e-4_ce_1.0_jc_0.3_lam_0.05_temp_0.1/seed_4242    # A, best 0.60753 @ep8
+      - ${paths.r0819_1355}/scratch_bs_1024_lr_3e-4_ce_1.0_jc_0.3_lam_0.05_temp_0.1/seed_42424    # A, best 0.60705 @ep10
+      - ${paths.r0819_1355}/scratch_bs_1024_lr_3e-4_ce_1.0_jc_0.3_lam_0.05_temp_0.1/seed_424242    # A, best 0.60735 @ep11
+      - ${paths.r0819_1355}/scratch_bs_1024_lr_3e-4_ce_1.0_jc_0.3_lam_0.05_temp_0.1/seed_4242424    # A, best 0.60676 @ep7
+  - color: '#0082c8'
+    dirs:
+      - ${paths.r0819_1344}/scratch_bs_1024_lr_3e-4_ce_1.0_jc_0.3_lam_0.1_temp_0.1/seed_42    # A, best 0.60647 @ep11
+      - ${paths.r0819_1344}/scratch_bs_1024_lr_3e-4_ce_1.0_jc_0.3_lam_0.1_temp_0.1/seed_424    # A, best 0.60605 @ep11
+      - ${paths.r0819_1344}/scratch_bs_1024_lr_3e-4_ce_1.0_jc_0.3_lam_0.1_temp_0.1/seed_4242    # A, best 0.60600 @ep14
+      - ${paths.r0819_1344}/scratch_bs_1024_lr_3e-4_ce_1.0_jc_0.3_lam_0.1_temp_0.1/seed_42424    # A, best 0.60665 @ep9
+      - ${paths.r0819_1344}/scratch_bs_1024_lr_3e-4_ce_1.0_jc_0.3_lam_0.1_temp_0.1/seed_424242    # A, best 0.60581 @ep11
+  - color: '#f58231'
+    dirs:
+      - ${paths.r0828_1636}/scratch_bs_1024_lr_3e-4_ce_1.0_jc_0.3_lam_0.2_temp_0.1/seed_42    # A, best 0.60481 @ep17
+      - ${paths.r0828_1636}/scratch_bs_1024_lr_3e-4_ce_1.0_jc_0.3_lam_0.2_temp_0.1/seed_424    # A, best 0.60459 @ep17
+      - ${paths.r0903_1557}/scratch_bs_2048_lr_3e-4_ce_1.0_jc_0.3_lam_0.2_temp_0.1/seed_42    # B, best 0.60443 @ep17
+  - color: '#911eb4'
+    dirs:
+      - ${paths.r0819_1355}/scratch_bs_1024_lr_3e-4_ce_1.0_jc_0.3_lam_0.25_temp_0.1/seed_42    # A, best 0.60255 @ep20
+      - ${paths.r0819_1355}/scratch_bs_1024_lr_3e-4_ce_1.0_jc_0.3_lam_0.25_temp_0.1/seed_424    # A, best 0.60260 @ep20
+      - ${paths.r0819_1355}/scratch_bs_1024_lr_3e-4_ce_1.0_jc_0.3_lam_0.25_temp_0.1/seed_4242    # A, best 0.60246 @ep17
+      - ${paths.r0819_1355}/scratch_bs_1024_lr_3e-4_ce_1.0_jc_0.3_lam_0.25_temp_0.1/seed_42424    # A, best 0.60210 @ep17
+  - color: '#46f0f0'
+    dirs:
+      - ${paths.r0819_1357}/scratch_bs_1024_lr_3e-4_ce_1.0_jc_0.3_lam_0.3_temp_0.1/seed_42    # A, best 0.60213 @ep20
+      - ${paths.r0819_1357}/scratch_bs_1024_lr_3e-4_ce_1.0_jc_0.3_lam_0.3_temp_0.1/seed_424    # A, best 0.60175 @ep25
+      - ${paths.r0819_1357}/scratch_bs_1024_lr_3e-4_ce_1.0_jc_0.3_lam_0.3_temp_0.1/seed_4242    # A, best 0.60216 @ep22
+      - ${paths.r0819_1357}/scratch_bs_1024_lr_3e-4_ce_1.0_jc_0.3_lam_0.3_temp_0.1/seed_42424    # A, best 0.60165 @ep26
+      - ${paths.r0903_1557}/scratch_bs_2048_lr_3e-4_ce_1.0_jc_0.3_lam_0.3_temp_0.1/seed_42    # B, best 0.60259 @ep27
+  - color: '#f032e6'
+    dirs:
+      - ${paths.r0819_1357}/scratch_bs_1024_lr_3e-4_ce_1.0_jc_0.3_lam_0.35_temp_0.1/seed_42    # A, best 0.60171 @ep23
+      - ${paths.r0819_1357}/scratch_bs_1024_lr_3e-4_ce_1.0_jc_0.3_lam_0.35_temp_0.1/seed_424    # A, best 0.60136 @ep30
+      - ${paths.r0828_1532}/scratch_bs_1024_lr_3e-4_ce_1.0_jc_0.3_lam_0.35_temp_0.1/seed_42    # A, best 0.60276 @ep22
+      - ${paths.r0828_1532}/scratch_bs_1024_lr_3e-4_ce_1.0_jc_0.3_lam_0.35_temp_0.1/seed_424    # A, best 0.60196 @ep32
+      - ${paths.r0903_1557}/scratch_bs_2048_lr_3e-4_ce_1.0_jc_0.3_lam_0.35_temp_0.1/seed_42    # B, best 0.60257 @ep27
+  - color: '#3cb44b'
+    dirs:
+      - ${paths.r0828_1532}/scratch_bs_1024_lr_3e-4_ce_1.0_jc_0.3_lam_0.4_temp_0.1/seed_42    # A, best 0.62015 @ep98
+      - ${paths.r0903_1557}/scratch_bs_2048_lr_3e-4_ce_1.0_jc_0.3_lam_0.4_temp_0.1/seed_42    # B, best 0.60210 @ep27
+      - ${paths.r0915_1339}/scratch_bs_2048_lr_3e-4_ce_1.0_jc_0.3_lam_0.4_temp_0.1/seed_42    # C, best 0.60201 @ep48
+      - ${paths.r0915_1339}/scratch_bs_2048_lr_3e-4_ce_1.0_jc_0.3_lam_0.4_temp_0.1/seed_424    # C, best 0.60124 @ep39
+  - color: '#008080'
+    dirs:
+      - ${paths.r0903_1557}/scratch_bs_2048_lr_3e-4_ce_1.0_jc_0.3_lam_0.45_temp_0.1/seed_42    # B, best 0.60174 @ep48
+      - ${paths.r0922_0951}/scratch_bs_2048_lr_3e-4_ce_1.0_jc_0.3_lam_0.45_temp_0.1/seed_424    # C, best 0.60116 @ep72
+  - color: '#800000'
+    dirs:
+      - ${paths.r0828_1532}/scratch_bs_1024_lr_3e-4_ce_1.0_jc_0.3_lam_0.5_temp_0.1/seed_42    # A, best 0.60232 @ep40
+      - ${paths.r0828_1532}/scratch_bs_1024_lr_3e-4_ce_1.0_jc_0.3_lam_0.5_temp_0.1/seed_424    # A, best 0.60248 @ep36
+      - ${paths.r0903_1557}/scratch_bs_2048_lr_3e-4_ce_1.0_jc_0.3_lam_0.5_temp_0.1/seed_42    # B, best 0.60204 @ep39
+      - ${paths.r0915_1339}/scratch_bs_2048_lr_3e-4_ce_1.0_jc_0.3_lam_0.5_temp_0.1/seed_42    # C, best 0.60274 @ep43
+      - ${paths.r0915_1339}/scratch_bs_2048_lr_3e-4_ce_1.0_jc_0.3_lam_0.5_temp_0.1/seed_424    # C, best 0.60197 @ep46
+  - color: '#808000'
+    dirs:
+      - ${paths.r0903_1557}/scratch_bs_2048_lr_3e-4_ce_1.0_jc_0.3_lam_0.55_temp_0.1/seed_42    # B, best 0.60044 @ep62
+      - ${paths.r0922_0951}/scratch_bs_2048_lr_3e-4_ce_1.0_jc_0.3_lam_0.55_temp_0.1/seed_424    # C, best 0.59929 @ep98
+  - color: '#000080'
+    dirs:
+      - ${paths.r0828_1532}/scratch_bs_1024_lr_3e-4_ce_1.0_jc_0.3_lam_0.6_temp_0.1/seed_42    # A, best 0.60054 @ep48
+      - ${paths.r0903_1557}/scratch_bs_2048_lr_3e-4_ce_1.0_jc_0.3_lam_0.6_temp_0.1/seed_42    # B, best 0.60020 @ep62
+      - ${paths.r0915_1339}/scratch_bs_2048_lr_3e-4_ce_1.0_jc_0.3_lam_0.6_temp_0.1/seed_42    # C, best 0.59905 @ep95
+  - color: '#4b00ff'
+    dirs:
+      - ${paths.r0922_0945}/scratch_bs_2048_lr_3e-4_ce_1.0_jc_0.3_lam_0.64_temp_0.1/seed_42    # C, best 0.59921 @ep99
+  - color: '#aa6e28'
+    dirs:
+      - ${paths.r0903_1557}/scratch_bs_2048_lr_3e-4_ce_1.0_jc_0.3_lam_0.65_temp_0.1/seed_42    # B, best 0.60011 @ep62
+      - ${paths.r0915_1339}/scratch_bs_2048_lr_3e-4_ce_1.0_jc_0.3_lam_0.65_temp_0.1/seed_42    # C, best 0.59936 @ep71
+  - color: '#a50069'
+    dirs:
+      - ${paths.r0915_1339}/scratch_bs_2048_lr_3e-4_ce_1.0_jc_0.3_lam_0.7_temp_0.1/seed_42    # C, best 0.59953 @ep99
+      - ${paths.r0922_0951}/scratch_bs_2048_lr_3e-4_ce_1.0_jc_0.3_lam_0.7_temp_0.1/seed_424    # C, best 0.60725 @ep98
+  - color: '#4b78ff'
+    dirs:
+      - ${paths.r0915_1339}/scratch_bs_2048_lr_3e-4_ce_1.0_jc_0.3_lam_0.75_temp_0.1/seed_42    # C, best 0.59972 @ep73
+  - color: '#ff1e00'
+    dirs:
+      - ${paths.r0915_1339}/scratch_bs_2048_lr_3e-4_ce_1.0_jc_0.3_lam_0.8_temp_0.1/seed_42    # C, best 0.60012 @ep61
+      - ${paths.r0915_1339}/scratch_bs_2048_lr_3e-4_ce_1.0_jc_0.3_lam_0.8_temp_0.1/seed_424    # C, best 0.60804 @ep72
