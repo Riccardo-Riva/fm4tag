@@ -294,6 +294,12 @@ def build_roc_config(cfg: dict, model_results: list) -> dict:
                 'dir': entry['dir'],
                 'label': f'{base_label} (f_c = {fc:.3f}, f_tau = {ftau:.3f})',
                 'fractions': {'c': round(fc, 6), 'tau': round(ftau, 6)},
+                # A pinned checkpoint must survive into the ROC config, or
+                # roc_comparison.py re-resolves 'best' and plots a different
+                # epoch from the one the fractions were optimised for.
+                **(
+                    {'checkpoint': entry['checkpoint']} if 'checkpoint' in entry else {}
+                ),
                 **({'colour': colour} if colour else {}),
             }
         )
