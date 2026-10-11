@@ -1,0 +1,38 @@
+# OVERLAY for scripts/plot_best_vs_lambda.py: CATEGORICAL colours - a totally different colour for every lambda,
+# instead of the blue -> teal -> amber gradient of the base config.  Apply it on top of the focus-plot overlay:
+#
+#   .venv/bin/python scripts/plot_best_vs_lambda.py \
+#       --config scripts/configs/val_loss_ce_seed_curves_cmap.yaml \
+#                scripts/configs/val_loss_ce_best_vs_lambda_no_dropout_min2.yaml \
+#                scripts/configs/val_loss_ce_best_vs_lambda_categorical_colours.yaml
+#
+# Writes val_loss_ce_best_vs_lambda_no_dropout_min2_categorical.png (+ _summary.csv, + the seed-curves figure
+# ..._categorical_curves.png of the same runs); the gradient versions are not touched.
+#
+# The palette is the one of the earlier categorical plots (val_loss_ce_seed_curves.yaml and the ROC runs of
+# scripts/plots/run_20261001_110047_*), so every lambda keeps its colour across all of them.  It is pinned by lambda
+# VALUE, not by rank: a lambda has the same colour whichever other lambdas are drawn.  The jc = 0 baseline stays black
+# (its `color:` in the models list).
+
+best_vs_lambda:
+  filename: val_loss_ce_best_vs_lambda_no_dropout_min2_categorical.png
+
+color:
+  categorical: true
+  by_lambda:
+    '0.05': '#e6194b'   # red
+    '0.1':  '#0082c8'   # blue
+    '0.2':  '#f58231'   # orange
+    '0.25': '#911eb4'   # purple
+    '0.3':  '#46f0f0'   # cyan
+    '0.35': '#f032e6'   # magenta
+    '0.4':  '#3cb44b'   # green
+    '0.45': '#008080'   # teal
+    '0.5':  '#800000'   # maroon
+    '0.55': '#808000'   # olive
+    '0.6':  '#000080'   # navy
+    '0.64': '#4b00ff'   # indigo
+    '0.65': '#aa6e28'   # brown
+    '0.7':  '#a50069'   # plum
+    '0.75': '#4b78ff'   # cornflower
+    '0.8':  '#ff1e00'   # vermilion

@@ -1,0 +1,28 @@
+# OVERLAY for scripts/plot_best_vs_lambda.py: the mean-best-CE plot WITHOUT the "no contrastive + dropout"
+# baseline and WITHOUT the lambdas that have a single usable seed (lambda 0.64, 0.7, 0.75, 0.8).
+#
+# It holds only the keys that differ from the full config and is merged on top of it, so the pool, the colours,
+# the stuck list and every text stay defined in ONE place (the base file).  Any other key of `best_vs_lambda:`
+# can be overridden here for this plot only - e.g. a `texts:` block with a different title or axis label.
+#
+#   .venv/bin/python scripts/plot_best_vs_lambda.py \
+#       --config scripts/configs/val_loss_ce_seed_curves_cmap.yaml \
+#                scripts/configs/val_loss_ce_best_vs_lambda_no_dropout_min2.yaml
+#
+# Writes val_loss_ce_best_vs_lambda_no_dropout_min2.png and ..._summary.csv under plot.out_dir of the base file
+# (plots/val_loss_ce).  The CSV still lists every configuration; its `shown_in_plot` column says which are drawn.
+
+best_vs_lambda:
+  filename: val_loss_ce_best_vs_lambda_no_dropout_min2.png
+  min_seeds: 2          # lambdas with fewer usable seeds are not drawn; they are named in the footnote
+  hide_references:
+    - 'no contrastive + dropout 0.1 (JC 0.0)'
+  curves: true          # also write val_loss_ce_best_vs_lambda_no_dropout_min2_curves.png: the seed curves of exactly these runs
+  # Texts of THIS plot only; every other text is inherited from the base file.  null = element switched off.
+  texts:
+    ylabel: 'Best validation cross-entropy loss'
+    xlabel: 'Noise parameter $\lambda$'
+    tick_stuck: null            # no "(k stuck)" line under a lambda -> the plain `tick` (lambda + n=) is used
+    tick_reference_stuck: null  # same under the baseline
+    tick_outliers: null         # no "(k outlier)" line under the baseline
+    mean_entry: null            # no legend box in the top right (the footnotes still name what was left out)
