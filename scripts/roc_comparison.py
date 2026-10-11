@@ -10,9 +10,11 @@ Given a YAML config listing training-run directories (as produced by the
    exactly as ``fm4tag.runner.run`` does,
 3. runs test-set inference — class probabilities are cached as ``.npz`` under
    ``<out_dir>/cache/``, so re-plotting does not re-run inference,
-4. draws puma (ATLAS-style) comparison plots:
+4. draws puma comparison plots (no experiment brand: ``plot.atlas_brand`` is
+   empty unless a config sets it):
 
-   - ``roc.png``              — ROC curves, one ratio panel per background
+   - ``roc.png``              — ROC curves, one ratio panel per background, top to
+                                bottom c, light, tau (``plot.ratio_order`` overrides)
    - ``disc_<label>.png``     — per-flavour discriminant distributions, one per tagger
    - ``disc_signal.png``      — signal-jet discriminant, all taggers overlaid
    - ``rej_vs_pt_<bkg>.png``  — background rejection vs pT at a fixed WP (optional)
@@ -80,6 +82,10 @@ from fm4tag.utils import build_aggregator, build_encoders, build_head
 FLAVOURS = ('b', 'c', 'u', 'tau')
 TRUTH_ID = {'b': 5, 'c': 4, 'u': 0, 'tau': 15}  # HadronConeExclTruthLabelID
 PUMA_CLASS = {'b': 'bjets', 'c': 'cjets', 'u': 'ujets', 'tau': 'taujets'}
+
+# Ratio panels of the ROC plot, top to bottom, whatever the order of `backgrounds`
+# in the config; `plot.ratio_order` overrides it.
+RATIO_PANEL_ORDER = ('c', 'u', 'tau')
 
 CUT_OPS = {
     '>': operator.gt,
@@ -479,7 +485,7 @@ def plot_rocs(
         xlabel=f'${signal}$-jet efficiency',
         figsize=tuple(plot_cfg.get('figsize', (7, 7))),
         y_scale=plot_cfg.get('y_scale', 1.3),
-        atlas_brand=plot_cfg.get('atlas_brand', 'ATLAS'),
+        atlas_brand=plot_cfg.get('atlas_brand', ''),
         atlas_first_tag=plot_cfg.get('atlas_first_tag', 'Simulation Internal'),
         atlas_second_tag=plot_cfg.get('atlas_second_tag', ''),
         dpi=plot_cfg.get('dpi', 200),
@@ -500,15 +506,22 @@ def plot_rocs(
                 ),
                 reference=tagger.is_reference,
             )
-    for panel, bkg in enumerate(backgrounds, start=1):
+    # Ratio panels top to bottom: c, light, tau, whatever the order of `backgrounds`;
+    # a background missing from the order goes after the listed ones.
+    ratio_order = [
+        b for b in plot_cfg.get('ratio_order', RATIO_PANEL_ORDER) if b in backgrounds
+    ]
+    ratio_order += [b for b in backgrounds if b not in ratio_order]
+    for panel, bkg in enumerate(ratio_order, start=1):
         roc_plot.set_ratio_class(panel, Flavours[PUMA_CLASS[bkg]])
     roc_plot.draw()
 
     if plot_cfg.get('legend_outside'):
         _legend_outside(roc_plot, plot_cfg)
 
-    roc_plot.savefig(str(out_dir / 'roc.png'), transparent=False)
-    print(f'Saved {out_dir / "roc.png"}')
+    roc_name = plot_cfg.get('roc_filename', 'roc.png')
+    roc_plot.savefig(str(out_dir / roc_name), transparent=False)
+    print(f'Saved {out_dir / roc_name}')
 
 
 def plot_disc_distributions(
@@ -525,6 +538,7 @@ def plot_disc_distributions(
         xlabel=f'$D_{{{signal}}}$',
         ylabel='Normalised entries',
         logy=disc_cfg.get('logy', False),
+        atlas_brand=plot_cfg.get('atlas_brand', ''),
         atlas_first_tag=plot_cfg.get('atlas_first_tag', 'Simulation Internal'),
         dpi=plot_cfg.get('dpi', 200),
     )
@@ -598,6 +612,7 @@ def plot_eff_vs_pt(
         xlabel=r'$p_{T}$ [GeV]',
         n_ratio_panels=1,
         figsize=tuple(plot_cfg.get('figsize', (7, 7))),
+        atlas_brand=plot_cfg.get('atlas_brand', ''),
         atlas_first_tag=plot_cfg.get('atlas_first_tag', 'Simulation Internal'),
         atlas_second_tag=(
             f'{second_tag}\n{wp_kind} $\\varepsilon_{{{signal}}}$ = {wp:.0%} WP'
@@ -686,7 +701,7 @@ def working_point_table(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description='ROC comparison of fm4tag classifiers (puma / ATLAS style).'
+        description='ROC comparison of fm4tag classifiers (puma plots).'
     )
     parser.add_argument('--config', type=Path, required=True, help='YAML config file')
     parser.add_argument(
