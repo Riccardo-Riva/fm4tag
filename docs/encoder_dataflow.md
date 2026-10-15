@@ -165,6 +165,22 @@ mixing from there.
   feed-forward) runs at width `row_dim = N·dim`, so it mixes feature tokens.
   Parameters scale as `row_dim²` — see `encoders/rowcol_concat_v0.yaml`.
 
+### Jet chunks (`chunk_size`)
+
+With `chunk_size: C` (top level of the config) the batch is cut into chunks of
+`C` consecutive jets and the row attention runs **within a chunk only**: among
+the chunk's jets in the global encoder, and among *all valid tracks of the
+chunk's jets* in the track encoder. Tracks are packed jet-major, so a jet chunk
+is a contiguous run of the packed axis; `view_encoding.batch_row_groups` builds
+the boundaries (`RowGroups`, int32 `cu_seqlens`) once per batch and every view
+and layer reuses them. On GPU (bf16/fp16) each row step is one flash
+**varlen** call (`torch.nn.attention.varlen.varlen_attn`) in which the
+`N` tokens × `heads` are independent heads; on CPU / fp32 an exact loop over
+the chunks runs instead. Cost per jet is O(C) rather than O(B), so the batch
+can be raised to fill the GPU without slowing the step per jet, and `C` — not
+the batch — is the intersample context. `chunk_size: null` = the whole batch is
+one chunk.
+
 > Consequence of row attention: a sample's output depends on which
 > other samples share its batch — keep evaluation batch composition fixed when
 > comparing numbers.

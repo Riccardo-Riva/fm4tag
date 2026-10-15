@@ -51,6 +51,7 @@ from torchmetrics.classification import MulticlassAUROC
 from ..augmentations import Compose
 from ..losses import validate_loss_weights
 from .view_encoding import (
+    batch_row_groups,
     encode_clean,
     encode_constituent_view,
     encode_global_view,
@@ -93,6 +94,10 @@ class FinetuneModule(L.LightningModule):
                       before ramping them onto the head's schedule.  ``0``
                       trains everything from step 0; ``>= max_epochs`` keeps
                       them frozen for the whole run.
+        chunk_size:   Jets per intersample-attention chunk: each jet (and each
+                      of its constituents) attends only within its chunk of
+                      ``chunk_size`` consecutive jets.  ``None`` = the whole
+                      batch is one chunk.
     """
 
     def __init__(
@@ -112,6 +117,7 @@ class FinetuneModule(L.LightningModule):
         weight_decay: float = 1e-5,
         warmup_frac: float = 0.1,
         unfreeze_at_epoch: int = 0,
+        chunk_size: int | None = None,
     ) -> None:
         super().__init__()
 
@@ -152,6 +158,7 @@ class FinetuneModule(L.LightningModule):
         self.weight_decay = weight_decay
         self.warmup_frac = warmup_frac
         self.unfreeze_at_epoch = unfreeze_at_epoch
+        self.chunk_size = chunk_size
 
         if class_weights is not None:
             self.register_buffer(
@@ -173,8 +180,17 @@ class FinetuneModule(L.LightningModule):
     # Forward: clean embeddings (same contract as PretrainModule)
     # ------------------------------------------------------------------
 
-    def forward(self, batch: dict) -> dict[str, torch.Tensor]:
+    def _row_groups(self, batch: dict) -> dict:
+        return batch_row_groups(
+            batch, self.global_object, self.constituent_objects, self.chunk_size
+        )
+
+    def forward(
+        self, batch: dict, groups: dict | None = None
+    ) -> dict[str, torch.Tensor]:
         """Clean (no augmentation) embeddings for every object and the aggregator.
+
+        ``groups`` (from :meth:`_row_groups`) is rebuilt when not given.
 
         Returns:
             ``{'<obj>_embedding': (B or N_valid, d), ..., 'aggregator': (B, d)}``
@@ -185,6 +201,7 @@ class FinetuneModule(L.LightningModule):
             batch,
             self.global_object,
             self.constituent_objects,
+            groups if groups is not None else self._row_groups(batch),
         )
 
     # ------------------------------------------------------------------
@@ -192,7 +209,10 @@ class FinetuneModule(L.LightningModule):
     # ------------------------------------------------------------------
 
     def _encode_jet_views(
-        self, batch: dict, z_clean: torch.Tensor | None = None
+        self,
+        batch: dict,
+        z_clean: torch.Tensor | None = None,
+        groups: dict | None = None,
     ) -> list[torch.Tensor]:
         """One aggregator output per augmentation view (as in pretraining).
 
@@ -203,6 +223,8 @@ class FinetuneModule(L.LightningModule):
         ``[CutMix+Mixup, Identity]`` pair this turns three full encoder passes
         per step into two, bit-for-bit unchanged.
         """
+        if groups is None:
+            groups = self._row_groups(batch)
         views = list(self.views)
         todo = [
             v for v, view in enumerate(views) if z_clean is None or not view.is_identity
@@ -212,7 +234,9 @@ class FinetuneModule(L.LightningModule):
 
         enc_global = self.backbone[self.global_object]
         z_global_views = {
-            v: encode_global_view(enc_global, views[v], batch['global'])[0]
+            v: encode_global_view(
+                enc_global, views[v], batch['global'], groups[self.global_object]
+            )[0]
             for v in todo
         }
 
@@ -227,7 +251,9 @@ class FinetuneModule(L.LightningModule):
 
             z_views = {}
             for v in todo:
-                z, _ = encode_constituent_view(encoder, views[v], const, valids_flat)
+                z, _ = encode_constituent_view(
+                    encoder, views[v], const, valids_flat, groups[obj_name]
+                )
                 z_views[v] = scatter_valid(z, valids_flat, B, C)
             z_consts_per_obj.append(z_views)
             valids_per_obj.append(valids)
@@ -248,8 +274,9 @@ class FinetuneModule(L.LightningModule):
     ) -> tuple[torch.Tensor, torch.Tensor, dict[str, torch.Tensor]]:
         """Returns ``(total_loss, logits, log_dict)``."""
         w = self.loss_weights
+        groups = self._row_groups(batch)  # shared by the clean pass and every view
 
-        out = self(batch)
+        out = self(batch, groups)
         logits = self.head(out['aggregator'])
 
         total = logits.new_zeros(())
@@ -263,7 +290,9 @@ class FinetuneModule(L.LightningModule):
         if w['jet_contrastive'] > 0:
             # Costs one extra full encoder pass per NON-identity view; identity
             # views reuse the clean aggregator output computed above.
-            z_jet_list = self._encode_jet_views(batch, z_clean=out['aggregator'])
+            z_jet_list = self._encode_jet_views(
+                batch, z_clean=out['aggregator'], groups=groups
+            )
             l_jet = self.jet_contrastive_loss(z_jet_list)
             total = total + w['jet_contrastive'] * l_jet
             log_dict['aggregator/loss_contrastive'] = l_jet

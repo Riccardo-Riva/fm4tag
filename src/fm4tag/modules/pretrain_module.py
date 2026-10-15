@@ -31,6 +31,7 @@ from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
 from ..augmentations import Compose
 from ..losses import denoising_cat_loss, denoising_con_loss, validate_loss_weights
 from .view_encoding import (
+    batch_row_groups,
     encode_clean,
     encode_constituent_view,
     encode_global_view,
@@ -68,6 +69,10 @@ class PretrainModule(L.LightningModule):
         weight_decay: AdamW weight decay.
         warmup_frac:  Fraction of total steps used for linear LR warmup before
                       cosine annealing.
+        chunk_size:   Jets per intersample-attention chunk: each jet (and each
+                      of its constituents) attends only within its chunk of
+                      ``chunk_size`` consecutive jets.  ``None`` = the whole
+                      batch is one chunk.
 
     Valid-mask consistency
     ----------------------
@@ -92,6 +97,7 @@ class PretrainModule(L.LightningModule):
         lr: float = 1e-4,
         weight_decay: float = 1e-5,
         warmup_frac: float = 0.1,
+        chunk_size: int | None = None,
     ) -> None:
         super().__init__()
 
@@ -145,6 +151,7 @@ class PretrainModule(L.LightningModule):
         self.lr = lr
         self.weight_decay = weight_decay
         self.warmup_frac = warmup_frac
+        self.chunk_size = chunk_size
 
         # nn.Module args are excluded: their weights live in the checkpoint's
         # state_dict and they are rebuilt from config on load.  Everything
@@ -172,8 +179,13 @@ class PretrainModule(L.LightningModule):
             return len(self.views)
         return 1
 
+    def _row_groups(self, batch: dict) -> dict:
+        return batch_row_groups(
+            batch, self.global_object, self.constituent_objects, self.chunk_size
+        )
+
     def _global_object_loss(
-        self, batch: dict
+        self, batch: dict, groups: dict
     ) -> tuple[torch.Tensor, dict[str, torch.Tensor], list[torch.Tensor]]:
         """Loss components for the global object.
 
@@ -187,7 +199,9 @@ class PretrainModule(L.LightningModule):
         zs: list[torch.Tensor] = []
         X_first: torch.Tensor | None = None
         for i in range(self._n_encode_views()):
-            z, X = encode_global_view(encoder, self.views[i], x_orig)
+            z, X = encode_global_view(
+                encoder, self.views[i], x_orig, groups[self.global_object]
+            )
             zs.append(z)
             if i == 0:
                 X_first = X
@@ -210,7 +224,7 @@ class PretrainModule(L.LightningModule):
         return obj_loss, logs, zs
 
     def _constituent_loss(
-        self, batch: dict, obj_name: str, needs_jet: bool
+        self, batch: dict, obj_name: str, needs_jet: bool, groups: dict
     ) -> tuple[
         torch.Tensor,
         dict[str, torch.Tensor],
@@ -233,7 +247,9 @@ class PretrainModule(L.LightningModule):
         zs: list[torch.Tensor] = []
         X_first: torch.Tensor | None = None
         for i in range(self._n_encode_views()):
-            z, X = encode_constituent_view(encoder, self.views[i], const, valids_flat)
+            z, X = encode_constituent_view(
+                encoder, self.views[i], const, valids_flat, groups[obj_name]
+            )
             zs.append(z)
             if i == 0:
                 X_first = X
@@ -283,8 +299,9 @@ class PretrainModule(L.LightningModule):
 
         total = batch['global'].new_zeros(())
         log_dict: dict[str, torch.Tensor] = {}
+        groups = self._row_groups(batch)  # shared by every view
 
-        obj_loss, obj_logs, z_global_views = self._global_object_loss(batch)
+        obj_loss, obj_logs, z_global_views = self._global_object_loss(batch, groups)
         total = total + obj_loss
         for k, v in obj_logs.items():
             log_dict[f'{self.global_object}_embedding/{k}'] = v
@@ -293,7 +310,7 @@ class PretrainModule(L.LightningModule):
         valids_per_obj: list[torch.Tensor] = []
         for obj_name in self.constituent_objects:
             obj_loss, obj_logs, z_views, valids = self._constituent_loss(
-                batch, obj_name, needs_jet
+                batch, obj_name, needs_jet, groups
             )
             total = total + obj_loss
             for k, v in obj_logs.items():
@@ -334,6 +351,7 @@ class PretrainModule(L.LightningModule):
             batch,
             self.global_object,
             self.constituent_objects,
+            self._row_groups(batch),
         )
 
     # ------------------------------------------------------------------

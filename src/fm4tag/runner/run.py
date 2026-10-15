@@ -31,6 +31,17 @@ from fm4tag.utils import (
 )
 
 
+def _check_chunk_size(chunk_size: int | None, batch_size: int) -> None:
+    """Training batches must split into whole jet chunks (eval may be ragged)."""
+    if chunk_size is None:
+        return
+    if chunk_size < 1 or batch_size % chunk_size:
+        raise ValueError(
+            f'datamodule.batch_size={batch_size} must be a positive multiple of '
+            f'chunk_size={chunk_size}.'
+        )
+
+
 def run(
     cfg: DictConfig,
     *,
@@ -100,6 +111,7 @@ def run(
     )
 
     # ── Data ──────────────────────────────────────────────────────────────
+    _check_chunk_size(cfg.get('chunk_size'), cfg.datamodule.batch_size)
     dm = hydra_instantiate(
         cfg.datamodule,
         _convert_='all',

@@ -98,11 +98,10 @@ datamodule:
   norm_dict_path:  ${norm_dict_path}
   class_dict_path: ${class_dict_path}
 
-  # NOTE: batch_size is a MODEL hyper-parameter here, not just a throughput
-  # knob — the row (intersample) attention makes every sample's output depend on
-  # its batch-mates, at inference as well as training.  Measured throughput is
-  # already flat past ~1024 (1024->4096 buys +19% for 4x the memory), so there is
-  # nothing to win by raising it and the model semantics change if you do.
+  # Jets per rank and step.  With chunk_size set (see below) the intersample
+  # context is the chunk, so batch_size is an optimisation knob only (gradient
+  # batch, VRAM); with chunk_size: null the whole batch is the context and
+  # batch_size is a MODEL hyper-parameter.  Must be a multiple of chunk_size.
   batch_size:      1024
   num_workers:     6
   prefetch_factor: 2
@@ -119,6 +118,13 @@ datamodule:
   #   >1 = stitched from that many random regions, redrawn every epoch
   reads_per_batch: 8
   seed:            ${seed}
+
+# ── Intersample chunks ────────────────────────────────────────────────────────
+# Jets per intersample-attention chunk: each jet, and each of its tracks,
+# attends (row attention) only within its chunk of chunk_size consecutive jets
+# of the batch.  A MODEL hyper-parameter (the intersample context), also used at
+# inference.  null = the whole rank-local batch is one chunk.
+chunk_size: null
 
 # ── Backbone architecture ─────────────────────────────────────────────────────
 # The encoder architecture (the per-object embedding transformers) lives in the
@@ -215,6 +221,7 @@ pretrain:
   lr:           ${optimizer.lr}
   weight_decay: ${optimizer.weight_decay}
   warmup_frac:  0.1
+  chunk_size:   ${chunk_size}
 
 # ── Fine-tuning settings (runner-level) ───────────────────────────────────────
 encoder_ckpt:   null    # path to a pretraining checkpoint to load the encoder
@@ -256,6 +263,7 @@ finetune:
   # schedule). 0 = train everything from step 0 (from-scratch); >= max_epochs =
   # frozen for the whole run.
   unfreeze_at_epoch: 3
+  chunk_size:   ${chunk_size}
 
 # ── Optimiser ─────────────────────────────────────────────────────────────────
 optimizer:
