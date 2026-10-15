@@ -62,8 +62,6 @@ _HOT_CLASSES = {
     'RowMixer',
     'Attention',
     'RowAttention',
-    'InducedRowAttention',
-    'CrossAttention',
     'FeedForward',
     'simple_MLP',
     'sep_MLP',

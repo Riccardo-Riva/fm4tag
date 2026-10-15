@@ -82,11 +82,9 @@ WANDB_JOB_TYPE="scratch"
 
 # Encoder config group: the CLI gets `encoders=${TRANSFORMER_TYPE}_v0`, so this
 # must name a file in src/fm4tag/configs/encoders/ minus the _v0 suffix.
-#   rowcol         -> rowcol_v0         (per-token ISAB, dim 16)
-#   rowcol_concat  -> rowcol_concat_v0  (one ISAB over the concatenated N*dim
-#                                        vector; measured 2.17M params in 43.2 ms
-#                                        against rowcol_v0's 0.06M in 54.8 ms —
-#                                        strictly more model for less time)
+#   rowcol         -> rowcol_v0         (per-token row attention, dim 16)
+#   rowcol_concat  -> rowcol_concat_v0  (one row attention over the concatenated
+#                                        N*dim vector, SAINT-style)
 # Keep CONFIG in sync: rowcol_concat_test.yaml already defaults to the concat
 # encoder group, but the CLI override above is what actually decides.
 TRANSFORMER_TYPES=("rowcol_concat")
@@ -96,7 +94,7 @@ TRANSFORMER_TYPES=("rowcol_concat")
 # GPU_NUM x BATCH_SIZE.  Two things follow, and both matter here:
 #
 #  1. Intersample (row) attention does NOT all-gather across ranks — each rank's
-#     ISAB summarises only its own shard.  Keeping BATCH_SIZE fixed therefore keeps
+#     row attention sees only its own shard.  Keeping BATCH_SIZE fixed therefore keeps
 #     the intersample context identical to a single-GPU run, which is what we want.
 #  2. The gradient batch still grows with GPU_NUM, so the best learning rate shifts.
 #     A sweep at GPU_NUM=4 is NOT directly comparable to one at GPU_NUM=1.

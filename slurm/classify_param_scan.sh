@@ -216,7 +216,7 @@ TRANSFORMER_TYPE=${TRANSFORMER_TYPE:-rowcol}
 
 # PER-RANK batch size.  Also a MODEL hyper-parameter, not just a throughput knob:
 # the row (intersample) attention makes every sample's output depend on its
-# batch-mates, and the ISAB summarises only the rank's own shard (no all-gather),
+# batch-mates, and it attends only within the rank's own shard (no all-gather),
 # so this is the intersample context each sample actually sees.  Overridable so
 # a sweep can reproduce runs trained at a different context (e.g. the bs-1024
 # classify_from_scratch runs) — comparisons across batch sizes are NOT

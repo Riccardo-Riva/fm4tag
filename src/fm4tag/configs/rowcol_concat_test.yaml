@@ -9,15 +9,10 @@
 # The only difference from default.yaml as created is the encoders group:
 #   encoders: rowcol_concat_v0   (instead of rowcol_v0)
 # whose row (intersample) step runs `row_mode: concat` — the N feature tokens
-# are flattened to one wide (N*dim) vector and a single ISAB summarises the
-# batch over it, instead of N independent per-token ISABs.
-#
-# Why: under the per-token factorisation `num_inds` is paid N times (N=19 for
-# tracks) across N narrow matmuls, so raising it is expensive — 16->128 measured
-# 3.47->1.20 it/s.  In concat mode it is paid once, in one wide matmul, so
-# rowcol_concat_v0 can afford num_inds=64.  The trade is parameters: the row
-# attention and its feed-forward scale with row_dim = N*dim rather than dim
-# (2.2M with default.yaml -> 4.5M here).
+# are flattened to one wide (N*dim) vector and a single all-pairs attention runs
+# over the batch on it (SAINT), instead of N independent per-token attentions.
+# The trade is parameters: the row attention and its feed-forward scale with
+# row_dim = N*dim rather than dim.
 #
 # Use:
 #   fm4tag --config-name=rowcol_concat_test ...
@@ -153,9 +148,9 @@ datamodule:
 #   encoders.constituents.<name>   — one Encoder per constituent object
 # whose "layers" list carries ONLY the kwargs its block class accepts:
 #   type: col    → ColTransformer    (heads, dim_head)
-#   type: row    → RowTransformer    (row_heads, dim_row_head, num_inds)
+#   type: row    → RowTransformer    (row_heads, dim_row_head, row_mode)
 #   type: rowcol → RowColTransformer (col_heads, row_heads, dim_head,
-#                                     dim_row_head, num_inds)
+#                                     dim_row_head, row_mode)
 # "dim" and (for row-aware blocks) "nfeats" are injected automatically.
 #
 # Per-key CLI overrides still work, e.g.

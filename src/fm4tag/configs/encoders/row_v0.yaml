@@ -6,9 +6,8 @@
 # or overridden on the CLI:  encoders=row_v0
 #
 # RowTransformer's head arg is `row_heads` and its head dim `dim_row_head`; it
-# has no column attention — so no `col_heads` or `dim_head`.  `num_inds` selects
-# the induced (ISAB) row attention.
-#   type: row → RowTransformer(row_heads, dim_row_head, num_inds, ...)
+# has no column attention — so no `col_heads` or `dim_head`.
+#   type: row → RowTransformer(row_heads, dim_row_head, row_mode, ...)
 # `dim` and `nfeats` are injected at runtime.
 # ════════════════════════════════════════════════════════════════════════════
 
@@ -26,7 +25,6 @@ global_encoder:
       ff_mult:      1
       attn_dropout: 0.0
       ff_dropout:   0.0
-      num_inds:     16     # null = all-pairs row attention over the batch
       row_mode:     per_token  # per_token | concat — see RowMixer
 
 constituents:
@@ -45,6 +43,4 @@ constituents:
         ff_mult:       1
         attn_dropout:  0.0
         ff_dropout:    0.0
-        num_inds:      16     # ISAB inducing points: O(B*num_inds) row attention
-                              # null = all-pairs row attention over the batch
         row_mode:      per_token  # per_token | concat — see RowMixer

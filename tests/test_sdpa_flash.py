@@ -76,19 +76,15 @@ def test_cpu_tensor_falls_back_even_if_flash_attn_available():
     assert out.shape == (2, 4, 6, 8)
 
 
-# (q_shape, kv_shape) — equal for self-attention, different sequence lengths for
-# the cross-attention inside InducedRowAttention.
+# (q_shape, kv_shape) — equal for self-attention; seq_q != seq_kv is kept as a
+# generic cross-attention case of the wrapper.
 _SHAPES = [
     # Attention (column), self: (b, h, n, d)
     ((2, 4, 6, 8), (2, 4, 6, 8)),
     # RowAttention, self over the sample axis: (n, h, B, d)
     ((5, 4, 10, 8), (5, 4, 10, 8)),
-    # CrossAttention stage 1 — inducing points read the batch: q seq = num_inds,
-    # kv seq = B.
+    # cross-attention, q seq != kv seq
     ((5, 4, 6, 8), (5, 4, 10, 8)),
-    # CrossAttention stage 2 — samples read the summary: q seq = B,
-    # kv seq = num_inds.
-    ((5, 4, 10, 8), (5, 4, 6, 8)),
 ]
 
 

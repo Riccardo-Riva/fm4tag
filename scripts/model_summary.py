@@ -17,7 +17,7 @@ Usage::
     scripts/model_summary.py --config-name model_0   # a different config
 
     scripts/model_summary.py encoders=col_v0         # compare architectures
-    scripts/model_summary.py encoders.constituents.tracks.layers.0.num_inds=64
+    scripts/model_summary.py encoders.constituents.tracks.layers.0.row_mode=concat
 
     scripts/model_summary.py --max-depth 4           # deeper module tree
     scripts/model_summary.py --breakdown             # + per-component % shares
@@ -110,9 +110,8 @@ def _print_geometry(cfg, encoders: torch.nn.ModuleDict) -> None:
         parts = []
         for lc in node.get('layers', []):
             desc = f'{lc["type"]}x{lc.get("depth", 1)}'
-            if 'num_inds' in lc:
-                inds = lc['num_inds']
-                desc += f' (ISAB m={inds})' if inds is not None else ' (all-pairs row)'
+            if 'row_mode' in lc:
+                desc += f' (row {lc["row_mode"]})'
             parts.append(desc)
         print(f'  {obj_name:<12} {n_tokens:>9} {dim:>5}   {", ".join(parts) or "-"}')
 

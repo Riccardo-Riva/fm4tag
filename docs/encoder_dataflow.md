@@ -143,55 +143,26 @@ batch dimension and the **sample axis `B` is the attention sequence**:
 
 ```
 x (B, N, dim)
-   │  x + RowAttention|InducedRowAttention (over B, per token)(norm(x))
+   │  x + RowAttention (over B, per token)(norm(x))
    │  x + FeedForward(dim)(norm(x))
    ▼
 x (B, N, dim)
 ```
 
-Because every projection has width `dim` (64), not `N·dim` (1216), the row step
-is affordable at full width — the old `out_row_dim` down/up bottleneck is gone.
+`RowAttention` is all-pairs: every sample attends to every other sample, O(B²).
 
-### RowAttention variants (both attend over the `B` axis, per token)
+### `row_mode`: per-feature vs SAINT-style intersample attention
 
-`num_inds` in the layer config picks one:
+- `row_mode: per_token` (default) — the picture above: one attention per
+  feature token at width `dim`, projections shared across tokens (the tabicl
+  `ColEmbedding` factorisation). Cross-feature mixing is left to the column
+  attention.
+- `row_mode: concat` — SAINT's intersample attention: the grid is flattened to
+  one row vector `(B, N·dim)` and the whole row step (norm + attention +
+  feed-forward) runs at width `row_dim = N·dim`, so it mixes feature tokens.
+  Parameters scale as `row_dim²` — see `encoders/rowcol_concat_v0.yaml`.
 
-- `num_inds: null` → **`RowAttention`**: all-pairs — every sample attends to
-  every other sample. O(B²).
-- `num_inds: m` (default 16) → **`InducedRowAttention`**: ISAB. Two
-  cross-attentions through `m` learned inducing points, O(B·m):
-
-```
-        inducing points I (N, m, dim)          x (N, B, dim)
-                    │                               │
-                    └────► MAB₁: I attends to x ◄───┘        # read the batch
-                                  │
-                          summary (N, m, dim)
-                                  │
-                    ┌────► MAB₂: x attends to summary        # every sample reads it
-                    ▼
-                 out (N, B, dim)
-```
-
-Why ISAB is the default:
-
-- **Variable `B` is native.** The inducing points are fixed learned queries, so
-  the packed constituent count can change every step. No chunking, no random
-  permutation, no tail padding — all of which the old `ChunkedRowAttention`
-  needed, and which made a sample's output depend on which 512 others happened
-  to land in its chunk.
-- **Permutation-invariant**, and identical in train and eval.
-- **No attention mask is needed**, which keeps the row path eligible for
-  FlashAttention (an arbitrary mask forces the SDPA fallback).
-- The out-projection of MAB₂ is **zero-initialised**, so under the residual the
-  row step starts as the identity (the encoder begins col-only) and learns
-  intersample mixing from there.
-
-The inducing points are **per token** (`(N, m, dim)`). tabicl shares one set
-across columns because its column count varies per table; here `N` is fixed and
-each token is a distinct physics feature with its own embedding subspace.
-
-> Consequence of row attention (any variant): a sample's output depends on which
+> Consequence of row attention: a sample's output depends on which
 > other samples share its batch — keep evaluation batch composition fixed when
 > comparing numbers.
 
@@ -206,9 +177,9 @@ would inherit that drift, so both `Encoder` and `GlobalTransformerEncoder` end
 with a `norm_out = LayerNorm(dim)` — the `ln_f` of a pre-norm transformer.
 
 > tabicl omits this and instead zero-inits *every* block (attention out-proj and
-> FFN second linear), so its whole stack starts as the identity. We zero-init
-> only the ISAB out-projection, so the final norm is the more robust guard: it
-> holds however far training moves the weights, not just at init.
+> FFN second linear), so its whole stack starts as the identity. The final norm
+> is the more robust guard: it holds however far training moves the weights,
+> not just at init.
 
 ---
 

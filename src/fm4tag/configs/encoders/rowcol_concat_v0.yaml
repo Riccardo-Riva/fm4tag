@@ -1,56 +1,18 @@
 # ════════════════════════════════════════════════════════════════════════════
-# Encoder architecture — RowCol with CONCATENATED-vector row attention.
+# Encoder architecture — RowCol with SAINT-style CONCATENATED row attention.
 #
 # Same as rowcol_v0, except the row (intersample) step runs `row_mode: concat`:
-# instead of one ISAB per feature token (per_token), the N tokens are flattened
-# to a single wide row vector (N*dim) and ONE ISAB summarises the batch over that
-# vector — the pre-ISAB "row attention on the concatenated embeddings" shape, now
-# with ISAB as the O(B*num_inds) summary.
+# instead of one row attention per feature token (per_token), the N tokens are
+# flattened to a single wide row vector (N*dim) and ONE all-pairs attention runs
+# over the batch on that vector — SAINT's intersample attention.  concat's row
+# step mixes the feature tokens (per_token's does not), so it is a different
+# model, not a faster way to compute the same one.
 #
-# Why choose this over rowcol_v0 — MEASURED (1x A40, 60 steps, 2026-08-17):
-#
-#   phase     bs    per_token        concat           gain
-#   finetune  512   5.36 it/s        5.40 it/s        +1%
-#   finetune  1024  4.18 it/s        4.90 it/s       +17%
-#   finetune  2048  2.49 it/s        3.06 it/s       +23%
-#   pretrain  512   2.45 it/s        2.85 it/s       +16%
-#
-#   Controlled (rowcol_v0 with ONLY row_mode flipped, so col_heads/dim_head are
-#   held equal): 4.24 -> 4.72 it/s, 236 -> 212 ms/step, and peak memory went
-#   DOWN slightly (5.73 -> 5.54 GiB).  The gain grows with batch size because
-#   per_token issues N=19 narrow attentions whose inefficiency scales with B.
-#
-#   Mechanism, from the CUDA kernel census: the row step's flash-attention calls
-#   drop 72 -> 24 per step and their backward 28.1 -> 10.1 ms/step.  PyTorch's
-#   flash kernels tile at head-dim 32 and sequence 128, so N narrow attentions
-#   each waste most of a tile; one wide attention does not.
-#
-#   * num_inds is paid ONCE (not N=19 times).  At the current dim=16 num_inds is
-#     close to free in BOTH modes though (concat 256 vs 64: 4.90 vs 4.79 it/s;
-#     per_token 128 vs 16: 4.18 vs 4.20), so this is a smaller advantage than the
-#     original rationale assumed.
-#
-# NOTE this is not a drop-in speedup: concat's row step mixes the feature tokens
-# (per_token's does not), so it is a different model and needs its own quality
-# comparison, not just the throughput numbers above.
-# The trade, and it is a steep one: the row attention AND its feed-forward now run
-# at width row_dim = N*dim, and both are dense at that width, so parameters scale
-# as row_dim^2 = (N*dim)^2 — QUADRATIC in dim, not linear.  For tracks (N=19):
-#
-#     dim   row_dim   tracks encoder (depth 6, ff_mult 4)
-#      16      304        14.7 M
-#      32      608        42.7 M
-#      64     1216       138.8 M      <- 9.5x the dim=16 model
-#     128     2432       491.0 M
-#
-# A dim=64 run measured 144 M total params, 74% of which was the row feed-forward
-# alone (17.8 M x 6 depth).  Read the table before raising `dim` here; the same
-# change in rowcol_v0 (per_token) costs ~40x less.
-#
-# ff_mult multiplies the largest term, so it is the cheapest lever: at dim=64,
-# ff_mult 4->2 takes the tracks encoder 138.8 M -> 85.3 M.  `num_inds` is NOT a
-# lever — the inducing points are (1, num_inds, dim) and paid once, so 256->64
-# saves only 1.4 M.  That part of the concat design works as advertised.
+# The trade: the row attention AND its feed-forward run at width
+# row_dim = N*dim (304 for tracks, N=19), so their parameters scale as
+# row_dim^2 — QUADRATIC in dim.  Doubling `dim` roughly quadruples the tracks
+# encoder; ff_mult multiplies the largest term (the row feed-forward), so it is
+# the cheapest lever.  Check `scripts/model_summary.py` before raising `dim`.
 #
 # Select with:  encoders=rowcol_concat_v0
 # ════════════════════════════════════════════════════════════════════════════
@@ -58,7 +20,7 @@
 global_encoder:
   _target_: fm4tag.models.GlobalTransformerEncoder
   dim:          16     # token width — the backbone runs at this width.
-                       # Row-half params go as (N*dim)^2; see the header table.
+                       # Row-half params go as (N*dim)^2; see the header.
   proj_hidden:  null   # null → auto (2 × dim × n_tokens)
   proj_out:     128    # projector output width — head only, never the backbone
   # num_features injected at runtime from variables.jets.inputs
@@ -73,15 +35,13 @@ global_encoder:
       ff_mult:      2
       attn_dropout: 0.0
       ff_dropout:   0.0
-      num_inds:     128     # paid once (concat), so affordable to raise;
-                           # null = all-pairs O(B^2) row attention on the concat
       row_mode:     concat
 
 constituents:
   tracks:
     _target_: fm4tag.models.Encoder
     dim:              16     # row-half params go as (N*dim)^2 with N=19; see
-                             # the header table before raising this
+                             # the header before raising this
     cont_embeddings:  MLP    # MLP | pos_singleMLP
     proj_hidden:      null   # null → auto (3/4 × dim × n_tokens)
     proj_out:         128    # null → auto (1/2 × dim × n_tokens)
@@ -104,6 +64,4 @@ constituents:
         ff_mult:       2
         attn_dropout:  0.0
         ff_dropout:    0.0
-        num_inds:      256     # paid once (concat), so affordable to raise;
-                              # null = all-pairs O(B^2) row attention on the concat
         row_mode:      concat

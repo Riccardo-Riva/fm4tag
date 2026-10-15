@@ -67,7 +67,7 @@ BATCH_SIZES=(1024)
 # PER-RANK batch size.  Lightning injects a DistributedSampler under DDP, so each
 # rank's dataloader yields BATCH_SIZE samples and the gradient batch is
 # GPU_NUM x BATCH_SIZE.  Intersample (row) attention does NOT all-gather across
-# ranks — each rank's ISAB summarises only its own shard — so holding BATCH_SIZE
+# ranks — each rank's row attention sees only its own shard — so holding BATCH_SIZE
 # fixed keeps the intersample context identical to a single-GPU run.  The gradient
 # batch still grows with GPU_NUM, so the best LR shifts: a sweep at GPU_NUM=2 is not
 # directly comparable to one at GPU_NUM=1.

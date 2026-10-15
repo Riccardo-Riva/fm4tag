@@ -27,7 +27,6 @@ Example ``backbone.constituents.tracks.layers`` config::
         ff_mult: 1
         attn_dropout: 0.0
         ff_dropout: 0.0
-        num_inds: 16
       - type: col
         depth: 1
         heads: 4
@@ -39,73 +38,34 @@ from __future__ import annotations
 import torch
 from torch import nn
 
-from ..attention import Attention, InducedRowAttention, RowAttention
+from ..attention import Attention, RowAttention
 from ..blocks import FeedForward, PreNormResidual
-
-
-def _build_row_attention(
-    dim: int,
-    nfeats: int,
-    *,
-    heads: int,
-    dim_row_head: int,
-    dropout: float,
-    num_inds: int | None,
-) -> nn.Module:
-    """Select the intersample-attention variant at construction time.
-
-    ``num_inds=None`` → all-pairs :class:`RowAttention` (O(B²) in the batch
-    size); otherwise :class:`InducedRowAttention` with that many inducing points
-    (O(B·num_inds)).  Keeping this decision here means neither module needs a
-    structural branch in its ``forward``.
-    """
-    if num_inds is None:
-        return RowAttention(
-            dim, heads=heads, dim_row_head=dim_row_head, dropout=dropout
-        )
-    return InducedRowAttention(
-        dim,
-        nfeats,
-        heads=heads,
-        dim_row_head=dim_row_head,
-        dropout=dropout,
-        num_inds=num_inds,
-    )
 
 
 class RowMixer(nn.Module):
     """One depth step of intersample (row) attention + feed-forward.
 
     ``row_mode`` selects how the ``(B, N, dim)`` token grid is presented to the
-    row step; both variants attend over the batch axis ``B`` and return
-    ``(B, N, dim)``:
+    all-pairs :class:`RowAttention`; both variants attend over the batch axis
+    ``B`` and return ``(B, N, dim)``:
 
     * ``'per_token'`` (default) — one row attention per token, run independently
       for each of the ``N`` tokens at width ``dim`` with the projections shared
       across tokens.  This is the tabicl ``ColEmbedding`` factorisation: each
       feature builds its own summary across samples, and cross-feature mixing is
-      left to the column attention.  ``N`` narrow attentions per step; the cost
-      of ``num_inds`` is paid ``N`` times.
+      left to the column attention.  ``N`` narrow attentions per step.
 
-    * ``'concat'`` — the token grid is flattened to a single wide row vector
-      ``(B, N*dim)`` and the whole row step (norm + attention + feed-forward)
-      runs at width ``row_dim = N*dim``.  This is the pre-ISAB "row attention on
-      the concatenated token embeddings" shape, but with ISAB
-      (:class:`InducedRowAttention`) as the O(B*num_inds) summary in place of the
-      old O(B²) / chunked attention.  One wide attention per step instead of
-      ``N`` narrow ones: it uses the GPU far better and ``num_inds`` is paid once,
-      so it can grow cheaply — the whole point of recovering this shape.  The
-      trade is parameter count: the projections and feed-forward now scale with
-      ``row_dim`` rather than ``dim``.
+    * ``'concat'`` — SAINT's intersample attention: the token grid is flattened
+      to a single wide row vector ``(B, N*dim)`` and the whole row step (norm +
+      attention + feed-forward) runs at width ``row_dim = N*dim``.  One wide
+      attention per step instead of ``N`` narrow ones, at the price of
+      projections and feed-forward that scale with ``row_dim`` rather than
+      ``dim``.
 
     Args:
         dim:      Token embedding width.
-        nfeats:   Number of tokens ``N``.  Sizes the per-token inducing points in
-                  ``per_token`` mode, and the flattened ``row_dim = N*dim`` in
+        nfeats:   Number of tokens ``N``; sizes ``row_dim = N*dim`` in
                   ``concat`` mode.
-        num_inds: Inducing points for :class:`InducedRowAttention`; ``None``
-                  selects all-pairs :class:`RowAttention` instead.  Orthogonal to
-                  ``row_mode`` — every (mode, num_inds) pair is valid.
         row_mode: ``'per_token'`` | ``'concat'`` (see above).
     """
 
@@ -119,7 +79,6 @@ class RowMixer(nn.Module):
         ff_mult: int,
         attn_dropout: float,
         ff_dropout: float,
-        num_inds: int | None,
         row_mode: str = 'per_token',
     ) -> None:
         super().__init__()
@@ -130,19 +89,13 @@ class RowMixer(nn.Module):
         self.row_mode = row_mode
 
         # In concat mode the whole feature vector is a single row token of width
-        # row_dim; the attention then has nfeats == 1 (one inducing-point set).
+        # row_dim = nfeats * dim.
         width = dim * nfeats if row_mode == 'concat' else dim
-        row_nfeats = 1 if row_mode == 'concat' else nfeats
 
         self.attn = PreNormResidual(
             width,
-            _build_row_attention(
-                width,
-                row_nfeats,
-                heads=heads,
-                dim_row_head=dim_row_head,
-                dropout=attn_dropout,
-                num_inds=num_inds,
+            RowAttention(
+                width, heads=heads, dim_row_head=dim_row_head, dropout=attn_dropout
             ),
         )
         self.ff = PreNormResidual(
@@ -240,10 +193,6 @@ class RowTransformer(nn.Module):
         ff_mult:      Feed-forward hidden-size multiplier.
         attn_dropout: Dropout rate inside attention.
         ff_dropout:   Dropout rate inside feed-forward.
-        num_inds:     Number of inducing points
-                      (:class:`~fm4tag.models.attention.InducedRowAttention`,
-                      O(B·num_inds)); ``None`` uses all-pairs
-                      :class:`~fm4tag.models.attention.RowAttention` (O(B²)).
         row_mode:     ``'per_token'`` | ``'concat'`` — how the row step sees the
                       token grid; see :class:`RowMixer`.
     """
@@ -258,7 +207,6 @@ class RowTransformer(nn.Module):
         ff_mult: int = 1,
         attn_dropout: float = 0.0,
         ff_dropout: float = 0.0,
-        num_inds: int | None = 16,
         row_mode: str = 'per_token',
     ) -> None:
         super().__init__()
@@ -272,7 +220,6 @@ class RowTransformer(nn.Module):
                     ff_mult=ff_mult,
                     attn_dropout=attn_dropout,
                     ff_dropout=ff_dropout,
-                    num_inds=num_inds,
                     row_mode=row_mode,
                 )
                 for _ in range(depth)
@@ -305,8 +252,6 @@ class RowColTransformer(nn.Module):
         ff_mult:      Feed-forward hidden-size multiplier (shared).
         attn_dropout: Dropout inside both attention sub-layers.
         ff_dropout:   Dropout inside both feed-forward sub-layers.
-        num_inds:     Inducing points for the row step — see
-                      :class:`RowTransformer`.
         row_mode:     ``'per_token'`` | ``'concat'`` — how the row step sees the
                       token grid; see :class:`RowMixer`.
     """
@@ -323,7 +268,6 @@ class RowColTransformer(nn.Module):
         ff_mult: int = 1,
         attn_dropout: float = 0.0,
         ff_dropout: float = 0.0,
-        num_inds: int | None = 16,
         row_mode: str = 'per_token',
     ) -> None:
         super().__init__()
@@ -351,7 +295,6 @@ class RowColTransformer(nn.Module):
                             ff_mult=ff_mult,
                             attn_dropout=attn_dropout,
                             ff_dropout=ff_dropout,
-                            num_inds=num_inds,
                             row_mode=row_mode,
                         ),
                     ]

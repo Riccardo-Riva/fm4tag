@@ -1,8 +1,7 @@
-"""Tests for the intersample (row) attention variants.
+"""Tests for the intersample (row) attention.
 
-Both variants take the token grid ``(B, N, dim)`` and attend over the **sample**
-axis ``B``, independently per token.  :class:`RowAttention` does so all-pairs;
-:class:`InducedRowAttention` routes through learned inducing points (ISAB).
+:class:`RowAttention` takes the token grid ``(B, N, dim)`` and attends all-pairs
+over the **sample** axis ``B``, independently per token.
 """
 
 from __future__ import annotations
@@ -10,7 +9,7 @@ from __future__ import annotations
 import pytest
 import torch
 
-from fm4tag.models.attention import InducedRowAttention, RowAttention
+from fm4tag.models.attention import RowAttention
 from fm4tag.models.backbones.transformers import RowMixer
 
 B, N, DIM = 10, 5, 16
@@ -21,36 +20,19 @@ def _row_attn(heads: int = 4) -> RowAttention:
     return RowAttention(dim=DIM, heads=heads, dim_row_head=8).eval()
 
 
-def _induced(heads: int = 4, num_inds: int = 6) -> InducedRowAttention:
-    torch.manual_seed(0)
-    attn = InducedRowAttention(
-        dim=DIM, nfeats=N, heads=heads, dim_row_head=8, num_inds=num_inds
-    ).eval()
-    # ``attn_out.to_out`` ships zero-initialised (identity-at-init under the
-    # surrounding residual), which would make every behavioural test below
-    # trivially true.  Give it real weights.
-    torch.nn.init.normal_(attn.attn_out.to_out.weight, std=0.1)
-    torch.nn.init.normal_(attn.attn_out.to_out.bias, std=0.1)
-    return attn
-
-
-def _both():
-    return [_row_attn(), _induced()]
-
-
 # ── shape / mask handling ────────────────────────────────────────────────────
 
 
-@pytest.mark.parametrize('attn', _both())
-def test_shape_roundtrip(attn):
+def test_shape_roundtrip():
+    attn = _row_attn()
     out = attn(torch.randn(B, N, DIM))
     assert out.shape == (B, N, DIM)
     assert torch.isfinite(out).all()
 
 
-@pytest.mark.parametrize('attn', _both())
-def test_mask_shape_broadcasts(attn):
+def test_mask_shape_broadcasts():
     """Regression: the per-sample (B,) mask must work when B != heads."""
+    attn = _row_attn()
     x = torch.randn(B, N, DIM)
     mask = torch.ones(B, dtype=torch.bool)
     mask[7:] = False
@@ -59,9 +41,9 @@ def test_mask_shape_broadcasts(attn):
     assert torch.isfinite(out).all()
 
 
-@pytest.mark.parametrize('attn', _both())
-def test_masked_samples_are_ignored_as_keys(attn):
+def test_masked_samples_are_ignored_as_keys():
     """Garbage in masked-out samples must not change the valid samples' outputs."""
+    attn = _row_attn()
     x = torch.randn(B, N, DIM)
     mask = torch.ones(B, dtype=torch.bool)
     mask[7:] = False
@@ -76,8 +58,8 @@ def test_masked_samples_are_ignored_as_keys(attn):
     assert torch.allclose(out[:7], out_garbage[:7], atol=1e-4)
 
 
-@pytest.mark.parametrize('attn', _both())
-def test_all_valid_mask_matches_no_mask(attn):
+def test_all_valid_mask_matches_no_mask():
+    attn = _row_attn()
     x = torch.randn(B, N, DIM)
     with torch.no_grad():
         out_none = attn(x)
@@ -88,14 +70,14 @@ def test_all_valid_mask_matches_no_mask(attn):
 # ── the tabicl factorisation: row attention acts per token ───────────────────
 
 
-@pytest.mark.parametrize('attn', _both())
-def test_token_channels_are_independent(attn):
+def test_token_channels_are_independent():
     """Output at token ``n`` must depend only on the input at token ``n``.
 
     Row attention runs over the sample axis independently per token — mixing
     across tokens is the column attention's job.  Perturbing a different token
     must therefore leave this token's output untouched.
     """
+    attn = _row_attn()
     x = torch.randn(B, N, DIM)
     x_perturbed = x.clone()
     x_perturbed[:, 3, :] += 5.0  # disturb token 3 only
@@ -112,14 +94,14 @@ def test_token_channels_are_independent(attn):
 # ── permutation equivariance over the sample axis ────────────────────────────
 
 
-@pytest.mark.parametrize('attn', _both())
-def test_permutation_equivariant_over_samples(attn):
+def test_permutation_equivariant_over_samples():
     """Reordering the batch must reorder the outputs identically.
 
     This is what the old chunked row attention could not offer: it drew a fresh
     random permutation every training step, so a sample's output depended on
     which 512 others happened to land in its chunk.
     """
+    attn = _row_attn()
     x = torch.randn(B, N, DIM)
     perm = torch.randperm(B)
 
@@ -130,59 +112,19 @@ def test_permutation_equivariant_over_samples(attn):
     assert torch.allclose(out[perm], out_perm, atol=1e-5)
 
 
-@pytest.mark.parametrize('attn', _both())
-def test_deterministic_in_train_mode(attn):
+def test_deterministic_in_train_mode():
     """No stochastic chunking: train mode must be as deterministic as eval."""
+    attn = _row_attn()
     attn.train()
     x = torch.randn(B, N, DIM)
     with torch.no_grad():
         assert torch.equal(attn(x), attn(x))
 
 
-# ── ISAB-specific ────────────────────────────────────────────────────────────
-
-
-def test_induced_starts_as_identity():
-    """As shipped, the zero-init out-projection makes the block a no-op.
-
-    Under ``PreNormResidual`` in ``RowMixer`` that means the row step starts as
-    the identity and learns intersample mixing from there.
-    """
-    torch.manual_seed(0)
-    attn = InducedRowAttention(dim=DIM, nfeats=N, heads=4, dim_row_head=8).eval()
-    with torch.no_grad():
-        out = attn(torch.randn(B, N, DIM))
-    assert torch.count_nonzero(out) == 0
-
-
-@pytest.mark.parametrize('batch', [1, 7, 64])
-def test_induced_handles_variable_batch_size(batch):
-    """A variable B — the packed constituent count — needs no padding or chunking."""
-    attn = _induced()
-    with torch.no_grad():
-        out = attn(torch.randn(batch, N, DIM))
-    assert out.shape == (batch, N, DIM)
-    assert torch.isfinite(out).all()
-
-
-def test_induced_cost_is_independent_of_batch_size():
-    """The inducing points, not B, set the attention's key length."""
-    attn = _induced(num_inds=6)
-    assert attn.inds.shape == (N, 6, DIM)
-
-
-def test_induced_gradients_reach_inducing_points():
-    attn = _induced()
-    out = attn(torch.randn(B, N, DIM))
-    out.sum().backward()
-    assert attn.inds.grad is not None
-    assert torch.count_nonzero(attn.inds.grad) > 0
-
-
 # ── RowMixer: per_token vs concat row_mode ───────────────────────────────────
 
 
-def _row_mixer(row_mode: str, num_inds: int | None = 6) -> RowMixer:
+def _row_mixer(row_mode: str) -> RowMixer:
     torch.manual_seed(0)
     return RowMixer(
         DIM,
@@ -192,16 +134,14 @@ def _row_mixer(row_mode: str, num_inds: int | None = 6) -> RowMixer:
         ff_mult=1,
         attn_dropout=0.0,
         ff_dropout=0.0,
-        num_inds=num_inds,
         row_mode=row_mode,
     ).eval()
 
 
 @pytest.mark.parametrize('row_mode', ['per_token', 'concat'])
-@pytest.mark.parametrize('num_inds', [6, None])
-def test_row_mixer_shape_roundtrips(row_mode, num_inds):
-    """Both modes and both num_inds settings return the (B, N, dim) grid."""
-    mixer = _row_mixer(row_mode, num_inds)
+def test_row_mixer_shape_roundtrips(row_mode):
+    """Both modes return the (B, N, dim) grid."""
+    mixer = _row_mixer(row_mode)
     out = mixer(torch.randn(B, N, DIM))
     assert out.shape == (B, N, DIM)
     assert torch.isfinite(out).all()
@@ -214,34 +154,19 @@ def test_row_mixer_rejects_unknown_mode():
 
 def test_concat_row_attention_runs_at_row_dim():
     """In concat mode the row attention operates on the flattened N*dim vector."""
-    mixer = _row_mixer('concat', num_inds=6)
-    # attn.fn is the InducedRowAttention; its inducing points are a single set
-    # (nfeats == 1) of width row_dim = N*dim, not N sets of width dim.
-    assert mixer.attn.fn.inds.shape == (1, 6, N * DIM)
+    mixer = _row_mixer('concat')
+    assert mixer.attn.fn.to_qkv.in_features == N * DIM
 
 
 def test_per_token_row_attention_runs_per_token():
-    mixer = _row_mixer('per_token', num_inds=6)
-    assert mixer.attn.fn.inds.shape == (N, 6, DIM)
-
-
-@pytest.mark.parametrize('row_mode', ['per_token', 'concat'])
-def test_row_mixer_attn_sublayer_is_identity_at_init(row_mode):
-    """Zero-init ISAB out-projection ⇒ the row-attention sublayer starts as a no-op."""
-    mixer = _row_mixer(row_mode, num_inds=6)
-    x = torch.randn(B, N, DIM)
-    if row_mode == 'concat':
-        x = x.reshape(B, 1, N * DIM)
-    with torch.no_grad():
-        assert torch.allclose(mixer.attn(x), x, atol=1e-6)
+    mixer = _row_mixer('per_token')
+    assert mixer.attn.fn.to_qkv.in_features == DIM
 
 
 @pytest.mark.parametrize('row_mode', ['per_token', 'concat'])
 def test_row_mixer_permutation_equivariant_over_samples(row_mode):
     """Reordering the batch reorders the outputs identically, in either mode."""
-    mixer = _row_mixer(row_mode, num_inds=6)
-    # Un-zero the ISAB out-projection so the block is not a trivial identity.
-    torch.nn.init.normal_(mixer.attn.fn.attn_out.to_out.weight, std=0.1)
+    mixer = _row_mixer(row_mode)
     x = torch.randn(B, N, DIM)
     perm = torch.randperm(B)
     with torch.no_grad():
@@ -260,14 +185,12 @@ def test_concat_mixes_across_tokens_but_per_token_does_not():
     x_pert[:, 3, :] += 5.0
     others = [n for n in range(N) if n != 3]
 
-    per_token = _row_mixer('per_token', num_inds=6)
-    torch.nn.init.normal_(per_token.attn.fn.attn_out.to_out.weight, std=0.1)
+    per_token = _row_mixer('per_token')
     with torch.no_grad():
         a, b = per_token(x), per_token(x_pert)
     assert torch.allclose(a[:, others], b[:, others], atol=1e-5)
 
-    concat = _row_mixer('concat', num_inds=6)
-    torch.nn.init.normal_(concat.attn.fn.attn_out.to_out.weight, std=0.1)
+    concat = _row_mixer('concat')
     torch.nn.init.normal_(concat.ff.fn.net[0].weight, std=0.1)
     with torch.no_grad():
         a, b = concat(x), concat(x_pert)
@@ -300,7 +223,6 @@ def test_encoder_output_is_normalised_regardless_of_depth(depth):
                 'row_heads': 2,
                 'dim_head': 8,
                 'dim_row_head': 8,
-                'num_inds': 4,
             }
         ],
     ).eval()

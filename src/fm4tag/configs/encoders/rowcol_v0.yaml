@@ -7,7 +7,7 @@
 #
 # Every `layers` entry lists ONLY the kwargs its block class accepts:
 #   type: rowcol → RowColTransformer(col_heads, row_heads, dim_head,
-#                                    dim_row_head, num_inds, ...)
+#                                    dim_row_head, row_mode, ...)
 # `dim` and (for row-aware blocks) `nfeats` are injected at runtime.
 # ════════════════════════════════════════════════════════════════════════════
 
@@ -28,9 +28,8 @@ global_encoder:
       ff_mult:      1
       attn_dropout: 0.0
       ff_dropout:   0.0
-      num_inds:     16      # null = all-pairs row attention over the batch
-      row_mode:     per_token  # per_token = one ISAB per feature token (see
-                               # rowcol_concat_v0 for the concat alternative)
+      row_mode:     per_token  # per_token = one row attention per feature token
+                               # (see rowcol_concat_v0 for the concat alternative)
 
 constituents:
   tracks:
@@ -50,20 +49,7 @@ constituents:
         ff_mult:       1
         attn_dropout:  0.0
         ff_dropout:    0.0
-        num_inds:      16      # ISAB inducing points: row attention costs
-                              # O(B*num_inds) per token instead of O(B^2), and
-                              # runs N=19 independent per-token attentions.
-                              # At dim=128 this was a throughput cliff (16->128
-                              # measured 3.47->1.20 it/s).  At the current dim=16
-                              # it is not: 128 vs 16 measured 4.18 vs 4.20 it/s
-                              # (1 A40, finetune, bs 1024) — the row attention is
-                              # no longer what the step is spending its time on.
-                              # null = all-pairs row attention over the batch.
-        row_mode:      per_token  # per_token = one ISAB per feature token, at
-                              # width dim.  concat runs a single ISAB over the
-                              # (N*dim) vector and is FASTER — flipping only this
-                              # key measured 4.24 -> 4.72 it/s (236 -> 212 ms/step)
-                              # on 1 A40, finetune, bs 1024, for 2.48M -> 6.09M
-                              # params.  It is a different model though (the row
-                              # step then mixes feature tokens), so this is not a
-                              # free speedup — see rowcol_concat_v0.
+        row_mode:      per_token  # per_token = one row attention per feature
+                              # token, at width dim.  concat (SAINT) attends on
+                              # the flattened (N*dim) vector instead — a
+                              # different model, see rowcol_concat_v0.

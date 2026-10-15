@@ -74,8 +74,8 @@ ENCODERS=(
 )
 
 # PER-RANK batch size.  Under DDP the gradient batch is GPU_NUM x BATCH_SIZE, but
-# intersample (row) attention does NOT all-gather across ranks — each rank's ISAB
-# summarises only its own shard — so holding BATCH_SIZE fixed keeps the intersample
+# intersample (row) attention does NOT all-gather across ranks — each rank's row
+# attention sees only its own shard — so holding BATCH_SIZE fixed keeps the intersample
 # context identical to a single-GPU run.  The larger gradient batch does shift the
 # best LR, so a GPU_NUM=2 sweep is not directly comparable to a GPU_NUM=1 one.
 BATCH_SIZES=(2048)
