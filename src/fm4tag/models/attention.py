@@ -105,6 +105,10 @@ class RowAttention(nn.Module):
 
     Consequence: outputs (also at inference) depend on batch composition.
 
+    ``to_out`` is zero-initialised, so under the surrounding pre-norm residual
+    the row step starts as the identity and learns intersample mixing from
+    there.
+
     Args:
         x:    ``(B, N, dim)`` — token grid.
         mask: ``(B,)`` bool — ``True`` = valid sample, ``False`` = padding.
@@ -116,6 +120,8 @@ class RowAttention(nn.Module):
         self.heads = heads
         self.to_qkv = nn.Linear(dim, inner_dim * 3, bias=False)
         self.to_out = nn.Linear(inner_dim, dim)
+        nn.init.zeros_(self.to_out.weight)
+        nn.init.zeros_(self.to_out.bias)
         self.dropout = dropout
 
     def forward(self, x, mask=None):

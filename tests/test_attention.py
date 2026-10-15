@@ -17,7 +17,20 @@ B, N, DIM = 10, 5, 16
 
 def _row_attn(heads: int = 4) -> RowAttention:
     torch.manual_seed(0)
-    return RowAttention(dim=DIM, heads=heads, dim_row_head=8).eval()
+    attn = RowAttention(dim=DIM, heads=heads, dim_row_head=8).eval()
+    # ``to_out`` ships zero-initialised (identity-at-init under the residual),
+    # which would make every behavioural test below trivially true.
+    torch.nn.init.normal_(attn.to_out.weight, std=0.1)
+    torch.nn.init.normal_(attn.to_out.bias, std=0.1)
+    return attn
+
+
+def test_row_attention_starts_as_zero():
+    torch.manual_seed(0)
+    attn = RowAttention(dim=DIM, heads=4, dim_row_head=8).eval()
+    with torch.no_grad():
+        out = attn(torch.randn(B, N, DIM))
+    assert torch.count_nonzero(out) == 0
 
 
 # ── shape / mask handling ────────────────────────────────────────────────────
@@ -124,9 +137,9 @@ def test_deterministic_in_train_mode():
 # ── RowMixer: per_token vs concat row_mode ───────────────────────────────────
 
 
-def _row_mixer(row_mode: str) -> RowMixer:
+def _row_mixer(row_mode: str, zero_init: bool = False) -> RowMixer:
     torch.manual_seed(0)
-    return RowMixer(
+    mixer = RowMixer(
         DIM,
         N,
         heads=2,
@@ -136,6 +149,9 @@ def _row_mixer(row_mode: str) -> RowMixer:
         ff_dropout=0.0,
         row_mode=row_mode,
     ).eval()
+    if not zero_init:
+        torch.nn.init.normal_(mixer.attn.fn.to_out.weight, std=0.1)
+    return mixer
 
 
 @pytest.mark.parametrize('row_mode', ['per_token', 'concat'])
@@ -161,6 +177,17 @@ def test_concat_row_attention_runs_at_row_dim():
 def test_per_token_row_attention_runs_per_token():
     mixer = _row_mixer('per_token')
     assert mixer.attn.fn.to_qkv.in_features == DIM
+
+
+@pytest.mark.parametrize('row_mode', ['per_token', 'concat'])
+def test_row_mixer_attn_sublayer_is_identity_at_init(row_mode):
+    """Zero-init out-projection ⇒ the row-attention sublayer starts as a no-op."""
+    mixer = _row_mixer(row_mode, zero_init=True)
+    x = torch.randn(B, N, DIM)
+    if row_mode == 'concat':
+        x = x.reshape(B, 1, N * DIM)
+    with torch.no_grad():
+        assert torch.allclose(mixer.attn(x), x, atol=1e-6)
 
 
 @pytest.mark.parametrize('row_mode', ['per_token', 'concat'])

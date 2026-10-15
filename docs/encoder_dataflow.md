@@ -150,6 +150,9 @@ x (B, N, dim)
 ```
 
 `RowAttention` is all-pairs: every sample attends to every other sample, O(B²).
+Its out-projection is **zero-initialised**, so under the residual the row step
+starts as the identity (the encoder begins col-only) and learns intersample
+mixing from there.
 
 ### `row_mode`: per-feature vs SAINT-style intersample attention
 
@@ -177,9 +180,9 @@ would inherit that drift, so both `Encoder` and `GlobalTransformerEncoder` end
 with a `norm_out = LayerNorm(dim)` — the `ln_f` of a pre-norm transformer.
 
 > tabicl omits this and instead zero-inits *every* block (attention out-proj and
-> FFN second linear), so its whole stack starts as the identity. The final norm
-> is the more robust guard: it holds however far training moves the weights,
-> not just at init.
+> FFN second linear), so its whole stack starts as the identity. We zero-init
+> only the row-attention out-projection, so the final norm is the more robust
+> guard: it holds however far training moves the weights, not just at init.
 
 ---
 
