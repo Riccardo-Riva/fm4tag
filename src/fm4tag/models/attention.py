@@ -1,6 +1,9 @@
+from dataclasses import dataclass
+
 import torch
 import torch.nn.functional as F
 from torch import nn
+from torch.nn.attention.varlen import varlen_attn
 from einops import rearrange
 
 try:
@@ -95,6 +98,74 @@ class Attention(nn.Module):
         return self.to_out(out)
 
 
+@dataclass(frozen=True)
+class RowGroups:
+    """Contiguous groups of samples that attend only among themselves.
+
+    ``cu_seqlens`` ``(K+1,)`` int32 holds the group boundaries on the sample
+    axis (``0 = cu[0] <= ... <= cu[K] = n_samples``, empty groups allowed);
+    ``max_seqlen`` is the longest group, which flash's varlen kernel needs on
+    the host.  Build it once per batch and reuse it across views and layers.
+    """
+
+    cu_seqlens: torch.Tensor
+    max_seqlen: int
+
+    @classmethod
+    def from_boundaries(cls, cu_seqlens: torch.Tensor) -> 'RowGroups':
+        cu = cu_seqlens.to(torch.int32)
+        longest = int((cu[1:] - cu[:-1]).max()) if cu.numel() > 1 else 0  # host sync
+        return cls(cu, longest)
+
+
+def _use_varlen(q: torch.Tensor, dropout_p: float) -> bool:
+    # varlen_attn: CUDA, fp16/bf16, head_dim % 8 == 0 and <= 256, no dropout.
+    d = q.shape[-1]
+    return (
+        q.is_cuda
+        and q.dtype in _FLASH_ATTN_DTYPES
+        and d % 8 == 0
+        and d <= 256
+        and dropout_p == 0.0
+    )
+
+
+def grouped_attention(
+    q: torch.Tensor,
+    k: torch.Tensor,
+    v: torch.Tensor,
+    groups: RowGroups,
+    dropout_p: float = 0.0,
+) -> torch.Tensor:
+    """Self-attention within each group of the packed sample axis.
+
+    ``q``/``k``/``v``: ``(T, H, D)`` — ``T`` packed samples, ``H`` independent
+    heads.  Sample ``i`` attends only to the samples of its own group.  Runs
+    flash's varlen kernel when eligible, otherwise an exact loop over the
+    groups (CPU tests, fp32 offline inference, attention dropout).
+    """
+    if q.shape[0] == 0:
+        return q.clone()
+    cu = groups.cu_seqlens
+    if _use_varlen(q, dropout_p):
+        return varlen_attn(q, k, v, cu, cu, groups.max_seqlen, groups.max_seqlen)
+
+    bounds = cu.tolist()
+    outs = []
+    for start, end in zip(bounds[:-1], bounds[1:]):
+        if end == start:
+            continue
+        # (L, H, D) → (H, L, D): heads as batch, the group as the sequence.
+        o = sdpa(
+            q[start:end].transpose(0, 1),
+            k[start:end].transpose(0, 1),
+            v[start:end].transpose(0, 1),
+            dropout_p=dropout_p,
+        )
+        outs.append(o.transpose(0, 1))
+    return torch.cat(outs, dim=0)
+
+
 class RowAttention(nn.Module):
     """All-pairs intersample (row) attention over the batch axis.
 
@@ -109,9 +180,15 @@ class RowAttention(nn.Module):
     the row step starts as the identity and learns intersample mixing from
     there.
 
+    With ``groups`` (:class:`RowGroups`) the batch axis is split into
+    contiguous chunks and each sample attends only within its own chunk; the
+    ``N`` tokens × ``heads`` become independent heads of one varlen call.
+
     Args:
-        x:    ``(B, N, dim)`` — token grid.
-        mask: ``(B,)`` bool — ``True`` = valid sample, ``False`` = padding.
+        x:      ``(B, N, dim)`` — token grid.
+        mask:   ``(B,)`` bool — ``True`` = valid sample, ``False`` = padding.
+                Only without ``groups``.
+        groups: Optional :class:`RowGroups` over the ``B`` axis.
     """
 
     def __init__(self, dim, heads=8, dim_row_head=16, dropout=0.0):
@@ -124,8 +201,19 @@ class RowAttention(nn.Module):
         nn.init.zeros_(self.to_out.bias)
         self.dropout = dropout
 
-    def forward(self, x, mask=None):
+    def forward(self, x, mask=None, groups=None):
         h = self.heads
+        dropout_p = self.dropout if self.training else 0.0
+
+        if groups is not None:
+            if mask is not None:
+                raise ValueError('RowAttention: pass either mask or groups, not both.')
+            b, n, _ = x.shape
+            # (B, N, 3*h*d) → three (B, N*h, d): the N tokens and h heads are
+            # all independent heads attending over the grouped sample axis.
+            q, k, v = (t.reshape(b, n * h, -1) for t in self.to_qkv(x).chunk(3, dim=-1))
+            out = grouped_attention(q, k, v, groups, dropout_p=dropout_p)
+            return self.to_out(out.reshape(b, n, -1))
 
         q, k, v = self.to_qkv(x).chunk(3, dim=-1)
         # (B, N, h*d) → (N, h, B, d): tokens become a batch dim, the sample axis
@@ -139,12 +227,6 @@ class RowAttention(nn.Module):
             # Key-padding mask over the sample axis: (B,) → (1, 1, 1, B).
             attn_mask = torch.where(mask, 0.0, float('-inf'))[None, None, None, :]
 
-        out = sdpa(
-            q,
-            k,
-            v,
-            attn_mask=attn_mask,
-            dropout_p=self.dropout if self.training else 0.0,
-        )
+        out = sdpa(q, k, v, attn_mask=attn_mask, dropout_p=dropout_p)
         out = rearrange(out, 'n h b d -> b n (h d)')
         return self.to_out(out)

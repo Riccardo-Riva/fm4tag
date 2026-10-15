@@ -9,7 +9,7 @@ from __future__ import annotations
 import pytest
 import torch
 
-from fm4tag.models.attention import RowAttention
+from fm4tag.models.attention import RowAttention, RowGroups, grouped_attention
 from fm4tag.models.backbones.transformers import RowMixer
 
 B, N, DIM = 10, 5, 16
@@ -222,6 +222,137 @@ def test_concat_mixes_across_tokens_but_per_token_does_not():
     with torch.no_grad():
         a, b = concat(x), concat(x_pert)
     assert not torch.allclose(a[:, others], b[:, others], atol=1e-3)
+
+
+# ── chunked (grouped) row attention ─────────────────────────────────────────
+
+# Contiguous chunks of the B=10 axis, including an empty one.
+_BOUNDS = [0, 3, 3, 7, 10]
+
+
+def _groups(bounds=_BOUNDS) -> RowGroups:
+    return RowGroups.from_boundaries(torch.tensor(bounds))
+
+
+def _per_group(fn, x, bounds=_BOUNDS):
+    return torch.cat([fn(x[s:e]) for s, e in zip(bounds[:-1], bounds[1:]) if e > s])
+
+
+def test_row_groups_max_seqlen():
+    assert _groups().max_seqlen == 4
+    assert _groups().cu_seqlens.dtype == torch.int32
+
+
+@pytest.mark.parametrize('row_mode', ['per_token', 'concat'])
+def test_grouped_row_mixer_matches_per_chunk_calls(row_mode):
+    """Chunked attention == running the block separately on each chunk."""
+    mixer = _row_mixer(row_mode)
+    x = torch.randn(B, N, DIM)
+    with torch.no_grad():
+        out = mixer(x, groups=_groups())
+        ref = _per_group(mixer, x)
+    assert torch.allclose(out, ref, atol=1e-5)
+
+
+@pytest.mark.parametrize('row_mode', ['per_token', 'concat'])
+def test_groups_isolate_chunks(row_mode):
+    """Changing one chunk's samples must not move any other chunk's outputs."""
+    mixer = _row_mixer(row_mode)
+    x = torch.randn(B, N, DIM)
+    x_pert = x.clone()
+    x_pert[7:] += 5.0  # the last chunk only
+    with torch.no_grad():
+        out, out_pert = mixer(x, groups=_groups()), mixer(x_pert, groups=_groups())
+    assert torch.equal(out[:7], out_pert[:7])
+    assert not torch.allclose(out[7:], out_pert[7:], atol=1e-3)
+
+
+def test_single_group_equals_ungrouped():
+    attn = _row_attn()
+    x = torch.randn(B, N, DIM)
+    with torch.no_grad():
+        out = attn(x, groups=_groups([0, B]))
+        ref = attn(x)
+    assert torch.allclose(out, ref, atol=1e-5)
+
+
+def test_grouped_permutation_equivariant_within_chunk():
+    attn = _row_attn()
+    x = torch.randn(B, N, DIM)
+    perm = torch.arange(B)
+    perm[3:7] = perm[3:7][torch.tensor([2, 0, 3, 1])]
+    with torch.no_grad():
+        out, out_perm = attn(x, groups=_groups()), attn(x[perm], groups=_groups())
+    assert torch.allclose(out[perm], out_perm, atol=1e-5)
+
+
+def test_grouped_rejects_mask():
+    with pytest.raises(ValueError, match='mask or groups'):
+        _row_attn()(
+            torch.randn(B, N, DIM),
+            mask=torch.ones(B, dtype=torch.bool),
+            groups=_groups(),
+        )
+
+
+def test_grouped_attention_handles_empty_input():
+    q = torch.randn(0, 2, 8)
+    assert grouped_attention(q, q, q, _groups([0, 0])).shape == (0, 2, 8)
+
+
+@pytest.mark.parametrize('row_mode', ['per_token', 'concat'])
+def test_encoder_grouped_matches_per_chunk_calls(row_mode):
+    """Whole stack (col + row, depth 2): chunks never see each other."""
+    from fm4tag.models.backbones import Encoder
+
+    torch.manual_seed(0)
+    encoder = Encoder(
+        categories=[3, 4],
+        num_continuous=2,
+        dim=DIM,
+        layers=[
+            {
+                'type': 'rowcol',
+                'depth': 2,
+                'col_heads': 2,
+                'row_heads': 2,
+                'dim_head': 8,
+                'dim_row_head': 8,
+                'row_mode': row_mode,
+            }
+        ],
+    ).eval()
+    for m in encoder.modules():
+        if isinstance(m, RowAttention):
+            torch.nn.init.normal_(m.to_out.weight, std=0.1)
+    x_cat, x_con = torch.randn(B, 2, DIM), torch.randn(B, 2, DIM)
+    with torch.no_grad():
+        out = encoder(x_cat, x_con, groups=_groups())
+        bounds = [(s, e) for s, e in zip(_BOUNDS[:-1], _BOUNDS[1:]) if e > s]
+        ref = torch.cat([encoder(x_cat[s:e], x_con[s:e]) for s, e in bounds])
+    assert torch.allclose(out, ref, atol=1e-5)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason='requires a CUDA device')
+@pytest.mark.parametrize('heads,d', [(38, 8), (8, 32)])
+def test_varlen_matches_loop_on_gpu(heads, d):
+    """bf16 flash varlen vs the exact fp32 per-chunk loop, forward and backward."""
+    torch.manual_seed(0)
+    bounds = [0, 300, 300, 1100, 1137]
+    groups = RowGroups.from_boundaries(torch.tensor(bounds, device='cuda'))
+    q, k, v = (
+        torch.randn(1137, heads, d, device='cuda', requires_grad=True) for _ in range(3)
+    )
+    out = grouped_attention(*(t.bfloat16() for t in (q, k, v)), groups)
+    out.float().square().sum().backward()
+    grads = [t.grad.clone() for t in (q, k, v)]
+    for t in (q, k, v):
+        t.grad = None
+    ref = grouped_attention(q, k, v, groups)
+    ref.square().sum().backward()
+    assert torch.allclose(out.float(), ref, atol=3e-2, rtol=3e-2)
+    for g, t in zip(grads, (q, k, v)):
+        assert torch.allclose(g, t.grad, atol=5e-2, rtol=5e-2)
 
 
 # ── pre-norm stack must be closed by a final LayerNorm ───────────────────────

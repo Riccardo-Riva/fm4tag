@@ -6,6 +6,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from ..attention import RowGroups
 from ..mlp import sep_MLP, simple_MLP
 from .transformers import ColTransformer, RowColTransformer, RowTransformer
 
@@ -94,11 +95,13 @@ class GlobalEncoder(nn.Module):
         self.projector = simple_MLP([proj_in, _proj_hidden, self.proj_out])
         self.reconstructor = sep_MLP(self.dim, num_features, [1] * num_features)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, groups: RowGroups | None = None) -> torch.Tensor:
         """Embed global features.
 
         Args:
-            x: ``(N, F_g)`` continuous feature values (already normalised).
+            x:      ``(N, F_g)`` continuous feature values (already normalised).
+            groups: Ignored (no intersample attention here); accepted so every
+                    global encoder shares one call signature.
 
         Returns:
             ``(N, F_g, dim)`` — one embedding token per feature.
@@ -152,18 +155,20 @@ class GlobalTransformerEncoder(GlobalEncoder):
         # Final norm of the pre-norm residual stream — see :class:`Encoder`.
         self.norm_out = nn.LayerNorm(dim)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, groups: RowGroups | None = None) -> torch.Tensor:
         """Embed global features and refine them with attention.
 
         Args:
-            x: ``(N, F_g)`` continuous feature values (already normalised).
+            x:      ``(N, F_g)`` continuous feature values (already normalised).
+            groups: Optional :class:`~fm4tag.models.attention.RowGroups` that
+                    restrict the row attention to chunks of the ``N`` axis.
 
         Returns:
             ``(N, F_g, dim)`` — one embedding token per feature.
         """
-        tokens = super().forward(x)
+        tokens = super().forward(x, groups)
         for layer in self.layers:
-            tokens = layer(tokens)
+            tokens = layer(tokens, groups=groups)
         return self.norm_out(tokens)
 
 
@@ -282,12 +287,12 @@ class Encoder(nn.Module):
         _proj_out = proj_out if proj_out is not None else proj_in // 2
         self.projector = simple_MLP([proj_in, _proj_hidden, _proj_out])
 
-    def forward(self, x_categ, x_cont=None, mask=None):
+    def forward(self, x_categ, x_cont=None, mask=None, groups=None):
         x = x_categ
         if x_cont is not None:
             x = torch.cat((x, x_cont), dim=1)
         for layer in self.layers:
-            x = layer(x, mask=mask)
+            x = layer(x, mask=mask, groups=groups)
         return self.norm_out(x)
 
 

@@ -11,9 +11,14 @@ list, each with its own ``depth``.
 
 All classes share the forward signature::
 
-    forward(x: Tensor, mask: Tensor | None = None) -> Tensor
+    forward(x: Tensor, mask: Tensor | None = None,
+            groups: RowGroups | None = None) -> Tensor
     x:   (B, N, dim)
     out: (B, N, dim)
+
+``groups`` (:class:`~fm4tag.models.attention.RowGroups`) restricts the row
+(intersample) attention to contiguous chunks of the ``B`` axis; the column
+attention ignores it.
 
 Example ``backbone.constituents.tracks.layers`` config::
 
@@ -38,7 +43,7 @@ from __future__ import annotations
 import torch
 from torch import nn
 
-from ..attention import Attention, RowAttention
+from ..attention import Attention, RowAttention, RowGroups
 from ..blocks import FeedForward, PreNormResidual
 
 
@@ -103,17 +108,20 @@ class RowMixer(nn.Module):
         )
 
     def forward(
-        self, x: torch.Tensor, mask: torch.Tensor | None = None
+        self,
+        x: torch.Tensor,
+        mask: torch.Tensor | None = None,
+        groups: RowGroups | None = None,
     ) -> torch.Tensor:
         if self.row_mode == 'concat':
             b, n, d = x.shape
             # Flatten the token grid into one wide row vector; the row step runs
             # at width row_dim = n*d, then we restore the grid.
             x = x.reshape(b, 1, n * d)
-            x = self.attn(x, mask=mask)
+            x = self.attn(x, mask=mask, groups=groups)
             x = self.ff(x)
             return x.reshape(b, n, d)
-        x = self.attn(x, mask=mask)
+        x = self.attn(x, mask=mask, groups=groups)
         return self.ff(x)
 
 
@@ -166,8 +174,12 @@ class ColTransformer(nn.Module):
         )
 
     def forward(
-        self, x: torch.Tensor, mask: torch.Tensor | None = None
+        self,
+        x: torch.Tensor,
+        mask: torch.Tensor | None = None,
+        groups: RowGroups | None = None,
     ) -> torch.Tensor:
+        # ``groups`` is unused: column attention never crosses samples.
         # The incoming mask is per-sample ``(b,)``; column Attention expects a
         # per-token ``(b, n)`` key-padding mask, so broadcast it across tokens.
         col_mask = mask[:, None].expand(-1, x.size(1)) if mask is not None else None
@@ -227,10 +239,13 @@ class RowTransformer(nn.Module):
         )
 
     def forward(
-        self, x: torch.Tensor, mask: torch.Tensor | None = None
+        self,
+        x: torch.Tensor,
+        mask: torch.Tensor | None = None,
+        groups: RowGroups | None = None,
     ) -> torch.Tensor:
         for mixer in self.blocks:
-            x = mixer(x, mask=mask)
+            x = mixer(x, mask=mask, groups=groups)
         return x
 
 
@@ -304,7 +319,10 @@ class RowColTransformer(nn.Module):
         )
 
     def forward(
-        self, x: torch.Tensor, mask: torch.Tensor | None = None
+        self,
+        x: torch.Tensor,
+        mask: torch.Tensor | None = None,
+        groups: RowGroups | None = None,
     ) -> torch.Tensor:
         # Column Attention expects a per-token ``(b, n)`` mask; row attention
         # keeps the per-sample ``(b,)`` mask.
@@ -312,5 +330,5 @@ class RowColTransformer(nn.Module):
         for col_attn, col_ff, row_mixer in self.blocks:
             x = col_attn(x, mask=col_mask)
             x = col_ff(x)
-            x = row_mixer(x, mask=mask)
+            x = row_mixer(x, mask=mask, groups=groups)
         return x
