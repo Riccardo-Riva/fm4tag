@@ -400,3 +400,54 @@ def test_encoder_output_is_normalised_regardless_of_depth(depth):
     assert out.shape == (32, 4, DIM)
     per_token_std = out.std(dim=-1)
     assert torch.allclose(per_token_std, torch.ones_like(per_token_std), atol=0.1)
+
+
+# ── the CUDA grid limit on the kernel batch ─────────────────────────────────
+
+
+def test_column_attention_slices_beyond_kernel_batch_limit(monkeypatch):
+    import fm4tag.models.attention as attention_mod
+    from fm4tag.models.attention import Attention
+
+    torch.manual_seed(0)
+    attn = Attention(DIM, heads=2, dim_head=8).eval()
+    x = torch.randn(10, N, DIM)
+    mask = torch.rand(10, N) > 0.2
+    mask[:, 0] = True
+    with torch.no_grad():
+        ref, ref_masked = attn(x), attn(x, mask=mask)
+        monkeypatch.setattr(attention_mod, 'MAX_KERNEL_BATCH', 3)
+        out, out_masked = attn(x), attn(x, mask=mask)
+    assert torch.allclose(out, ref, atol=1e-6)
+    assert torch.allclose(out_masked, ref_masked, atol=1e-6)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason='requires a CUDA device')
+def test_column_attention_over_70k_tracks_on_gpu():
+    """More packed tracks than a CUDA grid dimension takes (65535)."""
+    from fm4tag.models.attention import Attention
+
+    torch.manual_seed(0)
+    attn = Attention(DIM, heads=2, dim_head=8).cuda().eval()
+    x = torch.randn(70_000, 19, DIM, device='cuda')
+    with torch.no_grad(), torch.autocast('cuda', dtype=torch.bfloat16):
+        out = attn(x)
+        head = attn(x[:1000])
+    assert torch.isfinite(out).all()
+    assert torch.allclose(out[:1000].float(), head.float(), atol=1e-2)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason='requires a CUDA device')
+def test_varlen_slices_beyond_kernel_batch_limit_on_gpu(monkeypatch):
+    import fm4tag.models.attention as attention_mod
+
+    torch.manual_seed(0)
+    bounds = [0, 30, 30, 75, 120, 121, 160]
+    groups = RowGroups.from_boundaries(torch.tensor(bounds, device='cuda'))
+    q, k, v = (
+        torch.randn(160, 4, 32, device='cuda', dtype=torch.bfloat16) for _ in range(3)
+    )
+    ref = grouped_attention(q, k, v, groups)
+    monkeypatch.setattr(attention_mod, 'MAX_KERNEL_BATCH', 2)
+    out = grouped_attention(q, k, v, groups)
+    assert torch.allclose(out.float(), ref.float(), atol=1e-2)

@@ -16,6 +16,12 @@ except ImportError:
 
 _FLASH_ATTN_DTYPES = (torch.float16, torch.bfloat16)
 
+# CUDA caps grid dims y/z at 65535 and the fused attention kernels put the batch
+# (or, for varlen, the number of sequences) there: a launch beyond it fails
+# with "invalid configuration argument".  The column attention batches every
+# packed track (~118k at 16k jets), so such calls are split into slices.
+MAX_KERNEL_BATCH = 65535
+
 
 def sdpa(q, k, v, attn_mask=None, dropout_p=0.0):
     """Scaled dot-product attention, routed through FlashAttention-2 when possible.
@@ -30,7 +36,24 @@ def sdpa(q, k, v, attn_mask=None, dropout_p=0.0):
     the MATH backend to dodge the padding the fused kernels apply: measured
     2026-08-17, it does cut their backward ~20%, but triples their forward
     (unaligned GEMMs + fp32 scores) for a net 2-3% loss and +0.4 GiB.
+
+    A leading batch above :data:`MAX_KERNEL_BATCH` is attended in slices.
     """
+    if q.dim() >= 4 and q.shape[0] > MAX_KERNEL_BATCH:
+        n = MAX_KERNEL_BATCH
+        per_sample_mask = attn_mask is not None and attn_mask.shape[0] == q.shape[0]
+        return torch.cat(
+            [
+                sdpa(
+                    q[i : i + n],
+                    k[i : i + n],
+                    v[i : i + n],
+                    attn_mask=attn_mask[i : i + n] if per_sample_mask else attn_mask,
+                    dropout_p=dropout_p,
+                )
+                for i in range(0, q.shape[0], n)
+            ]
+        )
     if (
         HAS_FLASH_ATTN
         and attn_mask is None
@@ -163,7 +186,18 @@ def grouped_attention(
         return q.clone()
     cu = groups.cu_seqlens
     if _use_varlen(q, dropout_p):
-        return varlen_attn(q, k, v, cu, cu, groups.max_seqlen, groups.max_seqlen)
+        n_groups = cu.numel() - 1
+        if n_groups <= MAX_KERNEL_BATCH:
+            return varlen_attn(q, k, v, cu, cu, groups.max_seqlen, groups.max_seqlen)
+        # More sequences than one launch takes: slices of whole groups.
+        bounds = cu.tolist()
+        outs = []
+        for a in range(0, n_groups, MAX_KERNEL_BATCH):
+            b = min(a + MAX_KERNEL_BATCH, n_groups)
+            lo, hi = bounds[a], bounds[b]
+            sub = RowGroups(cu[a : b + 1] - lo, groups.max_seqlen)
+            outs.append(grouped_attention(q[lo:hi], k[lo:hi], v[lo:hi], sub, dropout_p))
+        return torch.cat(outs, dim=0)
 
     bounds = cu.tolist()
     outs = []
