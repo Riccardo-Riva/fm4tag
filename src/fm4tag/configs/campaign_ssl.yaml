@@ -51,3 +51,10 @@ finetune:
     cross_entropy:   1.0
     jet_contrastive: 0.0   # JC arms: 0.3 (λ-scan prior)
   warmup_frac: 0.02
+
+callbacks:
+  # CPU RSS and GPU allocated / reserved / peak memory in metrics.csv — the
+  # VRAM the batch size is sized against (and what the cluster admins audit).
+  memory_monitor:
+    _target_: fm4tag.callbacks.MemoryMonitorCallback
+    log_every_n_steps: 500

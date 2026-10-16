@@ -71,3 +71,11 @@ def test_pretrain_arm_builds():
     )
     assert module.chunk_size == cfg.chunk_size
     assert any(p.requires_grad for p in module.aggregator.parameters())  # P1
+
+
+def test_campaign_logs_gpu_memory():
+    from fm4tag.callbacks import MemoryMonitorCallback
+    from fm4tag.utils import instantiate_callbacks
+
+    callbacks = instantiate_callbacks(_cfg('arm=scratch').callbacks)
+    assert any(isinstance(cb, MemoryMonitorCallback) for cb in callbacks)

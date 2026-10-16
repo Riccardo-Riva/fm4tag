@@ -13,6 +13,7 @@ class MemoryMonitorCallback(Callback):
     * ``mem/cpu_rss_MiB``  — resident set size of the main process (CPU RAM)
     * ``mem/gpu_alloc_MiB`` — GPU memory currently allocated by PyTorch tensors
     * ``mem/gpu_reserved_MiB`` — GPU memory reserved (cached) by the allocator
+    * ``mem/gpu_peak_MiB``      — peak allocated since the start of the run
 
     Enable from config::
 
@@ -34,6 +35,7 @@ class MemoryMonitorCallback(Callback):
             dev = torch.cuda.current_device()
             stats['mem/gpu_alloc_MiB'] = torch.cuda.memory_allocated(dev) / 1024**2
             stats['mem/gpu_reserved_MiB'] = torch.cuda.memory_reserved(dev) / 1024**2
+            stats['mem/gpu_peak_MiB'] = torch.cuda.max_memory_allocated(dev) / 1024**2
         return stats
 
     def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx) -> None:
