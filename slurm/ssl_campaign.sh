@@ -128,6 +128,14 @@ for ov in ${CELL_OVERRIDES}; do
 done
 ARM=$(grep -oE '(^| )arm=[a-z]+' <<< " ${CELL_OVERRIDES}" | cut -d= -f2 || true)
 ARM=${ARM:-scratch}
+# Compose the cell's config now: a typo in an override fails here, before
+# anything is submitted; it also names the data files the training reads.
+# shellcheck disable=SC2086
+if ! DATA_FILES=$("${VENV}/bin/python" "${REPO}/scripts/campaign_cell_files.py" ${CELL_OVERRIDES}); then
+    echo "ERROR: cell ${CELL_NAME} does not compose — nothing more submitted" >&2
+    exit 1
+fi
+DATA_FILES=$(echo ${DATA_FILES})
 # Shell-quoted for the job script, so Hydra interpolations such as
 # ${optimizer.lr} reach Hydra literally instead of being expanded by bash.
 # shellcheck disable=SC2086
@@ -181,6 +189,12 @@ for ov in ${CELL_OVERRIDES_Q}; do
     fi
     OVERRIDES+=("\${ov}")
 done
+
+# Warm the node's page cache with one sequential read: the loader's random
+# cold reads from NFS are ~8x slower than cached ones.
+WARM_START=\$(date +%s)
+cat ${DATA_FILES} > /dev/null
+echo "[data] page cache warmed in \$(( \$(date +%s) - WARM_START )) s: ${DATA_FILES}"
 
 export GPU_FREE_MIB_REQUIRED=${GPU_FREE_MIB_REQUIRED}
 export GPU_WAIT_SECONDS=${GPU_WAIT_SECONDS}
