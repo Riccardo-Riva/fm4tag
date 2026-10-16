@@ -1,0 +1,17 @@
+# @package _global_
+# Pretraining (P0): contrastive loss on the feature embeddings only — the
+# per-object embeddings of the tracks and of the global jet features.  P1 adds
+# the jet-level contrastive on the aggregator output:
+#   pretrain.loss_weights.jet_contrastive=1.0
+phase: pretrain
+
+pretrain:
+  loss_weights:
+    contrastive:     1.0
+    denoising_cat:   0.0
+    denoising_con:   0.0
+    jet_contrastive: 0.0
+  warmup_frac: 0.02
+
+trainer:
+  max_epochs: 30

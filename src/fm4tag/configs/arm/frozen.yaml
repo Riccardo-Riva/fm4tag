@@ -1,0 +1,15 @@
+# @package _global_
+# FR: start from a pretraining checkpoint with the encoders (+ projectors)
+# frozen for the whole run; the aggregator and the head train.  A pretrained
+# aggregator (P1) starts from its pretrained weights at optimizer.backbone_lr.
+phase: finetune
+encoder_ckpt: null            # pretraining checkpoint — must be given
+require_encoder_ckpt: true    # the runner refuses to start without it
+load_aggregator: auto
+
+finetune:
+  freeze_encoders:   true
+  unfreeze_at_epoch: 0
+
+optimizer:
+  backbone_lr: ${optimizer.lr}

@@ -1,0 +1,53 @@
+# ════════════════════════════════════════════════════════════════════════════
+# fm4tag — SSL campaign: does contrastive pretraining of the SAINT-like
+# encoders help the tagger?
+#
+# default.yaml + the settings every run of the campaign shares.  The arm (what
+# is trained, starting from what) is the `arm` config group:
+#
+#   fm4tag --config-name=campaign_ssl arm=pretrain                     # P0
+#   fm4tag --config-name=campaign_ssl arm=pretrain \
+#          pretrain.loss_weights.jet_contrastive=1.0                   # P1
+#   fm4tag --config-name=campaign_ssl arm=scratch                      # SC
+#   fm4tag --config-name=campaign_ssl arm=finetune encoder_ckpt=<ckpt> # FT
+#   fm4tag --config-name=campaign_ssl arm=frozen   encoder_ckpt=<ckpt> # FR
+#
+# The downstream jet-level contrastive term (JC) is
+# finetune.loss_weights.jet_contrastive (0 = off).  Every value a run used is
+# in its .hydra/config.yaml, which is what the analysis scripts read.
+# ════════════════════════════════════════════════════════════════════════════
+
+defaults:
+  - default
+  - _self_
+  - arm: scratch
+
+experiment_name: ssl_campaign
+
+# Disjoint splits by eventNumber % 100: pretrain 0-63 (39.7M jets), train
+# 64-93 (18.6M), val 94-96, test 97-99 (1.86M each).  Never mix with 112022.
+base_path: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_152051
+
+chunk_size: 256        # intersample context (jets); revised after the S0 benchmark
+
+datamodule:
+  batch_size:  4096    # per arm: the largest multiple of 8*chunk_size that
+                       # fills the GPU (S0); an optimisation knob only
+  num_workers: 10
+
+trainer:
+  devices:    1
+  max_epochs: 100
+
+optimizer:
+  lr: 3.0e-4           # tuned per arm (S3)
+
+# Augmentation strength of the views (CutMix + Mixup noise level): the λ-scan
+# prior for the downstream JC; the pretraining grid (S2) overrides it.
+lambda: 0.4
+
+finetune:
+  loss_weights:
+    cross_entropy:   1.0
+    jet_contrastive: 0.0   # JC arms: 0.3 (λ-scan prior)
+  warmup_frac: 0.02

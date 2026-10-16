@@ -1,0 +1,8 @@
+# @package _global_
+# SC: the whole tagger trained from random init; every part at optimizer.lr.
+phase: finetune
+encoder_ckpt: null
+
+finetune:
+  freeze_encoders:   false
+  unfreeze_at_epoch: 0

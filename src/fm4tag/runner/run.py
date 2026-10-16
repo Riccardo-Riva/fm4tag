@@ -105,6 +105,11 @@ def run(
 
     if _phase not in ('pretrain', 'finetune'):
         raise ValueError(f"phase must be 'pretrain' or 'finetune', got {_phase!r}")
+    if cfg.get('require_encoder_ckpt', False) and _enc_ckpt is None:
+        raise ValueError(
+            'require_encoder_ckpt is set (a pretrained arm) but no encoder_ckpt '
+            'was given; refusing to train from random init.'
+        )
 
     torch.set_float32_matmul_precision(cfg.get('float32_matmul_precision', 'high'))
     L.seed_everything(cfg.get('seed', 42), workers=True)
