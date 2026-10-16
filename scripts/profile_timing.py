@@ -19,6 +19,8 @@ Usage (typically inside an sbatch wrapper — see submit_profile_timing.sh):
     python scripts/profile_timing.py --phase pretrain  [hydra overrides ...]
     python scripts/profile_timing.py --phase finetune datamodule.batch_size=512
     python scripts/profile_timing.py --phase pretrain --synthetic --device cpu
+    python scripts/profile_timing.py --phase finetune --config-name campaign_ssl \
+        arm=frozen chunk_size=256 datamodule.batch_size=8192
 
 Results are printed as tables and saved as JSON next to --out.
 """
@@ -214,6 +216,11 @@ def synthetic_batch(cfg, B: int) -> dict:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--phase', choices=['pretrain', 'finetune'], required=True)
+    ap.add_argument(
+        '--config-name',
+        default='default',
+        help='primary config in src/fm4tag/configs (e.g. campaign_ssl)',
+    )
     ap.add_argument('--steps', type=int, default=30, help='measured steps')
     ap.add_argument('--warmup', type=int, default=10, help='untimed warmup steps')
     ap.add_argument(
@@ -257,7 +264,8 @@ def main() -> None:
 
     with initialize_config_dir(version_base=None, config_dir=CONFIG_DIR):
         cfg = compose(
-            config_name='default', overrides=[f'phase={args.phase}', *args.overrides]
+            config_name=args.config_name,
+            overrides=[f'phase={args.phase}', *args.overrides],
         )
 
     device = args.device
@@ -566,6 +574,7 @@ def main() -> None:
         out.mkdir(parents=True, exist_ok=True)
         report = {
             'phase': args.phase,
+            'config_name': args.config_name,
             'overrides': args.overrides,
             'batch_size': B,
             'params_M': n_params,
