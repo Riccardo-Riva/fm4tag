@@ -183,6 +183,18 @@ def best_feasible(
 # ---------------------------------------------------------------------------
 
 
+def _pretrain_jet_contrastive(ckpt_path: str | None) -> float | None:
+    """The pretraining run's jet_contrastive weight, from its checkpoint."""
+    if not ckpt_path:
+        return None
+    import torch  # deferred: cache-only runs never need it
+
+    ckpt = torch.load(ckpt_path, map_location='cpu', weights_only=False)
+    weights = (ckpt.get('hyper_parameters') or {}).get('loss_weights') or {}
+    value = weights.get('jet_contrastive')
+    return None if value is None else float(value)
+
+
 def meta_from_hydra(run_dir: Path, entry: dict) -> dict:
     """Ground-truth hyper-parameters from the run's own .hydra/config.yaml.
 
@@ -212,6 +224,11 @@ def meta_from_hydra(run_dir: Path, entry: dict) -> dict:
         ),
         'lr': float(cfg.optimizer.lr),
         'seed': int(cfg.get('seed', 0)),
+        # SSL campaign: how the downstream run was initialised and trained.
+        'init': 'pretrained' if cfg.get('encoder_ckpt') else 'scratch',
+        'frozen': bool(OmegaConf.select(cfg, 'finetune.freeze_encoders') or False),
+        'jc_pre': _pretrain_jet_contrastive(cfg.get('encoder_ckpt')),
+        'chunk': cfg.get('chunk_size'),
     }
     for key, value in meta.items():
         claimed = entry.get(key)
@@ -260,6 +277,7 @@ def load_entry_probs(
         entry.get('num_workers', 4),
         n_jets,
         desc=entry['label'],
+        precision=entry.get('precision', 'fp32'),
     )
     return probs, run_dir
 
@@ -391,7 +409,18 @@ def plot_crej_vs(
 # Main
 # ---------------------------------------------------------------------------
 
-META_COLUMNS = ('arch', 'lambda', 'jc', 'temp', 'lr', 'seed')
+META_COLUMNS = (
+    'arch',
+    'lambda',
+    'jc',
+    'temp',
+    'lr',
+    'seed',
+    'init',
+    'frozen',
+    'jc_pre',
+    'chunk',
+)
 
 
 def main() -> None:

@@ -163,9 +163,14 @@ def resolve_checkpoint(run_dir: Path, run_cfg: DictConfig, which: str) -> Path:
         return by_epoch[epoch]
 
     # 'best': look the saved epochs up in the run's metrics.csv, using the
-    # monitor/mode the run's own ModelCheckpoint used.
+    # monitor/mode the run's own ModelCheckpoint used — for a finetune run the
+    # runner merges callbacks_finetune onto callbacks (val/head/loss_ce).
     monitor = OmegaConf.select(run_cfg, 'callbacks.model_checkpoint.monitor')
     mode = OmegaConf.select(run_cfg, 'callbacks.model_checkpoint.mode') or 'min'
+    if run_cfg.get('phase') == 'finetune':
+        ft = OmegaConf.select(run_cfg, 'callbacks_finetune.model_checkpoint') or {}
+        monitor = ft.get('monitor', monitor)
+        mode = ft.get('mode', mode)
     monitor = monitor or 'val/loss'
 
     metrics_csv = ckpt_dir.parent / 'metrics.csv'
@@ -238,8 +243,25 @@ def run_inference(
     num_workers: int,
     n_jets: int | None,
     desc: str,
+    precision: str = 'fp32',
 ) -> np.ndarray:
-    """Class probabilities ``(n_jets, n_classes)`` on the (truncated) test set."""
+    """Class probabilities ``(n_jets, n_classes)`` on the (truncated) test set.
+
+    ``precision='bf16'`` runs under bf16 autocast on CUDA, as training does
+    (``bf16-mixed``); the chunked row attention then takes the flash varlen
+    kernel instead of its exact fp32 loop.  The batch must split into whole
+    intersample chunks of the model's ``chunk_size``.
+    """
+    if precision not in ('fp32', 'bf16'):
+        raise ValueError(
+            f"inference precision must be 'fp32' or 'bf16', got {precision!r}"
+        )
+    chunk = run_cfg.get('chunk_size')
+    if chunk and batch_size % chunk:
+        raise ValueError(
+            f'inference batch_size={batch_size} is not a multiple of the '
+            f"model's chunk_size={chunk}"
+        )
     dataset = DatasetCatCon(
         file_path=str(test_file),
         variables=OmegaConf.to_container(run_cfg.variables, resolve=True),
@@ -262,7 +284,12 @@ def run_inference(
 
     module.to(device)
     probs = []
-    with torch.inference_mode():
+    autocast = torch.autocast(
+        device.type,
+        dtype=torch.bfloat16,
+        enabled=(precision == 'bf16' and device.type == 'cuda'),
+    )
+    with torch.inference_mode(), autocast:
         for batch in tqdm(loader, desc=desc):
             batch_dev = {
                 'global': batch['global'].to(device, non_blocking=True),
@@ -284,6 +311,7 @@ def cached_probs(
     n_jets: int,
     recompute: bool,
     compute,
+    precision: str = 'fp32',
 ) -> np.ndarray:
     """Load cached predictions if they match ckpt/test-file, else recompute.
 
@@ -293,7 +321,8 @@ def cached_probs(
     stored ``ckpt_path``/``test_file`` match and that is at least ``n_jets``
     long.  This lets a downstream run (e.g. a fraction search that relabels
     entries with their optimal f_c/f_tau) reuse a cache populated under the
-    original labels instead of re-running inference.
+    original labels instead of re-running inference.  The inference
+    ``precision`` is part of the key (caches without it are fp32).
     """
     slug = re.sub(r'[^A-Za-z0-9]+', '_', label).strip('_').lower()
     cache_file = cache_dir / f'probs_{slug}.npz'
@@ -303,9 +332,13 @@ def cached_probs(
             cached = np.load(path, allow_pickle=False)
         except (OSError, ValueError):
             return None
+        cached_precision = (
+            str(cached['precision']) if 'precision' in cached.files else 'fp32'
+        )
         if (
             str(cached['ckpt_path']) == str(ckpt_path)
             and str(cached['test_file']) == str(test_file)
+            and cached_precision == precision
             and cached['probs'].shape[0] >= n_jets
         ):
             return cached['probs'][:n_jets]
@@ -326,12 +359,16 @@ def cached_probs(
                 print(f'  using cached predictions (matched by checkpoint): {other}')
                 return hit
         if cache_file.is_file():
-            print('  cache stale (different checkpoint/test file/size) — recomputing')
+            print('  cache stale (checkpoint/test file/size/precision) — recomputing')
 
     probs = compute()
     cache_dir.mkdir(parents=True, exist_ok=True)
     np.savez(
-        cache_file, probs=probs, ckpt_path=str(ckpt_path), test_file=str(test_file)
+        cache_file,
+        probs=probs,
+        ckpt_path=str(ckpt_path),
+        test_file=str(test_file),
+        precision=precision,
     )
     print(f'  cached predictions: {cache_file}')
     return probs
@@ -810,6 +847,7 @@ def main() -> None:
                 test_file,
                 n_jets,
                 args.recompute,
+                precision=inference_cfg.get('precision', 'fp32'),
                 compute=lambda: run_inference(
                     build_module(run_cfg, ckpt_path),
                     run_cfg,
@@ -819,6 +857,7 @@ def main() -> None:
                     inference_cfg.get('num_workers', 4),
                     n_jets,
                     desc=entry['label'],
+                    precision=inference_cfg.get('precision', 'fp32'),
                 ),
             )
             probs_by_ckpt[ckpt_key] = probs

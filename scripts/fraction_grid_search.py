@@ -121,6 +121,7 @@ def main() -> None:
         test_file,
         n_jets,
         args.recompute,
+        precision=inference_cfg.get('precision', 'fp32'),
         compute=lambda: rc.run_inference(
             rc.build_module(run_cfg, ckpt_path),
             run_cfg,
@@ -130,6 +131,7 @@ def main() -> None:
             inference_cfg.get('num_workers', 4),
             n_jets,
             desc=label,
+            precision=inference_cfg.get('precision', 'fp32'),
         ),
     )
 
