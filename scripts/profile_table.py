@@ -19,7 +19,12 @@ from pathlib import Path
 
 import pandas as pd
 
-COMPONENTS = {'tracks': 'backbone.tracks', 'jets': 'backbone.jets', 'agg': 'aggregator'}
+# FinetuneModule names its encoders `backbone`, PretrainModule `encoders`.
+COMPONENTS = {
+    'tracks': ('backbone.tracks', 'encoders.tracks'),
+    'jets': ('backbone.jets', 'encoders.jets'),
+    'agg': ('aggregator',),
+}
 
 
 def _override(overrides: list[str], key: str, default=None):
@@ -54,8 +59,8 @@ def _row(point: Path) -> dict:
         'peak_gib': round(r['peak_mem_gb'], 2),
         'data_ms': round(r['dataloader'].get('steady_mean_ms', float('nan')), 1),
     }
-    for short, name in COMPONENTS.items():
-        row[f'{short}_%'] = round(100 * mods.get(name, 0.0) / ms)
+    for short, names in COMPONENTS.items():
+        row[f'{short}_%'] = round(100 * sum(mods.get(n, 0.0) for n in names) / ms)
     return row
 
 
