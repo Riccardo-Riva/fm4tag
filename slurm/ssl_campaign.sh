@@ -120,6 +120,12 @@ for LINE in "${CELL_LINES[@]}"; do
 read -r CELL_NAME CELL_OVERRIDES <<< "${LINE}"
 CELL_DIR=${OUTPUT_BASE}/${CELL_NAME}
 mkdir -p "${CELL_DIR}"
+for ov in ${CELL_OVERRIDES}; do
+    if [[ "${ov}" == encoder_ckpt=@* && "${ov}" != encoder_ckpt=@/* ]]; then
+        echo "ERROR: ${CELL_NAME}: ${ov} — the @ path must be absolute" >&2
+        exit 1
+    fi
+done
 ARM=$(grep -oE '(^| )arm=[a-z]+' <<< " ${CELL_OVERRIDES}" | cut -d= -f2 || true)
 ARM=${ARM:-scratch}
 # Shell-quoted for the job script, so Hydra interpolations such as
