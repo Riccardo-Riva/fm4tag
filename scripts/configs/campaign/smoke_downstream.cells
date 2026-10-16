@@ -1,0 +1,7 @@
+# Downstream half of the smoke test; PRE = the smoke_pretrain stage directory.
+#   PRE=slurm/ssl_campaign/smoke_pretrain_<TS> DEPENDENCY=afterok:<p0>:<p1> ... (same env)
+sc_jc     arm=scratch finetune.loss_weights.jet_contrastive=0.3 +trainer.limit_train_batches=40 +trainer.limit_val_batches=8 chunk_size=256 datamodule.batch_size=2048
+ft_p0     arm=finetune encoder_ckpt=@${PRE}/p0/seed_42 +trainer.limit_train_batches=40 +trainer.limit_val_batches=8 chunk_size=256 datamodule.batch_size=2048
+fr_p0     arm=frozen encoder_ckpt=@${PRE}/p0/seed_42 +trainer.limit_train_batches=40 +trainer.limit_val_batches=8 chunk_size=256 datamodule.batch_size=2048
+ft_p1_jc  arm=finetune encoder_ckpt=@${PRE}/p1/seed_42 finetune.loss_weights.jet_contrastive=0.3 +trainer.limit_train_batches=40 +trainer.limit_val_batches=8 chunk_size=256 datamodule.batch_size=2048
+fr_p1_jc  arm=frozen encoder_ckpt=@${PRE}/p1/seed_42 finetune.loss_weights.jet_contrastive=0.3 +trainer.limit_train_batches=40 +trainer.limit_val_batches=8 chunk_size=256 datamodule.batch_size=2048
