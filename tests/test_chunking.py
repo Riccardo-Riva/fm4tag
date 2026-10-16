@@ -169,3 +169,17 @@ def test_chunked_training_step_backpropagates(phase):
     loss.backward()
     grads = [p.grad for p in module.parameters() if p.requires_grad]
     assert any(g is not None and torch.count_nonzero(g) > 0 for g in grads)
+
+
+@pytest.mark.parametrize('phase', ['pretrain', 'finetune'])
+def test_one_chunk_loss_equals_unchunked(phase):
+    """Chunked contrastive losses over a single chunk == the batch-wide ones."""
+    chunked, batch = _build(phase, B)
+    plain, _ = _build(phase, 'null')
+    losses = []
+    for module in (chunked, plain):
+        torch.manual_seed(7)  # same CutMix / Mixup partners for both
+        with torch.no_grad():
+            losses.append(module._compute_loss(batch)[-1])
+    for key in losses[1]:
+        assert torch.allclose(losses[0][key], losses[1][key], atol=1e-5), key

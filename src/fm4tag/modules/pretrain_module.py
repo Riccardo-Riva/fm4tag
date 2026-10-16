@@ -210,7 +210,7 @@ class PretrainModule(L.LightningModule):
         logs: dict[str, torch.Tensor] = {}
 
         if w['contrastive'] > 0:
-            l_con = self.contrastive_loss(zs)
+            l_con = self.contrastive_loss(zs, groups=groups[self.global_object])
             obj_loss = obj_loss + w['contrastive'] * l_con
             logs['loss_contrastive'] = l_con
 
@@ -258,7 +258,7 @@ class PretrainModule(L.LightningModule):
         logs: dict[str, torch.Tensor] = {}
 
         if w['contrastive'] > 0:
-            l_con = self.contrastive_loss(zs)
+            l_con = self.contrastive_loss(zs, groups=groups[obj_name])
             obj_loss = obj_loss + w['contrastive'] * l_con
             logs['loss_contrastive'] = l_con
 
@@ -328,7 +328,9 @@ class PretrainModule(L.LightningModule):
                 )
                 for v in range(len(self.views))
             ]
-            jet_loss = self.jet_contrastive_loss(z_jet_list)
+            jet_loss = self.jet_contrastive_loss(
+                z_jet_list, groups=groups[self.global_object]
+            )
             total = total + w['jet_contrastive'] * jet_loss
             log_dict['aggregator/loss_contrastive'] = jet_loss
 

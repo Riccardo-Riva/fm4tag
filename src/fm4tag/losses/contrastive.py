@@ -6,6 +6,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from fm4tag.models.attention import RowGroups
 from fm4tag.utils.ddp import all_gather_with_grad
 
 
@@ -25,6 +26,13 @@ class MultiViewSupConLoss(nn.Module):
     counts the effective objective is the mean of per-rank anchor means
     (each rank weighted equally, not each anchor); the residual world-size
     dependence is O(ΔN/N) and negligible at typical occupancies.
+
+    With ``groups`` (:class:`~fm4tag.models.attention.RowGroups`, the jet
+    chunks of the intersample attention) positives and negatives come from the
+    anchor's own chunk only and nothing is gathered across ranks: a chunk
+    lives on one rank, so the loss is world-size independent by construction.
+    Similarities are then computed in fp32 and the loss is the mean over all
+    anchors of all chunks.
 
     Reference: Khosla et al., "Supervised Contrastive Learning",
     NeurIPS 2020. https://arxiv.org/abs/2004.11362
@@ -62,12 +70,16 @@ class MultiViewSupConLoss(nn.Module):
         self.include_pos_in_denom = include_pos_in_denom
         self.include_same_view_negatives = include_same_view_negatives
 
-    def forward(self, z_list: list[torch.Tensor]) -> torch.Tensor:
+    def forward(
+        self, z_list: list[torch.Tensor], groups: RowGroups | None = None
+    ) -> torch.Tensor:
         """Compute multi-view SupCon loss.
 
         Args:
             z_list: V tensors each of shape ``(N, D)`` — one projected embedding
                     tensor per view, in the same sample order.
+            groups: Optional chunks of the ``N`` axis; ``None`` = one pool
+                    gathered across ranks.
 
         Returns:
             Scalar loss.
@@ -75,6 +87,8 @@ class MultiViewSupConLoss(nn.Module):
         V = len(z_list)
         if V < 2:
             raise ValueError('MultiViewSupConLoss requires at least 2 views.')
+        if groups is not None:
+            return self._chunked(z_list, groups)
 
         N = z_list[0].size(0)
         # Stack to (N, V, D) then flatten to (N*V, D).
@@ -130,3 +144,49 @@ class MultiViewSupConLoss(nn.Module):
             # graph-connected zero instead.
             return sim.sum() * 0.0
         return loss_local.mean()
+
+    def _chunked(self, z_list: list[torch.Tensor], groups: RowGroups) -> torch.Tensor:
+        z = torch.stack(z_list, dim=1)  # (N, V, D)
+        if z.dtype in (torch.float16, torch.bfloat16):
+            z = z.float()  # bf16 logits at T~0.1 are too coarse
+        z = F.normalize(z, dim=-1)
+        bounds = groups.cu_seqlens.tolist()
+        losses = [
+            self._chunk_loss(z[start:end])
+            for start, end in zip(bounds[:-1], bounds[1:])
+            if end > start
+        ]
+        if not losses:
+            return z.sum() * 0.0
+        losses = torch.cat(losses)
+        return losses.mean() if losses.numel() else z.sum() * 0.0
+
+    def _chunk_loss(self, z: torch.Tensor) -> torch.Tensor:
+        """Per-anchor losses of one chunk; ``z`` is ``(n, V, D)``, normalised."""
+        n, V, _ = z.shape
+        T = self.temperature
+        flat = z.reshape(n * V, -1)  # sample-major, view-fastest
+        sim = (flat @ flat.T).view(n, V, n, V) / T
+
+        same_sample = torch.eye(n, dtype=torch.bool, device=z.device)[:, None, :, None]
+        same_view = torch.eye(V, dtype=torch.bool, device=z.device)[None, :, None, :]
+        excluded = same_sample & same_view  # self
+        if not self.include_pos_in_denom:
+            excluded = excluded | same_sample
+        if not self.include_same_view_negatives:
+            excluded = excluded | same_view
+        log_Z = torch.logsumexp(
+            sim.masked_fill(excluded, float('-inf')).view(n * V, n * V), dim=-1
+        )
+
+        # Positives are the anchor's other views: (n, V, V) dot products.
+        pos = torch.einsum('svd,swd->svw', z, z) / T
+        off_diag = ~torch.eye(V, dtype=torch.bool, device=z.device)
+        if self.loss_type == 'out':
+            pos_term = pos.masked_fill(~off_diag, 0.0).sum(-1) / (V - 1)
+        else:
+            pos_term = torch.logsumexp(pos.masked_fill(~off_diag, float('-inf')), -1)
+        loss = log_Z - pos_term.reshape(n * V)
+        # An anchor with an empty denominator (one-sample chunk, positives
+        # excluded) carries no contrastive signal.
+        return loss[torch.isfinite(log_Z)]

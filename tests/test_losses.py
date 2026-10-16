@@ -271,3 +271,74 @@ def test_denoising_losses_empty_batch_return_zero():
     x_cont = torch.zeros(0, 3)
     l_con = denoising_con_loss(con_outs, x_cont)
     assert torch.isfinite(l_con) and l_con.item() == 0.0
+
+
+# ── chunked pools (jet chunks) ──────────────────────────────────────────────
+
+_FLAGS = [
+    dict(loss_type=lt, include_pos_in_denom=p, include_same_view_negatives=sv)
+    for lt in ('out', 'in')
+    for p in (True, False)
+    for sv in (True, False)
+]
+
+
+@pytest.mark.parametrize('flags', _FLAGS)
+@pytest.mark.parametrize('V', [2, 3])
+def test_chunked_equals_anchor_weighted_per_chunk_dense(flags, V):
+    from fm4tag.models.attention import RowGroups
+
+    loss_fn = MultiViewSupConLoss(temperature=0.2, **flags)
+    zs = [z.double().requires_grad_() for z in _make_views(11, 8, V)]
+    bounds = [0, 4, 4, 9, 11]
+    groups = RowGroups.from_boundaries(torch.tensor(bounds))
+
+    chunked = loss_fn(zs, groups=groups)
+    parts = [
+        (loss_fn([z[s:e] for z in zs]), e - s)
+        for s, e in zip(bounds[:-1], bounds[1:])
+        if e > s
+    ]
+    ref = sum(loss * n for loss, n in parts) / sum(n for _, n in parts)
+    assert torch.allclose(chunked, ref.to(chunked.dtype), atol=1e-6)
+
+    g_chunked = torch.autograd.grad(chunked, zs)
+    g_ref = torch.autograd.grad(ref, zs)
+    for a, b in zip(g_chunked, g_ref):
+        assert torch.allclose(a.double(), b, atol=1e-6)
+
+
+def test_chunked_single_chunk_equals_dense():
+    from fm4tag.models.attention import RowGroups
+
+    loss_fn = MultiViewSupConLoss(temperature=0.1, include_same_view_negatives=False)
+    zs = _make_views(9, 8, 2)
+    groups = RowGroups.from_boundaries(torch.tensor([0, 9]))
+    assert torch.allclose(loss_fn(zs, groups=groups), loss_fn(zs), atol=1e-6)
+
+
+def test_chunked_ignores_other_chunks():
+    from fm4tag.models.attention import RowGroups
+
+    loss_fn = MultiViewSupConLoss(temperature=0.1)
+    zs = [z.requires_grad_() for z in _make_views(8, 8, 2)]
+    groups = RowGroups.from_boundaries(torch.tensor([0, 4, 8]))
+    grads = torch.autograd.grad(loss_fn([z[:4] for z in zs]), zs)
+    assert all(torch.count_nonzero(g[4:]) == 0 for g in grads)
+    zs2 = [z.detach().clone() for z in zs]
+    zs2[0][4:] += 1.0  # move only the second chunk
+    full = [loss_fn(zs, groups=groups), loss_fn(zs2, groups=groups)]
+    assert not torch.allclose(full[0], full[1])
+
+
+def test_chunked_one_sample_chunk_without_positives_in_denom_is_dropped():
+    from fm4tag.models.attention import RowGroups
+
+    loss_fn = MultiViewSupConLoss(
+        include_pos_in_denom=False, include_same_view_negatives=False
+    )
+    zs = _make_views(5, 8, 2)
+    groups = RowGroups.from_boundaries(torch.tensor([0, 1, 5]))
+    out = loss_fn(zs, groups=groups)
+    assert torch.isfinite(out)
+    assert torch.allclose(out, loss_fn([z[1:] for z in zs]), atol=1e-6)

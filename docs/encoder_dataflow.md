@@ -178,8 +178,11 @@ and layer reuses them. On GPU (bf16/fp16) each row step is one flash
 `N` tokens × `heads` are independent heads; on CPU / fp32 an exact loop over
 the chunks runs instead. Cost per jet is O(C) rather than O(B), so the batch
 can be raised to fill the GPU without slowing the step per jet, and `C` — not
-the batch — is the intersample context. `chunk_size: null` = the whole batch is
-one chunk.
+the batch — is the intersample context. The contrastive losses use the same
+chunks: the per-object losses (`jets_embedding`, `tracks_embedding`) and the
+jet-level one on the aggregator draw positives and negatives from the anchor's
+own chunk, with no cross-rank gather. `chunk_size: null` = the whole batch is
+one chunk (and the contrastive pool is gathered across ranks, as before).
 
 > Consequence of row attention: a sample's output depends on which
 > other samples share its batch — keep evaluation batch composition fixed when

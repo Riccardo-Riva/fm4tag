@@ -293,7 +293,9 @@ class FinetuneModule(L.LightningModule):
             z_jet_list = self._encode_jet_views(
                 batch, z_clean=out['aggregator'], groups=groups
             )
-            l_jet = self.jet_contrastive_loss(z_jet_list)
+            l_jet = self.jet_contrastive_loss(
+                z_jet_list, groups=groups[self.global_object]
+            )
             total = total + w['jet_contrastive'] * l_jet
             log_dict['aggregator/loss_contrastive'] = l_jet
 
