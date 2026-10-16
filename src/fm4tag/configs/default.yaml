@@ -225,7 +225,8 @@ pretrain:
 
 # ── Fine-tuning settings (runner-level) ───────────────────────────────────────
 encoder_ckpt:   null    # path to a pretraining checkpoint to load the encoder
-load_aggregator: true   # also load the aggregator from encoder_ckpt (shared weights)
+load_aggregator: auto   # load the aggregator from encoder_ckpt too: auto = only if
+                        # that pretraining trained it (jet_contrastive > 0); true | false
 ckpt_path:      null    # Lightning checkpoint to resume fit / run test / predict
 use_class_weights: false  # true → derive per-class CE weights for the global
                           # object's label from class_dict_path
@@ -263,6 +264,9 @@ finetune:
   # schedule). 0 = train everything from step 0 (from-scratch); >= max_epochs =
   # frozen for the whole run.
   unfreeze_at_epoch: 3
+  # Frozen-encoder downstream: encoders + projectors never train (no backward);
+  # the aggregator and the head do.
+  freeze_encoders: false
   chunk_size:   ${chunk_size}
 
 # ── Optimiser ─────────────────────────────────────────────────────────────────

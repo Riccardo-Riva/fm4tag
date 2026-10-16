@@ -12,6 +12,7 @@ checkpoints ``weights_only``-loadable.
 from __future__ import annotations
 
 import os
+import warnings
 
 import torch
 import yaml
@@ -26,9 +27,32 @@ from fm4tag.utils import (
     build_head,
     instantiate_callbacks,
     instantiate_loggers,
+    checkpoint_trained_aggregator,
     load_pretrained_aggregator,
     load_pretrained_encoders,
 )
+
+
+def _load_aggregator(mode: str | bool, ckpt_path: str) -> bool:
+    """``load_aggregator``: ``auto`` loads it only if pretraining trained it."""
+    trained = checkpoint_trained_aggregator(ckpt_path)
+    if mode == 'auto':
+        if trained is None:
+            warnings.warn(
+                f"load_aggregator=auto: '{ckpt_path}' does not record "
+                'jet_contrastive; loading the aggregator anyway.',
+                stacklevel=2,
+            )
+        return trained is not False
+    if mode is True and trained is False:
+        warnings.warn(
+            f"load_aggregator=true, but '{ckpt_path}' was pretrained with "
+            'jet_contrastive=0: its aggregator is the random init.',
+            stacklevel=2,
+        )
+    if mode not in (True, False):
+        raise ValueError(f'load_aggregator must be auto, true or false, got {mode!r}')
+    return mode
 
 
 def _check_chunk_size(chunk_size: int | None, batch_size: int) -> None:
@@ -139,14 +163,17 @@ def run(
     else:  # finetune
         head = build_head(cfg, aggregator)
 
+        # Which parts start from pretrained weights: they get backbone_lr and
+        # the staged unfreeze; everything else trains at the head's lr.
+        pretrained_parts: list[str] = []
         if _enc_ckpt is not None:
-            load_pretrained_encoders(encoders, _enc_ckpt)
-            # The aggregator is shared with pretraining; load it too unless
-            # disabled (meaningful only if pretraining trained it).
-            if cfg.get('load_aggregator', True):
-                load_pretrained_aggregator(aggregator, _enc_ckpt)
+            if load_pretrained_encoders(encoders, _enc_ckpt):
+                pretrained_parts.append('encoders')
+            if _load_aggregator(cfg.get('load_aggregator', 'auto'), _enc_ckpt):
+                if load_pretrained_aggregator(aggregator, _enc_ckpt):
+                    pretrained_parts.append('aggregator')
 
-        overrides: dict = {}
+        overrides: dict = {'pretrained_parts': pretrained_parts}
         if cfg.get('use_class_weights', False):
             # Per-class CE weights for the global object's label, taken from
             # the same class-dict file the datamodule uses.

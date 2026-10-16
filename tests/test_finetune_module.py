@@ -273,6 +273,73 @@ def test_unfreeze_at_epoch_zero_trains_backbone_from_start(
     assert opt.param_groups[0]['lr'] > 0.0  # trained from step 0
 
 
+@pytest.mark.parametrize(
+    'parts,backbone',
+    [((), None), (('encoders',), 'backbone'), (('aggregator',), 'aggregator')],
+)
+def test_param_groups_follow_pretrained_parts(
+    encoders, aggregator, head, two_views, parts, backbone
+):
+    """Only loaded parts sit in the backbone group; random-init ones train with
+    the head at its lr."""
+    module = _make_module(
+        encoders, aggregator, head, two_views, backbone_lr=1e-5, pretrained_parts=parts
+    )
+    _attach_trainer(module)
+    opt = module.configure_optimizers()['optimizer']
+    trainable = lambda m: [p for p in m.parameters() if p.requires_grad]  # noqa: E731
+    names = [g['name'] for g in opt.param_groups]
+    if backbone is None:
+        assert names == ['head']
+        assert _n_params(opt.param_groups[0]['params']) == _n_params(trainable(module))
+        return
+    assert names == ['backbone', 'head']
+    pretrained = getattr(module, backbone)
+    assert _n_params(opt.param_groups[0]['params']) == _n_params(trainable(pretrained))
+    assert _n_params(opt.param_groups[1]['params']) == _n_params(
+        trainable(module)
+    ) - _n_params(trainable(pretrained))
+
+
+def test_unknown_pretrained_part_raises(encoders, aggregator, head, two_views):
+    with pytest.raises(ValueError, match='pretrained_parts'):
+        _make_module(encoders, aggregator, head, two_views, pretrained_parts=['head'])
+
+
+def test_frozen_encoders_do_not_train(encoders, aggregator, head, two_views):
+    module = _make_module(
+        encoders,
+        aggregator,
+        head,
+        two_views,
+        freeze_encoders=True,
+        pretrained_parts=('encoders',),
+    )
+    _attach_trainer(module)
+    module.train()
+    assert not module.backbone.training  # frozen features stay in eval mode
+    assert module.aggregator.training and module.head.training
+    assert not any(p.requires_grad for p in module.backbone.parameters())
+
+    opt = module.configure_optimizers()['optimizer']
+    assert [g['name'] for g in opt.param_groups] == ['head']  # aggregator + head
+
+    enc_before = [p.clone() for p in module.backbone.parameters()]
+    agg_before = [p.clone() for p in module.aggregator.parameters()]
+    out = module(_make_batch())
+    assert out['tracks_embedding'].grad_fn is None  # no graph through encoders
+    loss, _, _ = module._compute_loss(_make_batch())
+    loss.backward()
+    opt.step()
+    assert all(
+        torch.equal(a, b) for a, b in zip(enc_before, module.backbone.parameters())
+    )
+    assert any(
+        not torch.equal(a, b)
+        for a, b in zip(agg_before, module.aggregator.parameters())
+    )
+
+
 # ---------------------------------------------------------------------------
 # forward(): same embeddings contract as PretrainModule
 # ---------------------------------------------------------------------------

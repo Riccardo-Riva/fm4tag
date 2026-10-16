@@ -24,13 +24,17 @@ Logged keys follow ``<split>/<component>/<metric>``:
 :class:`~fm4tag.callbacks.EmbeddingMetrics` callback works during fine-tuning
 unchanged.
 
-Staged unfreeze of the pretrained parts (encoders **and** aggregator) is
-handled inside :meth:`configure_optimizers` via ``unfreeze_at_epoch``: every
+Staged unfreeze of the pretrained parts (``pretrained_parts``: the encoders
+and/or the aggregator actually loaded from a checkpoint) is handled inside
+:meth:`configure_optimizers` via ``unfreeze_at_epoch``: every
 parameter is in the optimiser from step 0 (so DDP registers a gradient-sync
 hook for each), but the pretrained param group is held at ``lr=0`` until
 ``unfreeze_at_epoch`` and then ramps onto the head's cosine schedule.
 ``unfreeze_at_epoch=0`` trains everything from step 0; ``>= max_epochs`` keeps
-the pretrained parts frozen for the whole run.  The encoders are stored as
+the pretrained parts at lr=0 for the whole run.  Parts that start from random
+init train in the head group.  ``freeze_encoders`` is the real freeze of the
+encoders (+ projectors): no gradient, no backward, eval mode.  The encoders are
+stored as
 ``self.backbone``.  (This replaces the old ``PretrainedFinetuning`` callback,
 whose ``requires_grad`` freeze happened before the DDP wrap and left the
 unfrozen params without sync hooks → silent rank divergence.)
@@ -93,6 +97,15 @@ class FinetuneModule(L.LightningModule):
                       before ramping them onto the head's schedule.  ``0``
                       trains everything from step 0; ``>= max_epochs`` keeps
                       them frozen for the whole run.
+        freeze_encoders: Freeze the encoders and their projectors for the whole
+                      run (``requires_grad=False`` before the DDP wrap — safe,
+                      as they are never unfrozen — and eval mode).  Nothing
+                      upstream of the aggregator then requires grad, so the
+                      encoders run without autograd graph or backward.
+        pretrained_parts: Which of ``'encoders'``, ``'aggregator'`` start from
+                      pretrained weights (set by the runner from what it
+                      loaded): those train at ``backbone_lr`` with the staged
+                      unfreeze, the rest with the head at ``lr``.
         chunk_size:   Jets per intersample-attention chunk: each jet (and each
                       of its constituents) attends only within its chunk of
                       ``chunk_size`` consecutive jets.  ``None`` = the whole
@@ -117,8 +130,14 @@ class FinetuneModule(L.LightningModule):
         warmup_frac: float = 0.1,
         unfreeze_at_epoch: int = 0,
         chunk_size: int | None = None,
+        freeze_encoders: bool = False,
+        pretrained_parts: Sequence[str] = ('encoders', 'aggregator'),
     ) -> None:
         super().__init__()
+
+        unknown_parts = set(pretrained_parts) - {'encoders', 'aggregator'}
+        if unknown_parts:
+            raise ValueError(f'Unknown pretrained_parts {sorted(unknown_parts)}.')
 
         unknown = set(loss_weights) - set(LOSS_COMPONENTS)
         if unknown:
@@ -148,6 +167,10 @@ class FinetuneModule(L.LightningModule):
             for name in ('reconstructor', 'cat_reconstructor', 'con_reconstructor'):
                 if hasattr(enc, name):
                     getattr(enc, name).requires_grad_(False)
+        self.freeze_encoders = freeze_encoders
+        if freeze_encoders:
+            encoders.requires_grad_(False)
+        self.pretrained_parts = tuple(pretrained_parts)
 
         self.global_object = global_object
         self.constituent_objects = list(constituent_objects)
@@ -174,6 +197,12 @@ class FinetuneModule(L.LightningModule):
         self.save_hyperparameters(
             ignore=['encoders', 'aggregator', 'head', 'views', 'jet_contrastive_loss']
         )
+
+    def train(self, mode: bool = True):
+        super().train(mode)
+        if self.freeze_encoders:
+            self.backbone.eval()  # frozen features: no dropout
+        return self
 
     # ------------------------------------------------------------------
     # Forward: clean embeddings (same contract as PretrainModule)
@@ -405,25 +434,32 @@ class FinetuneModule(L.LightningModule):
         # `unfreeze_at_epoch` via a per-group LR multiplier, then ramp onto the
         # head's cosine schedule.  (AdamW at lr=0 is a true freeze — both the
         # gradient step and decoupled weight decay scale by lr.)
-        pretrained_params = [
-            p
-            for m in (self.backbone, self.aggregator)
-            for p in m.parameters()
-            if p.requires_grad  # skip frozen reconstructor heads
-        ]
-        optimizer = torch.optim.AdamW(
-            [
-                # 'name' labels the LearningRateMonitor series (lr-AdamW/backbone,
-                # lr-AdamW/head) so the staged unfreeze is visible in the logs.
+        # Pretrained parts → 'backbone' group; randomly initialised ones train
+        # with the head.  Frozen params (reconstructors, frozen encoders) are
+        # left out.
+        pretrained_params, fresh_params = [], list(self.head.parameters())
+        for name, part in (
+            ('encoders', self.backbone),
+            ('aggregator', self.aggregator),
+        ):
+            params = [p for p in part.parameters() if p.requires_grad]
+            if name in self.pretrained_parts:
+                pretrained_params += params
+            else:
+                fresh_params += params
+        # 'name' labels the LearningRateMonitor series (lr-AdamW/backbone,
+        # lr-AdamW/head) so the staged unfreeze is visible in the logs.
+        groups = [{'params': fresh_params, 'lr': self.lr, 'name': 'head'}]
+        if pretrained_params:
+            groups.insert(
+                0,
                 {
                     'params': pretrained_params,
                     'lr': self.backbone_lr,
                     'name': 'backbone',
                 },
-                {'params': list(self.head.parameters()), 'lr': self.lr, 'name': 'head'},
-            ],
-            weight_decay=self.weight_decay,
-        )
+            )
+        optimizer = torch.optim.AdamW(groups, weight_decay=self.weight_decay)
 
         total_steps = self.trainer.estimated_stepping_batches
         warmup_steps = max(1, int(self.warmup_frac * total_steps))
@@ -440,7 +476,8 @@ class FinetuneModule(L.LightningModule):
             # Frozen (0 LR) until the unfreeze epoch, then joins the head curve.
             return 0.0 if step < unfreeze_step else head_factor(step)
 
-        scheduler = LambdaLR(optimizer, lr_lambda=[backbone_factor, head_factor])
+        factors = [backbone_factor, head_factor] if pretrained_params else [head_factor]
+        scheduler = LambdaLR(optimizer, lr_lambda=factors)
         return {
             'optimizer': optimizer,
             'lr_scheduler': {'scheduler': scheduler, 'interval': 'step'},
