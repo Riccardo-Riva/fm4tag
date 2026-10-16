@@ -18,6 +18,10 @@
 set -euo pipefail
 
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+# The job imports fm4tag from ${REPO}/src (PYTHONPATH wins over the venv's
+# editable install), so a detached snapshot worktree can be benchmarked with
+# another checkout's interpreter:  PY=<other checkout>/.venv/bin/python
+PY=${PY:-${REPO}/.venv/bin/python}
 TS=$(date +%Y%m%d_%H%M%S)
 OUT=${REPO}/slurm/profiling/s0_${TS}
 mkdir -p "${OUT}"
@@ -60,8 +64,9 @@ cat <<HDR
 #SBATCH --error=${OUT}/err.txt
 nvidia-smi --query-gpu=name,memory.used,memory.total --format=csv,noheader -i \$CUDA_VISIBLE_DEVICES
 GPU_FREE_MIB_REQUIRED=44000 bash ${REPO}/slurm/gpu_preflight.sh || exit 1
+export PYTHONPATH=${REPO}/src
 run() { name=\$1; shift; echo "=============== \$name  \$(date -Is)"; mkdir -p ${OUT}/\$name
-  ${REPO}/.venv/bin/python ${REPO}/scripts/profile_timing.py --config-name campaign_ssl \\
+  ${PY} ${REPO}/scripts/profile_timing.py --config-name campaign_ssl \\
       --steps 20 --warmup 8 --data-batches 10 --out ${OUT}/\$name "\$@" \\
       > ${OUT}/\$name/log.txt 2>&1 || echo "  FAILED (see \$name/log.txt)"; }
 HDR
