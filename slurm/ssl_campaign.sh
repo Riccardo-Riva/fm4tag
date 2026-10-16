@@ -10,6 +10,8 @@
 #   sc_pt_c256   arm=scratch chunk_size=256 datamodule.batch_size=8192 optimizer.lr=6e-4
 #   ft_p0        arm=finetune encoder_ckpt=@/path/to/<p0 cell>/seed_42
 #
+# ${VAR} in a cell line is filled from the environment (unset = error), e.g.
+# PRE=<pretraining stage dir> for  encoder_ckpt=@${PRE}/p0/seed_42.
 # encoder_ckpt=@<pretrain seed dir> is resolved when the training starts, to
 # that run's checkpoints/last.ckpt (the pretraining budget is fixed), so
 # downstream cells can be queued behind their pretraining with
@@ -89,7 +91,13 @@ if (( SEEDS_FIT < 1 )); then
     exit 1
 fi
 
-mapfile -t CELL_LINES < <(grep -vE '^\s*(#|$)' "${CELLS}")
+# ${VAR} in a cell line is taken from the environment (e.g. the directory of
+# the pretraining stage); an unset one is an error, never an empty string.
+for var in $(grep -vE '^\s*#' "${CELLS}" | grep -oE '\$\{[A-Za-z_][A-Za-z0-9_]*\}' \
+             | tr -d '${}' | sort -u); do
+    [[ -n "${!var:-}" ]] || { echo "ERROR: cell file uses \${${var}}, which is not set" >&2; exit 1; }
+done
+mapfile -t CELL_LINES < <(grep -vE '^\s*(#|$)' "${CELLS}" | envsubst)
 mkdir -p "${OUTPUT_BASE}"
 cp "${CELLS}" "${OUTPUT_BASE}/cells"
 {
@@ -114,6 +122,10 @@ CELL_DIR=${OUTPUT_BASE}/${CELL_NAME}
 mkdir -p "${CELL_DIR}"
 ARM=$(grep -oE '(^| )arm=[a-z]+' <<< " ${CELL_OVERRIDES}" | cut -d= -f2 || true)
 ARM=${ARM:-scratch}
+# Shell-quoted for the job script, so Hydra interpolations such as
+# ${optimizer.lr} reach Hydra literally instead of being expanded by bash.
+# shellcheck disable=SC2086
+CELL_OVERRIDES_Q=$(printf '%q ' ${CELL_OVERRIDES})
 
 cat > "${CELL_DIR}/cell_job.sh" << EOF
 #!/bin/bash
@@ -150,7 +162,7 @@ fmt_dhms() {
 
 # encoder_ckpt=@<pretrain seed dir> → that run's last.ckpt
 OVERRIDES=()
-for ov in ${CELL_OVERRIDES}; do
+for ov in ${CELL_OVERRIDES_Q}; do
     if [[ "\${ov}" == encoder_ckpt=@* ]]; then
         src=\${ov#encoder_ckpt=@}
         ckpt=\$(ls -t "\${src}"/*/version_*/checkpoints/last.ckpt 2>/dev/null | head -1)
