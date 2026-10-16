@@ -1,0 +1,19 @@
+# S2 (part 1) — pretraining recipe: P0 (contrastive on the feature embeddings)
+# at temperature T x augmentation strength lambda, 10 epochs, 1 seed. Each is
+# judged by its frozen-encoder probe (S2_probe.cells), NOT by the pretraining
+# loss, whose scale changes with T and lambda. The winner is reused for P1.
+#
+# Row mode and chunk size = the S1 winner. Batch for ~38 GiB peak (S0; the
+# chunked contrastive loss grows with C):
+#              per_token   concat
+#   C = 128      22528      18432
+#   C = 512      16384      12288
+# Epoch (39.7M jets, A40): ~7000 s per_token, ~4500 s concat.
+#
+#   ENCODERS=rowcol_v0 CHUNK=128 B_PRE=22528 SEEDS=42 MAX_EPOCHS=10 \
+#   EST_SECONDS_PER_EPOCH=7500 GPU_NODE=gpu-A40,gpu-L40S-open MEM=48G \
+#   CELLS=scripts/configs/campaign/S2_pretrain.cells bash slurm/ssl_campaign.sh
+p0_T0.1_lam0.1  arm=pretrain encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=${B_PRE} optimizer.lr=1e-3 pretrain.contrastive_loss.temperature=0.1 lambda=0.1
+p0_T0.1_lam0.4  arm=pretrain encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=${B_PRE} optimizer.lr=1e-3 pretrain.contrastive_loss.temperature=0.1 lambda=0.4
+p0_T0.3_lam0.1  arm=pretrain encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=${B_PRE} optimizer.lr=1e-3 pretrain.contrastive_loss.temperature=0.3 lambda=0.1
+p0_T0.3_lam0.4  arm=pretrain encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=${B_PRE} optimizer.lr=1e-3 pretrain.contrastive_loss.temperature=0.3 lambda=0.4

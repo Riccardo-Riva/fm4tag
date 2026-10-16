@@ -120,12 +120,29 @@ for LINE in "${CELL_LINES[@]}"; do
 read -r CELL_NAME CELL_OVERRIDES <<< "${LINE}"
 CELL_DIR=${OUTPUT_BASE}/${CELL_NAME}
 mkdir -p "${CELL_DIR}"
+# A cell starting from a pretraining that has not written its last.ckpt yet
+# waits for that pretraining cell's job (its job_id file, written at submit).
+CELL_DEPS=()
 for ov in ${CELL_OVERRIDES}; do
     if [[ "${ov}" == encoder_ckpt=@* && "${ov}" != encoder_ckpt=@/* ]]; then
         echo "ERROR: ${CELL_NAME}: ${ov} — the @ path must be absolute" >&2
         exit 1
     fi
+    if [[ "${ov}" == encoder_ckpt=@* ]]; then
+        src=${ov#encoder_ckpt=@}
+        if ! ls "${src}"/*/version_*/checkpoints/last.ckpt > /dev/null 2>&1; then
+            if [[ -f "$(dirname "${src}")/job_id" ]]; then
+                CELL_DEPS+=("$(cat "$(dirname "${src}")/job_id")")
+            elif [[ -z "${DEPENDENCY}" ]]; then
+                echo "WARNING: ${CELL_NAME}: no last.ckpt under ${src} and no job to wait for" >&2
+            fi
+        fi
+    fi
 done
+DEP=${DEPENDENCY}
+if (( ${#CELL_DEPS[@]} )); then
+    DEP=${DEP:+${DEP},}afterok:$(IFS=:; echo "${CELL_DEPS[*]}")
+fi
 ARM=$(grep -oE '(^| )arm=[a-z]+' <<< " ${CELL_OVERRIDES}" | cut -d= -f2 || true)
 ARM=${ARM:-scratch}
 # Compose the cell's config now: a typo in an override fails here, before
@@ -287,10 +304,12 @@ grep -H '^status:' ${CELL_DIR}/seed_*/run_info.yaml 2>/dev/null || true
 EOF
 
 if [[ "${DRY_RUN}" == "1" ]]; then
-    echo "[dry-run] ${CELL_NAME}: ${CELL_OVERRIDES}"
+    echo "[dry-run] ${CELL_NAME}: ${CELL_OVERRIDES}${DEP:+   [after ${DEP}]}"
 else
     for v in $(env | grep -o '^SLURM_[A-Z_]*'); do unset "$v"; done
-    ( cd "${CELL_DIR}" && sbatch ${DEPENDENCY:+--dependency=${DEPENDENCY}} cell_job.sh )
+    JOB_ID=$(cd "${CELL_DIR}" && sbatch --parsable ${DEP:+--dependency=${DEP}} cell_job.sh)
+    echo "${JOB_ID}" > "${CELL_DIR}/job_id"
+    echo "Submitted ${CELL_NAME}: job ${JOB_ID}${DEP:+ (after ${DEP})}"
 fi
 done
 
