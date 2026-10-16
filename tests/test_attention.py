@@ -334,12 +334,18 @@ def test_encoder_grouped_matches_per_chunk_calls(row_mode):
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason='requires a CUDA device')
-@pytest.mark.parametrize('heads,d', [(38, 8), (8, 32)])
-def test_varlen_matches_loop_on_gpu(heads, d):
-    """bf16 flash varlen vs the exact fp32 per-chunk loop, forward and backward."""
+@pytest.mark.parametrize('heads,d', [(38, 8), (8, 32), (4, 64)])
+@pytest.mark.parametrize('max_pad', [0, 512])
+def test_varlen_matches_loop_on_gpu(heads, d, max_pad):
+    """bf16 flash varlen vs the exact fp32 per-chunk loop, forward and backward.
+
+    ``max_pad`` over-estimates ``max_seqlen`` (the aggregator passes the slot
+    count as a sync-free upper bound): the kernel must not care.
+    """
     torch.manual_seed(0)
     bounds = [0, 300, 300, 1100, 1137]
-    groups = RowGroups.from_boundaries(torch.tensor(bounds, device='cuda'))
+    exact = RowGroups.from_boundaries(torch.tensor(bounds, device='cuda'))
+    groups = RowGroups(exact.cu_seqlens, exact.max_seqlen + max_pad)
     q, k, v = (
         torch.randn(1137, heads, d, device='cuda', requires_grad=True) for _ in range(3)
     )

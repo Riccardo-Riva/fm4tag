@@ -7,8 +7,9 @@ from ..blocks import FeedForward, PreNormResidual
 class Classifier_Transformer(nn.Module):
     """Cross-constituent transformer used in the classification head.
 
-    Uses the shared :class:`~fm4tag.models.attention.Attention` with a per-token
-    ``(B, C)`` key-padding mask so padded constituents are excluded.
+    Uses the shared :class:`~fm4tag.models.attention.Attention` either with a
+    per-token ``(B, C)`` key-padding mask over a padded grid, or with
+    ``groups`` over packed valid constituents (one group per jet).
     """
 
     def __init__(
@@ -37,8 +38,8 @@ class Classifier_Transformer(nn.Module):
             ]
         )
 
-    def forward(self, x, mask=None):
+    def forward(self, x, mask=None, groups=None):
         for attn, ff in self.layers:
-            x = attn(x, mask=mask)
+            x = attn(x, mask=mask, groups=groups)
             x = ff(x)
         return x

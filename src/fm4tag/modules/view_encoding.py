@@ -197,8 +197,7 @@ def encode_clean(
         z = encoder.projector(X.flatten(1, 2))  # (N_valid, proj_dim)
         out[f'{obj_name}_embedding'] = z
 
-        B, C = valids.shape
-        z_consts.append(scatter_valid(z, valids_flat, B, C))
+        z_consts.append(z)  # packed; the aggregator runs on valid slots only
         valids_list.append(valids)
 
     out['aggregator'] = aggregator(z_global, z_consts, valids_list)

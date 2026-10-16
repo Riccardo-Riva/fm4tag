@@ -55,7 +55,6 @@ from .view_encoding import (
     encode_clean,
     encode_constituent_view,
     encode_global_view,
-    scatter_valid,
 )
 
 LOSS_COMPONENTS = ('cross_entropy', 'jet_contrastive')
@@ -246,15 +245,13 @@ class FinetuneModule(L.LightningModule):
             encoder = self.backbone[obj_name]
             const = batch['constituents'][obj_name]
             valids = const['valid']
-            B, C = valids.shape
             valids_flat = valids.reshape(-1)
 
             z_views = {}
             for v in todo:
-                z, _ = encode_constituent_view(
+                z_views[v], _ = encode_constituent_view(
                     encoder, views[v], const, valids_flat, groups[obj_name]
                 )
-                z_views[v] = scatter_valid(z, valids_flat, B, C)
             z_consts_per_obj.append(z_views)
             valids_per_obj.append(valids)
 

@@ -7,6 +7,7 @@ padded slots may influence the output.
 
 from __future__ import annotations
 
+import pytest
 import torch
 
 from fm4tag.models import TransformerAggregator
@@ -95,3 +96,44 @@ def test_all_invalid_jet_pools_to_zero():
     # Constituent part of jet 0 is exactly zero; global part passes through.
     assert torch.equal(out[0, :_GLOBAL_DIM], z_global[0])
     assert torch.equal(out[0, _GLOBAL_DIM:], torch.zeros(_CONST_DIM))
+
+
+def _padded_reference(agg, z_global, z, valid):
+    """The pre-packing implementation: padded grid + key mask + masked mean."""
+    z = torch.where(valid.unsqueeze(-1), z, 0.0)
+    z = agg.const_transformer[0](z, valid)
+    z = torch.where(valid.unsqueeze(-1), z, 0.0)
+    pooled = z.sum(dim=1) / valid.sum(dim=1, keepdim=True).float().clamp(min=1.0)
+    return torch.cat([z_global, pooled], dim=-1)
+
+
+@pytest.mark.parametrize('packed_input', [True, False])
+def test_packed_aggregator_matches_padded_reference(packed_input):
+    agg = _make_aggregator().eval()
+    torch.manual_seed(3)
+    B, C = 9, 7
+    valid = torch.rand(B, C) < 0.5
+    valid[2] = False  # a jet without constituents
+    z_global = torch.randn(B, _GLOBAL_DIM)
+    z = torch.randn(B, C, _CONST_DIM)
+    with torch.no_grad():
+        ref = _padded_reference(agg, z_global, z, valid)
+        out = agg(z_global, [z[valid] if packed_input else z], [valid])
+    assert torch.allclose(out, ref, atol=1e-5)
+    assert torch.count_nonzero(out[2, _GLOBAL_DIM:]) == 0
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason='requires a CUDA device')
+def test_packed_aggregator_bf16_gpu_matches_fp32_reference():
+    agg = _make_aggregator().cuda()
+    torch.manual_seed(4)
+    B, C = 64, 40
+    valid = torch.rand(B, C, device='cuda') < 0.18
+    valid[0] = False
+    z_global = torch.randn(B, _GLOBAL_DIM, device='cuda')
+    z = torch.randn(B, C, _CONST_DIM, device='cuda')
+    with torch.no_grad():
+        ref = _padded_reference(agg, z_global, z, valid)
+        with torch.autocast('cuda', dtype=torch.bfloat16):
+            out = agg(z_global, [z[valid]], [valid])
+    assert torch.allclose(out.float(), ref, atol=5e-2, rtol=5e-2)

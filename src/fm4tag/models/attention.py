@@ -61,9 +61,15 @@ class Attention(nn.Module):
     mask is a per-token key-padding mask, so padded positions can be excluded
     individually (used e.g. for cross-constituent attention within a jet).
 
+    With ``groups`` the input is instead a packed ``(T, dim)`` set of tokens
+    and each group (one sample's tokens, e.g. one jet's valid tracks) attends
+    within itself — no padding, no mask (flash varlen on GPU).
+
     Args:
-        x:    ``(b, n, dim)`` — batch of token sequences.
-        mask: ``(b, n)`` bool — ``True`` = valid token, ``False`` = padding.
+        x:      ``(b, n, dim)`` — batch of token sequences, or ``(T, dim)``
+                with ``groups``.
+        mask:   ``(b, n)`` bool — ``True`` = valid token, ``False`` = padding.
+        groups: Optional :class:`RowGroups` over the packed ``T`` axis.
     """
 
     def __init__(self, dim, heads=8, dim_head=16, dropout=0.0):
@@ -74,8 +80,17 @@ class Attention(nn.Module):
         self.to_out = nn.Linear(inner_dim, dim)
         self.dropout = dropout
 
-    def forward(self, x, mask=None):
+    def forward(self, x, mask=None, groups=None):
         h = self.heads
+
+        if groups is not None:
+            if mask is not None:
+                raise ValueError('Attention: pass either mask or groups, not both.')
+            t = x.shape[0]
+            q, k, v = (u.reshape(t, h, -1) for u in self.to_qkv(x).chunk(3, dim=-1))
+            dropout_p = self.dropout if self.training else 0.0
+            out = grouped_attention(q, k, v, groups, dropout_p=dropout_p)
+            return self.to_out(out.reshape(t, -1))
 
         q, k, v = self.to_qkv(x).chunk(3, dim=-1)
         q = rearrange(q, 'b n (h d) -> b h n d', h=h)

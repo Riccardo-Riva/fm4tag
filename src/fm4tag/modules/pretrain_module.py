@@ -35,7 +35,6 @@ from .view_encoding import (
     encode_clean,
     encode_constituent_view,
     encode_global_view,
-    scatter_valid,
 )
 
 LOSS_COMPONENTS = ('contrastive', 'denoising_cat', 'denoising_con', 'jet_contrastive')
@@ -234,9 +233,8 @@ class PretrainModule(L.LightningModule):
         """Loss components for one constituent type.
 
         Returns ``(obj_loss, obj_logs, z_views, valids)`` where ``z_views`` —
-        present only when ``needs_jet`` — is the list of per-view ``(B, C, d)``
-        projections scattered back onto the padded grid, and ``valids`` is the
-        ``(B, C)`` mask.
+        present only when ``needs_jet`` — is the list of per-view packed
+        ``(N_valid, d)`` projections, and ``valids`` is the ``(B, C)`` mask.
         """
         w = self.loss_weights
         encoder = self.encoders[obj_name]
@@ -280,11 +278,7 @@ class PretrainModule(L.LightningModule):
             obj_loss = obj_loss + w['denoising_con'] * l_den
             logs['loss_denoising_con'] = l_den
 
-        z_views: list[torch.Tensor] | None = None
-        if needs_jet:
-            B, C = valids.shape
-            z_views = [scatter_valid(z, valids_flat, B, C) for z in zs]
-
+        z_views = zs if needs_jet else None  # packed; the aggregator takes them
         return obj_loss, logs, z_views, valids
 
     # ------------------------------------------------------------------
@@ -306,7 +300,7 @@ class PretrainModule(L.LightningModule):
         for k, v in obj_logs.items():
             log_dict[f'{self.global_object}_embedding/{k}'] = v
 
-        z_consts_per_obj: list[list[torch.Tensor]] = []  # [obj][view] → (B,C,d)
+        z_consts_per_obj: list[list[torch.Tensor]] = []  # [obj][view] → (N_valid,d)
         valids_per_obj: list[torch.Tensor] = []
         for obj_name in self.constituent_objects:
             obj_loss, obj_logs, z_views, valids = self._constituent_loss(
