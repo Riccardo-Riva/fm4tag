@@ -23,6 +23,8 @@
 #   CELLS=scripts/configs/campaign/S2.cells SEEDS=42 PACKS=4 \
 #     MAX_EPOCHS=10 EST_SECONDS_PER_EPOCH=6000 bash slurm/ssl_pack.sh
 #   DRY_RUN=1 ...                 write everything, submit nothing
+#   DEPENDENCY=afterany:<ids> ...  hold the packs until those jobs have ended
+#                                 (e.g. probes of single-GPU pretrainings)
 #   STAGE_DIR=<stage> PACKS=1 bash slurm/ssl_pack.sh
 #                                 add packs to an existing stage (e.g. after a
 #                                 node failure: stale claims are released)
@@ -48,6 +50,8 @@ CPUS_PER_GPU=$((NUM_WORKERS + 2))
 MEM_PER_GPU_GB=${MEM_PER_GPU_GB:-48}
 WALLTIME=${WALLTIME:-7-00:00:00}
 WANDB_MODE=${WANDB_MODE:-}
+DEPENDENCY=${DEPENDENCY:-}      # e.g. afterany:<pretraining job ids> — the packs
+                                # then start only when those jobs have ended
 DRY_RUN=${DRY_RUN:-0}
 GPU_FREE_MIB_REQUIRED=${GPU_FREE_MIB_REQUIRED:-44000}
 GPU_WAIT_SECONDS=${GPU_WAIT_SECONDS:-1800}
@@ -82,9 +86,9 @@ submit_packs() {
     check_job_limit
     for v in $(env | grep -o '^SLURM_[A-Z_]*'); do unset "$v"; done
     for (( i = 0; i < PACKS; i++ )); do
-        jid=$(cd "${STAGE_DIR}" && sbatch --parsable pack_job.sh)
+        jid=$(cd "${STAGE_DIR}" && sbatch --parsable ${DEPENDENCY:+--dependency=${DEPENDENCY}} pack_job.sh)
         echo "${jid}" >> "${STAGE_DIR}/pack_jobs"
-        echo "Submitted pack job ${jid}"
+        echo "Submitted pack job ${jid}${DEPENDENCY:+ (after ${DEPENDENCY})}"
     done
     echo "Progress: ls ${STAGE_DIR}/.queue/   (or grep -H '^status:' ${STAGE_DIR}/*/seed_*/run_info.yaml)"
 }
