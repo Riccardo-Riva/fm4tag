@@ -1,8 +1,10 @@
 # SSL campaign — does contrastive pretraining of the SAINT-like encoders help flavour tagging?
 
-Status (2026-10-16): S0 benchmark done (A40). Decided: S1 chunk-size candidates
-128 and 512; batch per arm from S0, FR / FR+JC capped at 32768; A40 cards may be
-used alongside L40S. S1 submitted.
+Status (2026-10-19): S0 and S1 done. Decided: SAINT-like (concat) intersample
+attention and chunk size 512 (S1: all four cells within seed noise, best val CE
+0.620-0.621, concat ~1.45x faster); downstream schedule 40 epochs (S1 runs peaked
+at epoch 7-10 with a 100-epoch cosine, i.e. before any decay); batch per arm
+from S0, FR / FR+JC capped at 32768; A40 and L40S both used. S2 launched.
 
 ## 1. The question
 
@@ -56,13 +58,13 @@ Both are contrastive only (no denoising), with intersample attention in the enco
 |---|---|
 | data | `data_parallel_preprocess_251112_152051`, split by `eventNumber % 100`: pretrain 0-63 (39.68M jets), train 64-93 (18.6M), val 94-96 (1.86M), test 97-99 (1.86M), all disjoint. Normalisation from the train split for every phase. |
 | reference tagger | GN2v01 columns of the test file (the salt GN2 only-JT was trained on `112022`, whose train events overlap this test set) |
-| model | `rowcol_v0` (per_token) or `rowcol_concat_v0` (concat), whichever wins S1; dim 16, depth 6; aggregator depth 6 |
+| model | `rowcol_concat_v0` (SAINT-like concat intersample attention, S1), 7.5M parameters; dim 16, depth 6; aggregator depth 6 |
 | intersample attention | all-pairs within each chunk (ISAB removed); flash varlen on GPU |
-| `chunk_size` | 128 or 512 (S1 decides; a model hyper-parameter, also used at inference) |
+| `chunk_size` | 512 (S1; a model hyper-parameter, also used at inference) |
 | batch | per arm, the largest multiple of 8·`chunk_size` under ~38 GiB peak (S0): SC/FT 30720 per_token / 26624 concat, +JC 16384 / 14336, P0 20480 / 16384, P1 14336 / 12288; FR and FR+JC capped at 32768. S1 uses 24576 for every cell (fits both row modes) |
 | optimiser | AdamW, wd 5.96e-5, cosine to `max_epochs` with 2 % warmup, bf16-mixed, 1 GPU |
 | learning rate | tuned per arm (S3); prior 3e-4 at batch 2048, scaled as √B |
-| downstream stop | 100 epochs max, early stopping on `val/head/loss_ce` (patience 12), best checkpoint by the same |
+| downstream stop | 40 epochs max (cosine over 40), early stopping on `val/head/loss_ce` (patience 12), best checkpoint by the same |
 | pretraining budget | 30 epochs, `last.ckpt` |
 | FT schedule | pretrained parts at `backbone_lr` (= lr; S3 also tries lr/10), held at 0 for the first 2 epochs |
 | JC (when on) | weight 0.3, augmentation strength λ = 0.4, temperature 0.1 (λ-scan priors) |

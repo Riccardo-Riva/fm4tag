@@ -45,7 +45,9 @@ CPUS_PER_TASK=$((NUM_WORKERS + 2))
 # persistent) + slack — see the training RAM budget notes.
 MEM=${MEM:-32G}
 WALLTIME=${WALLTIME:-7-00:00:00}
-MAX_EPOCHS=${MAX_EPOCHS:-100}
+# Required: it overrides the config's trainer.max_epochs (40 downstream, 30
+# pretraining) and sets the admission estimate.
+MAX_EPOCHS=${MAX_EPOCHS:?set MAX_EPOCHS (40 downstream, 30 pretraining, pilots shorter)}
 read -r -a SEEDS <<< "${SEEDS:-42 424 4242 42424}"
 DEPENDENCY=${DEPENDENCY:-}
 WANDB_MODE=${WANDB_MODE:-}      # e.g. offline for smoke tests

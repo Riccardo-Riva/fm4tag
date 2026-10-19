@@ -21,6 +21,7 @@ defaults:
   - default
   - _self_
   - arm: scratch
+  - override /encoders: rowcol_concat_v0   # S1: same quality, ~1.45x faster
 
 experiment_name: ssl_campaign
 
@@ -28,16 +29,18 @@ experiment_name: ssl_campaign
 # 64-93 (18.6M), val 94-96, test 97-99 (1.86M each).  Never mix with 112022.
 base_path: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_152051
 
-chunk_size: 256        # intersample context (jets); revised after the S0 benchmark
+chunk_size: 512        # intersample context (jets) — S1: 128 and 512 give the
+                       # same tagger; 512 gives pretraining 4x more negatives
 
 datamodule:
-  batch_size:  4096    # per arm: the largest multiple of 8*chunk_size that
-                       # fills the GPU (S0); an optimisation knob only
+  batch_size:  24576   # per arm: the largest multiple of 8*chunk_size under
+                       # ~38 GiB (S0); this one fits SC/FT. An optimisation knob only
   num_workers: 10
 
 trainer:
   devices:    1
-  max_epochs: 100
+  max_epochs: 40       # S1: the best epoch comes at 7-10, so the cosine has to
+                       # decay within reach of it (was 100: lr ~98% at the best)
 
 optimizer:
   lr: 3.0e-4           # tuned per arm (S3)
