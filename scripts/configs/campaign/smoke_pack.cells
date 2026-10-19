@@ -1,0 +1,9 @@
+# Smoke test of the GPU packs: a tiny P0, then FT and FR from it (they wait for
+# it in the queue), and SC in parallel. Tiny budgets, not results.
+#   WANDB_MODE=offline SEEDS=42 PACKS=1 MAX_EPOCHS=2 EST_SECONDS_PER_EPOCH=120 \
+#   WALLTIME=01:00:00 GPU_FREE_MIB_REQUIRED=20000 \
+#   CELLS=scripts/configs/campaign/smoke_pack.cells bash slurm/ssl_pack.sh
+p0     arm=pretrain chunk_size=256 datamodule.batch_size=2048 +trainer.limit_train_batches=40 +trainer.limit_val_batches=8 @epochs=2 @est=120
+sc     arm=scratch chunk_size=256 datamodule.batch_size=2048 +trainer.limit_train_batches=40 +trainer.limit_val_batches=8 @epochs=2 @est=120
+ft_p0  arm=finetune encoder_ckpt=@p0 chunk_size=256 datamodule.batch_size=2048 +trainer.limit_train_batches=40 +trainer.limit_val_batches=8 @epochs=2 @est=120
+fr_p0  arm=frozen encoder_ckpt=@p0 chunk_size=256 datamodule.batch_size=2048 +trainer.limit_train_batches=40 +trainer.limit_val_batches=8 @epochs=2 @est=120
