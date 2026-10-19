@@ -124,22 +124,29 @@ fm4tag --config-name=campaign_ssl arm=finetune encoder_ckpt=<P ckpt> [...JC]    
 fm4tag --config-name=campaign_ssl arm=frozen   encoder_ckpt=<P ckpt> [...JC]     # FR
 ```
 
-On the cluster, a stage is a cell file (one line per cell: name + overrides) given to
-`slurm/ssl_campaign.sh`. It submits one 1-GPU job per cell and runs the seeds
-back-to-back inside it:
+On the cluster, a stage is a cell file (one line per cell: name + overrides),
+run as **GPU packs**: the cluster allows at most 10 GPU jobs per user, running
+and pending. `slurm/ssl_pack.sh` turns cells × seeds into tasks and submits
+`PACKS` jobs of 2 GPUs. Each GPU takes the next task from the stage's shared
+queue when it is free, and every training is still an ordinary 1-GPU training.
 
 ```bash
-CELLS=scripts/configs/campaign/<stage>.cells EST_SECONDS_PER_EPOCH=<measured> \
-    bash slurm/ssl_campaign.sh                       # DRY_RUN=1 to check first
+CELLS=scripts/configs/campaign/<stage>.cells SEEDS="42 424" PACKS=3 \
+    MAX_EPOCHS=40 EST_SECONDS_PER_EPOCH=<measured> bash slurm/ssl_pack.sh
+                                                     # DRY_RUN=1 to check first
 ```
 
-- **Pretraining checkpoints.** A downstream cell can name its pretraining as
-  `encoder_ckpt=@${PRE}/p0/seed_42`. The job resolves that to the pretraining run's
-  `last.ckpt` when it starts.
-- **Queueing behind the pretraining.** `DEPENDENCY=afterok:<jobids>` holds the downstream
-  jobs until the pretraining jobs have finished.
-- **Checks at submit time.** Each cell is composed when it is submitted, so a typo fails
-  before anything is queued. Each job also reads its data files once at the start to warm
-  the node's page cache: cold NFS reads were the loader's bottleneck.
-- **A tiny full chain to copy from.** `scripts/configs/campaign/smoke_*.cells` run
-  P0/P1 → SC/FT/FR in a few minutes.
+- **Pretraining checkpoints.** `encoder_ckpt=@<cell>` starts from that cell's
+  `last.ckpt` (same stage, same seed), and the task waits for it in the queue.
+  `encoder_ckpt=@/abs/<cell dir>/seed_42` points at a pretraining of another stage.
+- **Per-cell budgets.** `@epochs=N` and `@est=S` on a cell line override the
+  defaults; a task only starts if it fits the time left in its job.
+- **Holding packs back.** `DEPENDENCY=afterany:<jobids>` keeps the packs pending
+  until those jobs have ended, so they don't hold GPUs idle.
+- **Adding capacity.** `STAGE_DIR=<stage> PACKS=n` adds packs to a running stage,
+  or replaces a failed one; claims left by a dead job are released.
+- **Checks at submit time.** The launcher refuses to go past the job limit, and
+  composes each cell so a typo fails before anything is queued. Each job reads its
+  data files once at the start to warm the node's page cache.
+- **A tiny full chain to copy from.** `scripts/configs/campaign/smoke_pack.cells`
+  runs P0 → SC/FT/FR in one 2-GPU pack in a few minutes.
