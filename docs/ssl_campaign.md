@@ -30,6 +30,7 @@ Two side questions come with it:
 |---|---|---|
 | **P0** | contrastive on the feature embeddings: per-track embedding (`tracks_embedding`) and global-jet-feature embedding (`jets_embedding`) | not trained |
 | **P1** | P0 + contrastive on the global jet embedding (aggregator output) | trained |
+| **P2** | contrastive on the global jet embedding only (no feature-embedding contrastive) | trained |
 
 Both are contrastive only (no denoising), with intersample attention in the encoders.
 
@@ -78,7 +79,7 @@ Each stage ends at a decision taken on its numbers, before the next is launched.
 |---|---|---|
 | **S0** benchmark | one profiling job: chunk 64-1024 at batch 4096, batch 4096-16384 at chunk 256, for SC, SC+JC, P0, P1, FR, FR+JC × both row modes | two candidate chunk sizes (speed) and the batch of each arm (memory) |
 | **S1** architecture | SC (CE only) × {per_token, concat} × the two chunk sizes, 2 seeds | **SAINT-like vs per-feature intersample attention**, and the chunk size |
-| **S2** pretraining recipe | P0 × temperature {0.1, 0.3} × λ {0.1, 0.4}, 10 epochs, each followed by a short FR probe (15 epochs, fixed lr), plus one probe of frozen *random* encoders as the floor | the pretraining recipe, judged by the probe's val CE (pretraining losses are not comparable across T and λ); reused for P1 |
+| **S2** pretraining recipe | P0 and P2 × temperature {0.1, 0.3} × λ {0.1, 0.4}, 10 epochs, each followed by a short FR probe (15 epochs, fixed lr), plus one probe of frozen *random* encoders as the floor | the pretraining recipe of P0 and P2, judged by the probe's val CE (pretraining losses are not comparable across T and λ); P0's is reused for P1 |
 | **S3** learning rates | each of the 6 arms × 3 learning rates (×2 log steps); FT also backbone_lr = lr/10 | the learning rate of each arm |
 | **final** | P0 and P1 × 2 pretraining seeds (full budget); each pretrained arm × 2 pretraining seeds × 2 downstream seeds; SC × 4 seeds | the results |
 
