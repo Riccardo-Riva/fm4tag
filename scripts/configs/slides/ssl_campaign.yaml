@@ -1,0 +1,339 @@
+# The SSL campaign slides: what is tested, the results (plots), the decisions.
+# A living deck — build it from the fm4tag-chunk worktree with
+#
+#   uv run --no-sync --with python-pptx python scripts/ssl_campaign_slides.py \
+#       --config scripts/configs/slides/ssl_campaign.yaml
+#
+# To update: edit this file (status, decisions, new slides) and re-run. Every
+# plot re-reads its runs, so finished runs appear by themselves; a plot with no
+# data yet shows its `placeholder` text instead. All wording lives here.
+
+output:
+  dir: docs/slides/ssl_campaign        # relative to the repo; plots go in <dir>/plots
+  pptx: ssl_campaign.pptx
+
+footer: 'SSL campaign · fm4tag-chunk, branch feat/chunked-ia'
+updated_label: 'updated'
+decision_label: 'Decision'
+result_label: 'Result'
+decides_label: 'decides'
+
+style:
+  font: Liberation Sans                # plots; metric twin of the deck's Arial
+  deck_font: Arial
+  ink: '#1b1d21'
+  muted: '#5b5e66'
+  grid: '#e3e3e0'
+  dark_bg: '#1e2227'
+  dark_ink: '#ffffff'
+  dark_muted: '#c9ccd1'
+  accent: '#c98500'                    # decision cards and the title slide's date
+  accent_ink: '#7a4f00'
+  card_tint: '#fbf3e4'
+  header_fill: '#2b2f36'
+  status:                              # fill, text — always shown with a label
+    done:    ['#e3f1e3', '#1e6b1e']
+    running: ['#fbf3e4', '#7a4f00']
+    queued:  ['#eeeeec', '#52514e']
+    planned: ['#eeeeec', '#52514e']
+    failed:  ['#fbe4e4', '#a12a2a']
+  # One colour per entity, the same on every plot.
+  colors:
+    P0: '#2a78d6'
+    P1: '#eb6834'
+    P2: '#1baf7a'
+    random: '#8a8984'
+    per_token: '#6250d6'
+    concat: '#008300'
+    SC: '#6250d6'
+    SCJC: '#6250d6'
+    FR: '#008300'
+    FRJC: '#008300'
+    bar: '#2a78d6'
+    bar_muted: '#b7d3f6'
+
+data:
+  s0_table: /storage3/DSIP/rriva/research/fm4tag-chunk-s0/slurm/profiling/s0_20261016_103150_a40/table.csv
+  firstlook_table: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/profiling/firstlook_20261015_230859/table.csv
+  aggpacked_table: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/profiling/aggpacked_20261016_093645/table.csv
+  loader_bench: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/smoke/loader/out_6470015.txt
+  s1_stage: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/S1_arch_20261016_121444
+  # Stage directories searched (globs allowed) for a cell; the first that has it wins.
+  s2_stages:
+    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/S2_pretrain_20261019_102325
+    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/S2_p1_20261020_112148
+    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/S2_probe_20261020_112146
+    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/S2_probe_p2T03_*
+
+# ── Plots ────────────────────────────────────────────────────────────────────
+plots:
+  model:
+    size: [7.2, 5.6]
+    texts:
+      tracks_in: "tracks of the jet"
+      jets_in: "global jet features"
+      track_enc: "track encoder\ncolumn + intersample\nattention"
+      jet_enc: "jet-feature encoder\ncolumn + intersample\nattention"
+      track_emb: "track embeddings"
+      jet_emb: "jet-feature embedding"
+      aggregator: "aggregator: attention over\nthe jet's tracks, mean pool"
+      global_emb: "global jet embedding = [ jet-feature emb. ; pooled tracks ]"
+      head: "head: b / c / light / τ, cross-entropy (CE)"
+      loss_feat: "contrastive on the\nfeature embeddings\nP0, P1"
+      loss_jc: "contrastive on the\nglobal jet embedding (JC)\nP1, P2, +JC arms"
+      chunk_note: "intersample attention and contrastive losses: within chunks of C jets"
+
+  efficiency:
+    size: [6.2, 5.3]
+    bars:                               # (table, point) of the L40S profiles
+      - {table: firstlook_table, point: pt_nochunk_bs1024, label: "before: whole-batch\nintersample attn, B 1024"}
+      - {table: firstlook_table, point: pt_c256_bs4096, label: "chunks of 256 jets,\nB 4096"}
+      - {table: aggpacked_table, point: pt_c256_bs4096, label: "+ aggregator on\nvalid tracks only"}
+      - {table: aggpacked_table, point: cc_c256_bs4096, label: "+ SAINT-like (concat)\nintersample attn"}
+    texts:
+      title_speed: "Training speed, one L40S (fine-tune + JC)"
+      xlabel_speed: "thousand jets per second"
+      value_fmt: "{k:.1f}k jets/s  ·  {gib:.1f} GiB per 1k jets"
+      title_loader: "Reading one batch of 4096 jets"
+      xlabel_loader: "milliseconds"
+      cold: "files not in page cache"
+      warm: "files in page cache"
+      ms_fmt: "{ms:.0f} ms"
+
+  s0_speed:
+    size: [12.3, 3.9]
+    panels:
+      - {arm: P1, title: "Pretraining P1 (B 4096, A40)"}
+      - {arm: SCJC, title: "From scratch + JC (B 4096, A40)"}
+    texts:
+      xlabel: "chunk size C (jets)"
+      ylabel: "thousand jets per second"
+      per_token: "per-feature (per_token)"
+      concat: "SAINT-like (concat)"
+      candidates: "S1 candidates"
+
+  s0_memory:
+    size: [8.3, 4.9]
+    row_mode: cc
+    chunk: 256
+    target_gib: 38
+    card_gib: 44.4
+    x_max: 34000
+    arms:                                # arm in the S0 table: label, chosen batch, linestyle
+      - {arm: SC,   label: "from scratch / fine-tune", batch: 26624, ls: '-'}
+      - {arm: SCJC, label: "from scratch + JC",        batch: 14336, ls: '--'}
+      - {arm: P0,   label: "pretraining P0",           batch: 16384, ls: '-'}
+      - {arm: P1,   label: "pretraining P1",           batch: 12288, ls: '-'}
+      - {arm: FR,   label: "frozen encoders",          batch: 32768, ls: '-'}
+      - {arm: FRJC, label: "frozen encoders + JC",     batch: 32768, ls: '--'}
+    texts:
+      xlabel: "batch B (thousand jets)"
+      ylabel: "peak GPU memory (GiB)"
+      target: "target ~38 GiB"
+      card: "card limit"
+      measured: "measured (B 4096, 8192)"
+      chosen: "chosen batch"
+      arm_fmt: "{label}: B {batch}"
+
+  s1:
+    size: [12.3, 4.0]
+    cells:                               # cell dir: row mode, chunk, label
+      - {cell: sc_pt_c128, mode: per_token, chunk: 128, label: "per-feature, C 128"}
+      - {cell: sc_pt_c512, mode: per_token, chunk: 512, label: "per-feature, C 512"}
+      - {cell: sc_cc_c128, mode: concat, chunk: 128, label: "SAINT-like, C 128"}
+      - {cell: sc_cc_c512, mode: concat, chunk: 512, label: "SAINT-like, C 512"}
+    linestyle: {128: '--', 512: '-'}
+    ylim: [0.615, 0.67]
+    texts:
+      title_curves: "Validation CE per epoch (from scratch, 2 seeds per cell)"
+      xlabel: "epoch"
+      ylabel: "validation cross-entropy"
+      best_marker: "best epoch"
+      title_best: "Best validation CE"
+      seed: "one seed"
+
+  s2_loss:
+    size: [12.3, 4.6]
+    rows:                                # pretraining: cell-name prefix
+      - {key: P0, label: "P0", prefix: p0}
+      - {key: P1, label: "P1 (clipped)", prefix: p1}
+      - {key: P2, label: "P2", prefix: p2}
+    recipes:
+      - {suffix: T0.1_lam0.1, label: "T 0.1, λ 0.1"}
+      - {suffix: T0.1_lam0.4, label: "T 0.1, λ 0.4"}
+      - {suffix: T0.3_lam0.1, label: "T 0.3, λ 0.1"}
+      - {suffix: T0.3_lam0.4, label: "T 0.3, λ 0.4"}
+    texts:
+      xlabel: "epoch"
+      ylabel: "train loss"
+      lr_peak: "lr peak"
+      queued: "queued"
+      no_data: "no data yet"
+
+  s2_collapse:
+    size: [8.6, 5.2]
+    rows: [P0, P1, P2]                    # pretraining kinds drawn (s2_loss rows)
+    recipes: [T0.1_lam0.1, T0.1_lam0.4, T0.3_lam0.1, T0.3_lam0.4]
+    metrics:
+      - {column: val/tracks_embedding/uniformity, label: "track embeddings:\nuniformity (0 = all equal)"}
+      - {column: val/aggregator/effective_rank, label: "global jet embedding:\neffective rank"}
+    texts:
+      xlabel: "epoch"
+
+  s2_probes:
+    size: [12.3, 3.9]
+    rows: [P0, P1, P2]
+    recipes: [T0.1_lam0.1, T0.1_lam0.4, T0.3_lam0.1, T0.3_lam0.4]
+    probe_prefix: fr_
+    floor_cell: fr_random
+    metric: val/head/loss_ce
+    texts:
+      ylabel: "best validation CE\n(frozen-encoder probe)"
+      floor: "frozen random encoders"
+      running: "running, epoch {epoch}/{epochs}"
+      completed: "done"
+      pending: "pending"
+    placeholder: >-
+      The probes are running. This plot fills in as they finish: best validation
+      CE of the frozen-encoder probe of each pretraining recipe, against the same
+      probe on frozen random encoders.
+
+# ── Slides ───────────────────────────────────────────────────────────────────
+# layouts: title | text_plot | plot_full | tables | stages | cards
+slides:
+  - layout: title
+    title: "Does contrastive pretraining help jet flavour tagging?"
+    subtitle: "SSL campaign on the SAINT-like fm4tag encoders: what we test, the results so far, the decisions"
+
+  - layout: text_plot
+    title: "What we test"
+    plot: model
+    bullets:
+      - "Pretrain the encoders (column + intersample attention) with a contrastive loss on their feature embeddings, then train the tagger with cross-entropy"
+      - "Compare with the same tagger trained from scratch, and with the pretrained encoders frozen"
+      - "Repeat with a contrastive loss on the global jet embedding (JC), in pretraining and downstream"
+      - "Side questions: SAINT-like (concat) or per-feature intersample attention; chunks of jets so the batch can fill the GPU"
+
+  - layout: tables
+    title: "The tests"
+    tables:
+      - caption: "Pretraining (pretrain split, 39.7M jets, labels unused)"
+        widths: [0.9, 5.2, 2.3, 3.9]
+        header: ["id", "loss", "aggregator", "status"]
+        status_col: 3
+        rows:
+          - ["P0", "contrastive on the feature embeddings (tracks, global jet features)", "not trained", "running: S2 recipe grid"]
+          - ["P1", "P0 + JC on the global jet embedding", "trained", "queued: S2 recipe grid"]
+          - ["P2", "JC on the global jet embedding only", "trained", "running: S2 recipe grid"]
+      - caption: "Downstream (train split, 18.6M jets, cross-entropy always on)"
+        widths: [4.3, 2.7, 2.7, 2.6]
+        header: ["arm", "without JC", "with JC (weight 0.3)", "status"]
+        status_col: 3
+        rows:
+          - ["FT: fine-tune the pretrained model", "FT ← P0", "FT ← P1, + JC", "planned: after S3"]
+          - ["SC: whole tagger from scratch", "SC", "SC + JC", "planned: after S3"]
+          - ["FR: encoders frozen, aggregator + head train", "FR ← P0", "FR ← P1, + JC", "planned: after S3"]
+    note: "The JC column switches JC on in pretraining and downstream at once; if it wins, FT ← P1 and FR ← P1 without JC tell which half helped. Data: data_parallel_preprocess_251112_152051, splits disjoint by eventNumber; reference tagger GN2v01."
+
+  - layout: text_plot
+    title: "Code: chunked intersample attention, faster training"
+    plot: efficiency
+    text_width: 5.4
+    bullets:
+      - "ISAB removed: intersample attention is all-pairs within chunks of C jets, on flash varlen kernels"
+      - "The contrastive losses use the same chunks: negatives come from the chunk, no gather across GPUs"
+      - "So the batch can fill the GPU while the cost per jet stays flat"
+      - "The aggregator runs on the valid tracks only (82% of the padded track slots are empty)"
+      - "Data: one sequential read of the files at job start puts them in the page cache"
+    result: "2.7× the jets per second of the start of the campaign, at half the memory per jet."
+
+  - layout: stages
+    title: "Plan: small staged grids, a decision at every gate"
+    stages:
+      - {name: "S0", what: "benchmark: speed and memory of every arm, both row modes, chunk and batch scans", decides: "chunk candidates, batch per arm", status: done}
+      - {name: "S1", what: "from scratch: per-feature vs SAINT-like × C 128 / 512, 2 seeds", decides: "intersample attention, chunk size", status: done}
+      - {name: "S2", what: "P0, P1, P2 × temperature × augmentation, each with a frozen probe", decides: "recipe of each pretraining", status: running}
+      - {name: "S3", what: "learning rate of each of the 6 arms (3 values)", decides: "learning rate per arm", status: planned}
+      - {name: "Final", what: "2 pretraining seeds × 2 downstream seeds per arm; SC × 4 seeds", decides: "the answer", status: planned}
+    note: "Every run is identified from its own .hydra config, never from its directory name. At most 10 GPU jobs per user: runs go in 2-GPU packs that share one task queue."
+
+  - layout: plot_full
+    title: "S0: speed vs chunk size"
+    plot: s0_speed
+    decision: "SAINT-like (concat) is 1.3–1.7× faster than per-feature over C 128–512 and nearly flat in C (−3%); per-feature slows by about 18% from 128 to 512. S1 tests C = 128 and 512 with both."
+
+  - layout: text_plot
+    title: "S0: batch per arm fills the GPU"
+    plot: s0_memory
+    plot_left: true
+    text_width: 3.9
+    bullets:
+      - "Peak memory is linear in the batch; the chunk size sets the attention context, not the batch"
+      - "Each arm gets the largest batch (multiple of 8 · C) under ~38 GiB"
+      - "B 16384 failed in S0 (a CUDA grid limit above 65535 packed tracks), fixed since"
+    decision: "Batch per arm (concat): SC / FT 26624, +JC 14336, P0 16384, P1 12288 at C 256; frozen arms capped at 32768. S2 pretrains at C 512 with 12288."
+
+  - layout: plot_full
+    title: "S1: per-feature vs SAINT-like intersample attention"
+    plot: s1
+    decision: "Same CE within seed noise (best 0.620–0.621; one SAINT-like C 512 seed started slowly, 0.632), concat 1.45× faster: SAINT-like (concat) with C = 512. Every run peaks at epoch 7–10, so downstream trainings get 40 epochs."
+
+  - layout: tables
+    title: "S2: choosing each pretraining's recipe"
+    tables:
+      - caption: "Grid: temperature T {0.1, 0.3} × augmentation strength λ {0.1, 0.4}; 10 epochs, B 12288, lr 1e-3"
+        widths: [0.9, 5.4, 2.6, 3.4]
+        header: ["id", "loss", "gradient clipping", "status"]
+        status_col: 3
+        rows:
+          - ["P0", "contrastive on the feature embeddings", "no", "running: ends 2026-10-20"]
+          - ["P1", "P0 + JC (same T for both)", "1.0", "queued"]
+          - ["P2", "JC only", "no", "running: T 0.3 ends 2026-10-21"]
+    bullets_title: "How a recipe is judged: a probe"
+    bullets:
+      - "Freeze the pretrained encoders, train aggregator + head with CE for 15 epochs (B 32768, lr 1e-3); compare the best validation CE"
+      - "Pretraining losses are not comparable across T and λ; the probe's CE is"
+      - "Floor: the same probe on frozen random encoders"
+
+  - layout: plot_full
+    title: "S2: every run spiked soon after the learning-rate peak"
+    plot: s2_loss
+    result: "P0 recovered within a few hundred steps, at T 0.1 and 0.3 (jumps of +18 to +390%). P2 at T 0.1 stayed on a plateau until the cosine lr had fallen below ~4e-4 (epoch 5–6). Both P2 T 0.3 runs jumped at step 2000–2800 to the same constant loss, 6.23: the embedding no longer separates jets."
+
+  - layout: text_plot
+    title: "S2: P2 at T = 0.1 collapsed its track embeddings"
+    plot: s2_collapse
+    plot_left: true
+    text_width: 3.6
+    bullets:
+      - "The global jet embedding contains the jet-feature embedding as is"
+      - "So JC alone can be solved from pT and η: after the spike every track got the same embedding"
+      - "At low lr λ 0.1 recovered (aggregator rank 30 → 143), λ 0.4 only partly (→ 54)"
+    decision: "Clip gradients at 1.0 in every pretraining from now on; P1 gets its own grid, clipped. Proposed: rerun the four P2 points with clipping (both T 0.3 runs collapsed too)."
+
+  - layout: plot_full
+    title: "S2 probes: pretrained vs random frozen encoders"
+    plot: s2_probes
+    decision: "Pending: each pretraining takes the recipe with the lowest probe CE, which must beat frozen random encoders."
+
+  - layout: tables
+    title: "Decisions so far"
+    tables:
+      - widths: [1.5, 6.2, 4.6]
+        header: ["date", "decision", "based on"]
+        rows:
+          - ["2026-10-15", "One dataset (152051) with disjoint splits; contrastive-only pretraining; small staged grids, no Optuna; each arm fills the GPU", "the plan"]
+          - ["2026-10-15", "ISAB removed; intersample attention within chunks of jets", "request; S0 cost per jet"]
+          - ["2026-10-16", "Chunk candidates 128 and 512; batch per arm; frozen arms capped at 32768", "S0"]
+          - ["2026-10-19", "SAINT-like (concat), C = 512, 40 downstream epochs", "S1"]
+          - ["2026-10-19", "P2 added: pretraining with JC only", "request"]
+          - ["2026-10-19", "2-GPU packs sharing a task queue", "10-GPU-job limit"]
+          - ["2026-10-20", "Gradient clipping 1.0 in pretraining; P1 gets its own S2 grid", "S2 loss spikes, P2 collapse"]
+
+  - layout: cards
+    title: "Next"
+    cards:
+      - {header: "S2 probes", text: "Pick the recipe of P0, P1 and P2 from the probes; check each beats frozen random encoders."}
+      - {header: "S3 learning rates", text: "Each of the 6 arms at 3 learning rates (×2 apart); FT also with the pretrained parts at lr / 10."}
+      - {header: "Final runs", text: "P0, P1, P2: 2 pretraining seeds, 30 epochs. Each pretrained arm: 2 × 2 seeds. SC: 4 seeds."}
+      - {header: "Final plots", text: "Validation CE per arm; ROC vs GN2v01 with fractions tuned on validation; c-rejection at 77% b-efficiency; embedding quality; GPU-hours per arm."}
