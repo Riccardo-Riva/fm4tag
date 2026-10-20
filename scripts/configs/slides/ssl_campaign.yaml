@@ -42,6 +42,7 @@ style:
     P0: '#2a78d6'
     P1: '#eb6834'
     P2: '#1baf7a'
+    P2c: '#6250d6'                     # P2 rerun with gradient clipping
     random: '#8a8984'
     per_token: '#6250d6'
     concat: '#008300'
@@ -64,6 +65,7 @@ data:
     - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/S2_p1_20261020_112148
     - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/S2_probe_20261020_112146
     - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/S2_probe_p2T03_*
+    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/S2_p2clip_20261020_145001
 
 # ── Plots ────────────────────────────────────────────────────────────────────
 plots:
@@ -153,11 +155,12 @@ plots:
       seed: "one seed"
 
   s2_loss:
-    size: [12.3, 4.6]
+    size: [12.3, 5.4]
     rows:                                # pretraining: cell-name prefix
       - {key: P0, label: "P0", prefix: p0}
       - {key: P1, label: "P1 (clipped)", prefix: p1}
       - {key: P2, label: "P2", prefix: p2}
+      - {key: P2c, label: "P2 (clipped)", prefix: p2c}
     recipes:
       - {suffix: T0.1_lam0.1, label: "T 0.1, λ 0.1"}
       - {suffix: T0.1_lam0.4, label: "T 0.1, λ 0.4"}
@@ -172,7 +175,7 @@ plots:
 
   s2_collapse:
     size: [8.6, 5.2]
-    rows: [P0, P1, P2]                    # pretraining kinds drawn (s2_loss rows)
+    rows: [P0, P1, P2, P2c]               # pretraining kinds drawn (s2_loss rows)
     recipes: [T0.1_lam0.1, T0.1_lam0.4, T0.3_lam0.1, T0.3_lam0.4]
     metrics:
       - {column: val/tracks_embedding/uniformity, label: "track embeddings:\nuniformity (0 = all equal)"}
@@ -182,7 +185,7 @@ plots:
 
   s2_probes:
     size: [12.3, 3.9]
-    rows: [P0, P1, P2]
+    rows: [P0, P1, P2, P2c]
     recipes: [T0.1_lam0.1, T0.1_lam0.4, T0.3_lam0.1, T0.3_lam0.4]
     probe_prefix: fr_
     floor_cell: fr_random
@@ -224,7 +227,7 @@ slides:
         rows:
           - ["P0", "contrastive on the feature embeddings (tracks, global jet features)", "not trained", "running: S2 probes queued"]
           - ["P1", "P0 + JC on the global jet embedding", "trained", "queued: S2 recipe grid"]
-          - ["P2", "JC on the global jet embedding only", "trained", "running: S2 recipe grid"]
+          - ["P2", "JC on the global jet embedding only", "trained", "running: S2 grid, rerun with clipping"]
       - caption: "Downstream (train split, 18.6M jets, cross-entropy always on)"
         widths: [4.3, 2.7, 2.7, 2.6]
         header: ["arm", "without JC", "with JC (weight 0.3)", "status"]
@@ -288,7 +291,8 @@ slides:
         rows:
           - ["P0", "contrastive on the feature embeddings", "no", "done: 4/4, probes queued"]
           - ["P1", "P0 + JC (same T for both)", "1.0", "queued"]
-          - ["P2", "JC only", "no", "running: T 0.1 done, T 0.3 collapsed"]
+          - ["P2", "JC only", "no", "done: T 0.1; T 0.3 stopped (collapsed)"]
+          - ["P2 rerun", "JC only", "1.0", "queued"]
     bullets_title: "How a recipe is judged: a probe"
     bullets:
       - "Freeze the pretrained encoders, train aggregator + head with CE for 15 epochs (B 32768, lr 1e-3); compare the best validation CE"
@@ -310,7 +314,7 @@ slides:
       - "So JC alone can be solved from pT and η: after the spike every track got the same embedding"
       - "At low lr λ 0.1 recovered (aggregator rank 30 → 151), λ 0.4 only partly (→ 56)"
       - "Both T 0.3 runs: all jets get one embedding (rank ≈ 1)"
-    decision: "Clip gradients at 1.0 in every pretraining from now on; P1 gets its own grid, clipped. Proposed: rerun the four P2 points with clipping (both T 0.3 runs collapsed too)."
+    decision: "Clip gradients at 1.0 in every pretraining from now on: P1 gets its own grid, clipped, and the P2 grid is rerun clipped. The collapsed T 0.3 runs were stopped."
 
   - layout: plot_full
     title: "S2 probes: pretrained vs random frozen encoders"
@@ -330,6 +334,7 @@ slides:
           - ["2026-10-19", "P2 added: pretraining with JC only", "request"]
           - ["2026-10-19", "2-GPU packs sharing a task queue", "10-GPU-job limit"]
           - ["2026-10-20", "Gradient clipping 1.0 in pretraining; P1 gets its own S2 grid", "S2 loss spikes, P2 collapse"]
+          - ["2026-10-20", "P2 grid rerun with clipping; the collapsed unclipped T 0.3 runs stopped", "S2: P2 T 0.3 loss = ln 511, rank ≈ 1"]
 
   - layout: cards
     title: "Next"

@@ -7,7 +7,9 @@ at epoch 7-10 with a 100-epoch cosine, i.e. before any decay); batch per arm
 from S0, FR / FR+JC capped at 32768; A40 and L40S both used. S2 launched.
 2026-10-20: every S2 run at T=0.1 had a loss spike at the lr peak, and P2 then sat
 with collapsed track embeddings until the lr had decayed; pretraining now clips
-gradients at norm 1.0, and P1 gets its own S2 grid (run with clipping).
+gradients at norm 1.0, and P1 gets its own S2 grid (run with clipping). Both unclipped
+P2 T=0.3 runs then collapsed completely (loss = ln 511, embedding rank ~1): they were
+stopped and the whole P2 grid is rerun with clipping (`S2_p2clip.cells`, cells `p2c_*`).
 
 ## 1. The question
 
