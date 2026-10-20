@@ -23,6 +23,8 @@
 #   CELLS=scripts/configs/campaign/S2.cells SEEDS=42 PACKS=4 \
 #     MAX_EPOCHS=10 EST_SECONDS_PER_EPOCH=6000 bash slurm/ssl_pack.sh
 #   DRY_RUN=1 ...                 write everything, submit nothing
+#   CELL_FILTER=<regex> ...       only the cells whose name matches (e.g. the
+#                                 probes whose pretrainings have ended)
 #   DEPENDENCY=afterany:<ids> ...  hold the packs until those jobs have ended
 #                                 (e.g. probes of single-GPU pretrainings)
 #   STAGE_DIR=<stage> PACKS=1 bash slurm/ssl_pack.sh
@@ -108,6 +110,7 @@ STAGE=${STAGE:-$(basename "${CELLS}" .cells)}
 MAX_EPOCHS=${MAX_EPOCHS:?set MAX_EPOCHS (default for cells without @epochs)}
 EST_SECONDS_PER_EPOCH=${EST_SECONDS_PER_EPOCH:?set EST_SECONDS_PER_EPOCH (default for cells without @est)}
 read -r -a SEEDS <<< "${SEEDS:-42}"
+CELL_FILTER=${CELL_FILTER:-}
 
 [[ -f "${CELLS}" ]] || { echo "ERROR: cell file ${CELLS} not found" >&2; exit 1; }
 if ! git -C "${REPO}" diff --quiet -- src/fm4tag/configs; then
@@ -125,6 +128,7 @@ STAGE_DIR=${REPO}/slurm/ssl_campaign/${STAGE}_${TIMESTAMP}
 WANDB_GROUP=${WANDB_GROUP:-ssl_${STAGE}_${TIMESTAMP}}
 mkdir -p "${STAGE_DIR}/.queue"
 cp "${CELLS}" "${STAGE_DIR}/cells"
+[[ -n "${CELL_FILTER}" ]] && echo "${CELL_FILTER}" > "${STAGE_DIR}/cell_filter"
 
 declare -A DATA_SEEN=()
 DATA_FILES=()
@@ -132,6 +136,7 @@ TASK_LINES=()
 CELL_NAMES=" "
 for LINE in "${CELL_LINES[@]}"; do
     read -r CELL TOKENS <<< "${LINE}"
+    [[ -n "${CELL_FILTER}" && ! "${CELL}" =~ ${CELL_FILTER} ]] && continue
     EPOCHS=${MAX_EPOCHS} EST=${EST_SECONDS_PER_EPOCH} AFTER_CELL="" OVS=()
     for tok in ${TOKENS}; do
         case "${tok}" in
@@ -163,6 +168,7 @@ for LINE in "${CELL_LINES[@]}"; do
         echo "  task ${CELL}__s${SEED}: ${EPOCHS} epochs x ${EST} s ($(( (EPOCHS * EST + 1200) / 3600 )) h)${AFTER_CELL:+, after ${AFTER}}"
     done
 done
+(( ${#TASK_LINES[@]} )) || { echo "ERROR: no cell matches CELL_FILTER=${CELL_FILTER}" >&2; exit 1; }
 printf '%s\n' "${TASK_LINES[@]}" > "${STAGE_DIR}/tasks.tsv"
 
 cat > "${STAGE_DIR}/pack.env" << EOF
