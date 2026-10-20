@@ -552,7 +552,10 @@ def plot_s2_probes(cfg, style, data, out, rows_cfg):
         for rec in cfg['recipes']:
             res = best(f'{cfg["probe_prefix"]}{keyed[key]["prefix"]}_{rec}')
             ticks.append(
-                (x, f'{keyed[key]["label"].split(" ")[0]}\n{labels.get(rec, rec)}')
+                (
+                    x,
+                    f'{keyed[key].get("short", keyed[key]["label"])}\n{labels.get(rec, rec)}',
+                )
             )
             if res is not None:
                 points.append((x, key, *res))

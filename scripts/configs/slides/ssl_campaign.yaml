@@ -158,9 +158,9 @@ plots:
     size: [12.3, 5.4]
     rows:                                # pretraining: cell-name prefix
       - {key: P0, label: "P0", prefix: p0}
-      - {key: P1, label: "P1 (clipped)", prefix: p1}
+      - {key: P1, label: "P1 (clipped)", short: "P1", prefix: p1}
       - {key: P2, label: "P2", prefix: p2}
-      - {key: P2c, label: "P2 (clipped)", prefix: p2c}
+      - {key: P2c, label: "P2 (clipped)", short: "P2 clip", prefix: p2c}
     recipes:
       - {suffix: T0.1_lam0.1, label: "T 0.1, λ 0.1"}
       - {suffix: T0.1_lam0.4, label: "T 0.1, λ 0.4"}
