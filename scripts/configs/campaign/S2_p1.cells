@@ -1,0 +1,23 @@
+# S2 (part 3) — P1's own recipe grid, added 2026-10-20: P0's contrastive on the
+# feature embeddings + the jet-level contrastive on the aggregator output, both
+# at the same temperature T, augmentation strength lambda (one set of views for
+# both losses), weights 1:1. Each pretraining is followed in the same stage by
+# its frozen-encoder probe (same settings as S2_probe.cells), which waits for it
+# in the queue.
+#
+# Unlike the P0 / P2 points, these run with gradient clipping (1.0, now in
+# arm/pretrain.yaml): the S2 T=0.1 runs spiked at the lr peak without it.
+# Batch = P0's: P1 at C=512 is 12.9 GiB at B=4096 (S0) -> ~40 GiB at 12288.
+# Epoch (39.7M jets, A40): ~5700 s (S0: 7.0k jets/s); probe ~600 s.
+#
+#   ENCODERS=rowcol_concat_v0 CHUNK=512 B_PRE=12288 SEEDS=42 PACKS=2 \
+#   MAX_EPOCHS=10 EST_SECONDS_PER_EPOCH=6000 WALLTIME=2-00:00:00 \
+#   CELLS=scripts/configs/campaign/S2_p1.cells bash slurm/ssl_pack.sh
+p1_T0.1_lam0.1  arm=pretrain encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=${B_PRE} optimizer.lr=1e-3 pretrain.loss_weights.jet_contrastive=1.0 pretrain.contrastive_loss.temperature=0.1 pretrain.jet_contrastive_loss.temperature=0.1 lambda=0.1
+p1_T0.1_lam0.4  arm=pretrain encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=${B_PRE} optimizer.lr=1e-3 pretrain.loss_weights.jet_contrastive=1.0 pretrain.contrastive_loss.temperature=0.1 pretrain.jet_contrastive_loss.temperature=0.1 lambda=0.4
+p1_T0.3_lam0.1  arm=pretrain encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=${B_PRE} optimizer.lr=1e-3 pretrain.loss_weights.jet_contrastive=1.0 pretrain.contrastive_loss.temperature=0.3 pretrain.jet_contrastive_loss.temperature=0.3 lambda=0.1
+p1_T0.3_lam0.4  arm=pretrain encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=${B_PRE} optimizer.lr=1e-3 pretrain.loss_weights.jet_contrastive=1.0 pretrain.contrastive_loss.temperature=0.3 pretrain.jet_contrastive_loss.temperature=0.3 lambda=0.4
+fr_p1_T0.1_lam0.1  arm=frozen encoder_ckpt=@p1_T0.1_lam0.1 encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=32768 optimizer.lr=1e-3 @epochs=15 @est=600
+fr_p1_T0.1_lam0.4  arm=frozen encoder_ckpt=@p1_T0.1_lam0.4 encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=32768 optimizer.lr=1e-3 @epochs=15 @est=600
+fr_p1_T0.3_lam0.1  arm=frozen encoder_ckpt=@p1_T0.3_lam0.1 encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=32768 optimizer.lr=1e-3 @epochs=15 @est=600
+fr_p1_T0.3_lam0.4  arm=frozen encoder_ckpt=@p1_T0.3_lam0.4 encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=32768 optimizer.lr=1e-3 @epochs=15 @est=600
