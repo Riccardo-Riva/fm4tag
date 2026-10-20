@@ -48,6 +48,49 @@ class MemoryMonitorCallback(Callback):
         )
 
 
+class GradNormMonitorCallback(Callback):
+    """Log the global L2 norm of the gradients, before any clipping.
+
+    The norm is computed every optimizer step (on device, no host sync) and
+    logged on the steps Lightning writes its logs (``trainer.log_every_n_steps``),
+    so each row covers the steps since the previous one:
+
+    * ``train/grad_norm``      — the norm at the logged step
+    * ``train/grad_norm_max``  — the largest norm since the previous log, so a
+      short spike between two logs is not missed
+    * ``train/grad_clip_frac`` — fraction of those steps whose norm exceeded
+      ``trainer.gradient_clip_val`` (only when clipping by norm is on)
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._max = None
+        self._clipped = None
+        self._steps = 0
+
+    def on_before_optimizer_step(self, trainer, pl_module, optimizer) -> None:
+        # Lightning runs this hook before it clips the gradients.
+        grads = [p.grad for p in pl_module.parameters() if p.grad is not None]
+        if not grads:
+            return
+        norm = torch.nn.utils.get_total_norm(grads).float()
+        self._max = norm if self._max is None else torch.maximum(self._max, norm)
+        clip = trainer.gradient_clip_val
+        by_norm = trainer.gradient_clip_algorithm in (None, 'norm')
+        if clip and by_norm:
+            hit = (norm > clip).float()
+            self._clipped = hit if self._clipped is None else self._clipped + hit
+        self._steps += 1
+        # The step Lightning writes: (batches stepped + 1) % log_every_n_steps.
+        if (trainer.global_step + 1) % trainer.log_every_n_steps:
+            return
+        stats = {'train/grad_norm': norm, 'train/grad_norm_max': self._max}
+        if self._clipped is not None:
+            stats['train/grad_clip_frac'] = self._clipped / self._steps
+        pl_module.log_dict(stats, on_step=True, on_epoch=False)
+        self._max, self._clipped, self._steps = None, None, 0
+
+
 class _PrecisionProgressBar(TQDMProgressBar):
     """TQDMProgressBar that formats floats with 4 decimal places.
 

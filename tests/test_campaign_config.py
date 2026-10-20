@@ -79,3 +79,17 @@ def test_campaign_logs_gpu_memory():
 
     callbacks = instantiate_callbacks(_cfg('arm=scratch').callbacks)
     assert any(isinstance(cb, MemoryMonitorCallback) for cb in callbacks)
+
+
+def test_campaign_logs_grad_norm():
+    from fm4tag.callbacks import GradNormMonitorCallback
+    from fm4tag.utils import instantiate_callbacks
+
+    callbacks = instantiate_callbacks(_cfg('arm=scratch').callbacks)
+    assert any(isinstance(cb, GradNormMonitorCallback) for cb in callbacks)
+
+
+def test_only_pretraining_clips_gradients():
+    assert _cfg('arm=pretrain').trainer.gradient_clip_val == 1.0
+    for arm in ('scratch', 'finetune', 'frozen'):
+        assert _cfg(f'arm={arm}').trainer.get('gradient_clip_val') is None

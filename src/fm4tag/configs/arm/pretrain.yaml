@@ -15,3 +15,6 @@ pretrain:
 
 trainer:
   max_epochs: 30
+  # S2 (no clipping): every T=0.1 run spiked at the lr peak; P2 then sat with
+  # collapsed track embeddings until the lr had decayed below ~4e-4.
+  gradient_clip_val: 1.0

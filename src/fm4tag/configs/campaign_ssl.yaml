@@ -61,3 +61,7 @@ callbacks:
   memory_monitor:
     _target_: fm4tag.callbacks.MemoryMonitorCallback
     log_every_n_steps: 500
+  # Gradient norm before clipping (current, max since the last log, fraction
+  # of steps clipped): S2 showed loss spikes at the lr peak.
+  grad_norm_monitor:
+    _target_: fm4tag.callbacks.GradNormMonitorCallback
