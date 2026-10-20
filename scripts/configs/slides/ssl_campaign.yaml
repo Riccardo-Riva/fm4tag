@@ -222,7 +222,7 @@ slides:
         header: ["id", "loss", "aggregator", "status"]
         status_col: 3
         rows:
-          - ["P0", "contrastive on the feature embeddings (tracks, global jet features)", "not trained", "running: S2 recipe grid"]
+          - ["P0", "contrastive on the feature embeddings (tracks, global jet features)", "not trained", "running: S2 probes queued"]
           - ["P1", "P0 + JC on the global jet embedding", "trained", "queued: S2 recipe grid"]
           - ["P2", "JC on the global jet embedding only", "trained", "running: S2 recipe grid"]
       - caption: "Downstream (train split, 18.6M jets, cross-entropy always on)"
@@ -286,9 +286,9 @@ slides:
         header: ["id", "loss", "gradient clipping", "status"]
         status_col: 3
         rows:
-          - ["P0", "contrastive on the feature embeddings", "no", "running: ends 2026-10-20"]
+          - ["P0", "contrastive on the feature embeddings", "no", "done: 4/4, probes queued"]
           - ["P1", "P0 + JC (same T for both)", "1.0", "queued"]
-          - ["P2", "JC only", "no", "running: T 0.3 ends 2026-10-21"]
+          - ["P2", "JC only", "no", "running: T 0.1 done, T 0.3 collapsed"]
     bullets_title: "How a recipe is judged: a probe"
     bullets:
       - "Freeze the pretrained encoders, train aggregator + head with CE for 15 epochs (B 32768, lr 1e-3); compare the best validation CE"
@@ -301,14 +301,15 @@ slides:
     result: "P0 recovered within a few hundred steps, at T 0.1 and 0.3 (jumps of +18 to +390%). P2 at T 0.1 stayed on a plateau until the cosine lr had fallen below ~4e-4 (epoch 5–6). Both P2 T 0.3 runs jumped at step 2000–2800 to the same constant loss, 6.23: the embedding no longer separates jets."
 
   - layout: text_plot
-    title: "S2: P2 at T = 0.1 collapsed its track embeddings"
+    title: "S2: P2 collapsed: tracks at T 0.1, everything at T 0.3"
     plot: s2_collapse
     plot_left: true
     text_width: 3.6
     bullets:
       - "The global jet embedding contains the jet-feature embedding as is"
       - "So JC alone can be solved from pT and η: after the spike every track got the same embedding"
-      - "At low lr λ 0.1 recovered (aggregator rank 30 → 143), λ 0.4 only partly (→ 54)"
+      - "At low lr λ 0.1 recovered (aggregator rank 30 → 151), λ 0.4 only partly (→ 56)"
+      - "Both T 0.3 runs: all jets get one embedding (rank ≈ 1)"
     decision: "Clip gradients at 1.0 in every pretraining from now on; P1 gets its own grid, clipped. Proposed: rerun the four P2 points with clipping (both T 0.3 runs collapsed too)."
 
   - layout: plot_full
