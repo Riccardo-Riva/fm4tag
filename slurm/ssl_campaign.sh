@@ -38,7 +38,7 @@ CONFIG=campaign_ssl
 CELLS=${CELLS:?set CELLS=<cell file>}
 STAGE=${STAGE:-$(basename "${CELLS}" .cells)}
 GPU_NODE=${GPU_NODE:-gpu-L40S-open}
-EXCLUDE_NODES=${EXCLUDE_NODES:-node82}
+EXCLUDE_NODES=${EXCLUDE_NODES:-}    # node82 GPU 5 works again (checked 2026-10-20)
 NUM_WORKERS=${NUM_WORKERS:-10}
 CPUS_PER_TASK=$((NUM_WORKERS + 2))
 # Host RAM: ~2.7 GiB per rank + ~0.5 GiB per worker (train + val loaders are both

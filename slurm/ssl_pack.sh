@@ -44,10 +44,12 @@ PACKS=${PACKS:?set PACKS (number of GPU-pack jobs to submit)}
 GPUS_PER_PACK=${GPUS_PER_PACK:-2}
 MAX_GPU_JOBS=${MAX_GPU_JOBS:-10}
 GPU_NODE=${GPU_NODE:-gpu-L40S-open,gpu-A40}
-EXCLUDE_NODES=${EXCLUDE_NODES:-node82}
+EXCLUDE_NODES=${EXCLUDE_NODES:-}    # node82 GPU 5 works again (checked 2026-10-20)
 NUM_WORKERS=${NUM_WORKERS:-10}
 CPUS_PER_GPU=$((NUM_WORKERS + 2))
-MEM_PER_GPU_GB=${MEM_PER_GPU_GB:-48}
+# Host RAM per GPU: a pretraining uses ~11 GiB anon (10 workers, measured S2);
+# the rest holds the page cache of the train + val files (17 GB).
+MEM_PER_GPU_GB=${MEM_PER_GPU_GB:-32}
 WALLTIME=${WALLTIME:-7-00:00:00}
 WANDB_MODE=${WANDB_MODE:-}
 DEPENDENCY=${DEPENDENCY:-}      # e.g. afterany:<pretraining job ids> — the packs
