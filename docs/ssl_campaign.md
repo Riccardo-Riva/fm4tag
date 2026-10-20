@@ -5,6 +5,9 @@ attention and chunk size 512 (S1: all four cells within seed noise, best val CE
 0.620-0.621, concat ~1.45x faster); downstream schedule 40 epochs (S1 runs peaked
 at epoch 7-10 with a 100-epoch cosine, i.e. before any decay); batch per arm
 from S0, FR / FR+JC capped at 32768; A40 and L40S both used. S2 launched.
+2026-10-20: every S2 run at T=0.1 had a loss spike at the lr peak, and P2 then sat
+with collapsed track embeddings until the lr had decayed; pretraining now clips
+gradients at norm 1.0, and P1 gets its own S2 grid (run with clipping).
 
 ## 1. The question
 
@@ -66,7 +69,7 @@ Both are contrastive only (no denoising), with intersample attention in the enco
 | optimiser | AdamW, wd 5.96e-5, cosine to `max_epochs` with 2 % warmup, bf16-mixed, 1 GPU |
 | learning rate | tuned per arm (S3); prior 3e-4 at batch 2048, scaled as √B |
 | downstream stop | 40 epochs max (cosine over 40), early stopping on `val/head/loss_ce` (patience 12), best checkpoint by the same |
-| pretraining budget | 30 epochs, `last.ckpt` |
+| pretraining budget | 30 epochs, `last.ckpt`; gradients clipped at norm 1.0 (`arm=pretrain`, from S2's P1 grid on) |
 | FT schedule | pretrained parts at `backbone_lr` (= lr; S3 also tries lr/10), held at 0 for the first 2 epochs |
 | JC (when on) | weight 0.3, augmentation strength λ = 0.4, temperature 0.1 (λ-scan priors) |
 | seeds | spaced list `42 424 4242 42424 …`, never consecutive (the sampler uses seed + epoch) |
@@ -79,7 +82,7 @@ Each stage ends at a decision taken on its numbers, before the next is launched.
 |---|---|---|
 | **S0** benchmark | one profiling job: chunk 64-1024 at batch 4096, batch 4096-16384 at chunk 256, for SC, SC+JC, P0, P1, FR, FR+JC × both row modes | two candidate chunk sizes (speed) and the batch of each arm (memory) |
 | **S1** architecture | SC (CE only) × {per_token, concat} × the two chunk sizes, 2 seeds | **SAINT-like vs per-feature intersample attention**, and the chunk size |
-| **S2** pretraining recipe | P0 and P2 × temperature {0.1, 0.3} × λ {0.1, 0.4}, 10 epochs, each followed by a short FR probe (15 epochs, fixed lr), plus one probe of frozen *random* encoders as the floor | the pretraining recipe of P0 and P2, judged by the probe's val CE (pretraining losses are not comparable across T and λ); P0's is reused for P1 |
+| **S2** pretraining recipe | P0, P1 and P2 × temperature {0.1, 0.3} × λ {0.1, 0.4}, 10 epochs, each followed by a short FR probe (15 epochs, fixed lr), plus one probe of frozen *random* encoders as the floor. P1 (same T for both of its losses) runs with gradient clipping, P0 and P2 ran without | the pretraining recipe of each of P0, P1, P2, judged by the probe's val CE (pretraining losses are not comparable across T and λ) |
 | **S3** learning rates | each of the 6 arms × 3 learning rates (×2 log steps); FT also backbone_lr = lr/10 | the learning rate of each arm |
 | **final** | P0 and P1 × 2 pretraining seeds (full budget); each pretrained arm × 2 pretraining seeds × 2 downstream seeds; SC × 4 seeds | the results |
 
