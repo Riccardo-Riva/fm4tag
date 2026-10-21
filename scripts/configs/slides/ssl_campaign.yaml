@@ -227,8 +227,8 @@ slides:
         header: ["id", "loss", "aggregator", "status"]
         status_col: 3
         rows:
-          - ["P0", "contrastive on the feature embeddings (tracks, global jet features)", "not trained", "done: S2 recipe T 0.1, λ 0.4"]
-          - ["P1", "P0 + JC on the global jet embedding", "trained", "running: S2 grid, clipped"]
+          - ["P0", "contrastive on the feature embeddings (tracks, global jet features)", "not trained", "running: 30 epochs, T 0.1, λ 0.4"]
+          - ["P1", "P0 + JC on the global jet embedding", "trained", "done: S2 grid; best T 0.1, λ 0.4"]
           - ["P2", "JC on the global jet embedding only", "trained", "running: S2 grid rerun, clipped"]
       - caption: "Downstream (train split, 18.6M jets, cross-entropy always on)"
         widths: [4.3, 2.7, 2.7, 2.6]
@@ -292,9 +292,9 @@ slides:
         status_col: 3
         rows:
           - ["P0", "contrastive on the feature embeddings", "no", "done: best T 0.1, λ 0.4"]
-          - ["P1", "P0 + JC (same T for both)", "1.0", "running: T 0.1 done, probing"]
+          - ["P1", "P0 + JC (same T for both)", "1.0", "done: best T 0.1, λ 0.4"]
           - ["P2", "JC only", "no", "done: T 0.1; T 0.3 stopped (collapsed)"]
-          - ["P2 rerun", "JC only", "1.0", "running: 3/4 done, probing"]
+          - ["P2 rerun", "JC only", "1.0", "running: 3/4 probed"]
     bullets_title: "How a recipe is judged: a probe"
     bullets:
       - "Freeze the pretrained encoders, train aggregator + head with CE for 15 epochs (B 32768, lr 1e-3); compare the best validation CE"
@@ -320,7 +320,7 @@ slides:
   - layout: plot_full
     title: "S2 probes: pretrained vs random frozen encoders"
     plot: s2_probes
-    decision: "P0: T 0.1, λ 0.4 (probe CE 0.635, frozen random encoders 0.656; T 0.1, λ 0.1 close at 0.641, one seed). Unclipped P2 is far worse than random (0.83, 1.17). P1 and the clipped P2: probes running."
+    decision: "P0: T 0.1, λ 0.4 (probe CE 0.635, frozen random encoders 0.656; T 0.1, λ 0.1 close at 0.641, one seed). P1: T 0.1, λ 0.4 again (0.632; next best 0.647). Unclipped P2 is far worse than random (0.83, 1.17); clipped P2 just beats it at T 0.1 (0.648, 0.651), last point running."
 
   - layout: tables
     title: "Decisions so far"
@@ -341,7 +341,7 @@ slides:
   - layout: cards
     title: "Next"
     cards:
-      - {header: "S2 probes", text: "P0 done (T 0.1, λ 0.4). Pick the recipe of P1 and P2 when their probes finish; each must beat frozen random encoders."}
+      - {header: "S2 probes", text: "P0 and P1: T 0.1, λ 0.4; P0 pretrains for 30 epochs. Pick P2's recipe when its last probe finishes; it must beat frozen random encoders."}
       - {header: "S3 learning rates", text: "Each of the 6 arms at 3 learning rates (×2 apart); FT also with the pretrained parts at lr / 10."}
       - {header: "Final runs", text: "P0, P1, P2: 2 pretraining seeds, 30 epochs. Each pretrained arm: 2 × 2 seeds. SC: 4 seeds."}
       - {header: "Final plots", text: "Validation CE per arm; ROC vs GN2v01 with fractions tuned on validation; c-rejection at 77% b-efficiency; embedding quality; GPU-hours per arm."}
