@@ -2,11 +2,13 @@
 # starting points of S3 (learning rate per arm) and of the final runs.
 # Same batch, chunk and lr as the S2 grid the recipes were picked on.
 #   P0 = arm=pretrain: recipe T 0.1, lambda 0.4 (pinned in arm/pretrain.yaml), clipping 1.0.
-#   P1, P2: added when their S2 recipes are decided; submit only the new cells
-#   with CELL_FILTER.
-# Epoch (39.7M jets, A40): ~4750 s for P0 (S2).
+#   P1 = P0 + JC weight 1.0, JC T 0.1 (S2 recipe T 0.1, lambda 0.4, confirmed 2026-10-21).
+#   P2: added when its S2 recipe is decided; submit only the new cells with CELL_FILTER.
+# Epoch (39.7M jets): ~4750 s for P0 (S2, A40); ~3750 s for P1 (S2, L40S).
 #
 #   ENCODERS=rowcol_concat_v0 CHUNK=512 B_PRE=12288 SEEDS="42 424" PACKS=1 \
 #   MEM_PER_GPU_GB=22 MAX_EPOCHS=30 EST_SECONDS_PER_EPOCH=4800 WALLTIME=2-00:00:00 \
 #   CELL_FILTER='^p0$' CELLS=scripts/configs/campaign/P_full.cells bash slurm/ssl_pack.sh
+#   (P1: CELL_FILTER='^p1$' EST_SECONDS_PER_EPOCH=5000; A40 epoch unmeasured, ~1.3x L40S)
 p0  arm=pretrain encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=${B_PRE} optimizer.lr=1e-3
+p1  arm=pretrain encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=${B_PRE} optimizer.lr=1e-3 pretrain.loss_weights.jet_contrastive=1.0 pretrain.jet_contrastive_loss.temperature=0.1
