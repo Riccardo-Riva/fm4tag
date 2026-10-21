@@ -12,9 +12,13 @@ pretrain:
     denoising_con:   0.0
     jet_contrastive: 0.0
   warmup_frac: 0.02
+  # P0 recipe from S2 (rriva, 2026-10-21): T 0.1 with lambda 0.4 (campaign_ssl.yaml);
+  # best frozen-encoder probe, 0.635 vs 0.656 for frozen random encoders.
+  contrastive_loss:
+    temperature: 0.1
 
 trainer:
   max_epochs: 30
-  # S2 (no clipping): every T=0.1 run spiked at the lr peak; P2 then sat with
-  # collapsed track embeddings until the lr had decayed below ~4e-4.
+  # S2 (no clipping): every run spiked after the lr peak; P2 then sat on a
+  # plateau (T 0.1) or collapsed completely (T 0.3).
   gradient_clip_val: 1.0

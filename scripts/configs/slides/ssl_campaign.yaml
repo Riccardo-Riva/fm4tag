@@ -336,7 +336,7 @@ slides:
           - ["2026-10-19", "2-GPU packs sharing a task queue", "10-GPU-job limit"]
           - ["2026-10-20", "Gradient clipping 1.0 in pretraining; P1 gets its own S2 grid", "S2 loss spikes, P2 collapse"]
           - ["2026-10-20", "P2 grid rerun with clipping; the collapsed unclipped T 0.3 runs stopped", "S2: P2 T 0.3 loss = ln 511, rank ≈ 1"]
-          - ["2026-10-21", "P0 recipe: T 0.1, λ 0.4", "S2 probes: lowest CE, beats frozen random encoders"]
+          - ["2026-10-21", "P0 recipe: T 0.1, λ 0.4 (confirmed)", "S2 probes: lowest CE, beats frozen random encoders"]
 
   - layout: cards
     title: "Next"

@@ -10,6 +10,8 @@ with collapsed track embeddings until the lr had decayed; pretraining now clips
 gradients at norm 1.0, and P1 gets its own S2 grid (run with clipping). Both unclipped
 P2 T=0.3 runs then collapsed completely (loss = ln 511, embedding rank ~1): they were
 stopped and the whole P2 grid is rerun with clipping (`S2_p2clip.cells`, cells `p2c_*`).
+2026-10-21: P0 recipe decided from the S2 probes: T 0.1, λ 0.4 (probe CE 0.635; frozen
+random encoders 0.656; T 0.1, λ 0.1 0.641; T 0.3 worse; unclipped P2 far worse than random).
 
 ## 1. The question
 
