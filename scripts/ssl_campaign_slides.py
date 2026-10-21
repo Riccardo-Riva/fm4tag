@@ -546,25 +546,54 @@ def plot_s2_probes(cfg, style, data, out, rows_cfg):
         ep = per_epoch(df)[cfg['metric']].dropna()
         return ep.min(), run_status(run), int(ep.index.max()) + 1, max_epochs(run)
 
-    points, ticks = [], []
+    points, ticks, groups = [], [], []
     x = 0
     for key in cfg['rows']:
+        x0 = x
         for rec in cfg['recipes']:
             res = best(f'{cfg["probe_prefix"]}{keyed[key]["prefix"]}_{rec}')
-            ticks.append(
-                (
-                    x,
-                    f'{keyed[key].get("short", keyed[key]["label"])}\n{labels.get(rec, rec)}',
-                )
-            )
+            ticks.append((x, labels.get(rec, rec).replace(', ', '\n')))
             if res is not None:
                 points.append((x, key, *res))
             x += 1
+        groups.append(
+            ((x0 + x - 1) / 2, keyed[key].get('short', keyed[key]['label']), key)
+        )
         x += 0.6
     floor = best(cfg['floor_cell'])
     if not points and floor is None:
         return None
     fig, ax = plt.subplots(figsize=cfg['size'])
+    top = cfg['ylim'][1] if cfg.get('ylim') else None
+    if top is not None:
+        ax.set_ylim(*cfg['ylim'])
+        # Points above the axis: a marker on the top edge with their value
+        for i, (xi, key, val, *rest) in enumerate(points):
+            if val > top:
+                ax.plot(xi, top, '^', ms=10, color=style['colors'][key], clip_on=False)
+                ax.annotate(
+                    t['off_scale'].format(value=val),
+                    (xi, top),
+                    xytext=(0, -16),
+                    textcoords='offset points',
+                    ha='center',
+                    fontsize=9,
+                    color=style['ink'],
+                )
+        points = [p for p in points if p[2] <= top]
+    trans = matplotlib.transforms.blended_transform_factory(ax.transData, ax.transAxes)
+    for gx, name, key in groups:
+        ax.text(
+            gx,
+            -0.3,
+            name,
+            transform=trans,
+            ha='center',
+            va='top',
+            fontsize=11,
+            fontweight='bold',
+            color=style['colors'].get(key, style['ink']),
+        )
     if floor is not None:
         ax.axhline(floor[0], color=style['colors']['random'], lw=1.6)
         ax.text(

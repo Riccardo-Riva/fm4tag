@@ -189,6 +189,7 @@ plots:
     recipes: [T0.1_lam0.1, T0.1_lam0.4, T0.3_lam0.1, T0.3_lam0.4]
     probe_prefix: fr_
     floor_cell: fr_random
+    ylim: [0.62, 0.76]                    # points above: a marker on the top edge with their value
     metric: val/head/loss_ce
     texts:
       ylabel: "best validation CE\n(frozen-encoder probe)"
@@ -196,6 +197,7 @@ plots:
       running: "running, epoch {epoch}/{epochs}"
       completed: "done"
       pending: "pending"
+      off_scale: "{value:.2f}"
     placeholder: >-
       The probes are running. This plot fills in as they finish: best validation
       CE of the frozen-encoder probe of each pretraining recipe, against the same
@@ -225,9 +227,9 @@ slides:
         header: ["id", "loss", "aggregator", "status"]
         status_col: 3
         rows:
-          - ["P0", "contrastive on the feature embeddings (tracks, global jet features)", "not trained", "running: S2 probes queued"]
-          - ["P1", "P0 + JC on the global jet embedding", "trained", "queued: S2 recipe grid"]
-          - ["P2", "JC on the global jet embedding only", "trained", "running: S2 grid, rerun with clipping"]
+          - ["P0", "contrastive on the feature embeddings (tracks, global jet features)", "not trained", "done: S2 recipe T 0.1, λ 0.4"]
+          - ["P1", "P0 + JC on the global jet embedding", "trained", "running: S2 grid, clipped"]
+          - ["P2", "JC on the global jet embedding only", "trained", "running: S2 grid rerun, clipped"]
       - caption: "Downstream (train split, 18.6M jets, cross-entropy always on)"
         widths: [4.3, 2.7, 2.7, 2.6]
         header: ["arm", "without JC", "with JC (weight 0.3)", "status"]
@@ -289,10 +291,10 @@ slides:
         header: ["id", "loss", "gradient clipping", "status"]
         status_col: 3
         rows:
-          - ["P0", "contrastive on the feature embeddings", "no", "done: 4/4, probes queued"]
-          - ["P1", "P0 + JC (same T for both)", "1.0", "queued"]
+          - ["P0", "contrastive on the feature embeddings", "no", "done: best T 0.1, λ 0.4"]
+          - ["P1", "P0 + JC (same T for both)", "1.0", "running: T 0.1 done, probing"]
           - ["P2", "JC only", "no", "done: T 0.1; T 0.3 stopped (collapsed)"]
-          - ["P2 rerun", "JC only", "1.0", "queued"]
+          - ["P2 rerun", "JC only", "1.0", "running: 3/4 done, probing"]
     bullets_title: "How a recipe is judged: a probe"
     bullets:
       - "Freeze the pretrained encoders, train aggregator + head with CE for 15 epochs (B 32768, lr 1e-3); compare the best validation CE"
@@ -300,26 +302,25 @@ slides:
       - "Floor: the same probe on frozen random encoders"
 
   - layout: plot_full
-    title: "S2: every run spiked soon after the learning-rate peak"
+    title: "S2: loss spikes after the lr peak; clipping tames them"
     plot: s2_loss
-    result: "P0 recovered within a few hundred steps, at T 0.1 and 0.3 (jumps of +18 to +390%). P2 at T 0.1 stayed on a plateau until the cosine lr had fallen below ~4e-4 (epoch 5–6). Both P2 T 0.3 runs jumped at step 2000–2800 to the same constant loss, 6.23: the embedding no longer separates jets."
+    result: "Unclipped: P0 recovered within a few hundred steps; P2 sat on a plateau (T 0.1) or collapsed (T 0.3). Clipped at 1.0: P1 smooth; P2 clipped has no long plateau and no full collapse, but T 0.3, λ 0.1 keeps spiking."
 
   - layout: text_plot
-    title: "S2: P2 collapsed: tracks at T 0.1, everything at T 0.3"
+    title: "S2: P2 collapses without clipping, much less with it"
     plot: s2_collapse
     plot_left: true
     text_width: 3.6
     bullets:
-      - "The global jet embedding contains the jet-feature embedding as is"
-      - "So JC alone can be solved from pT and η: after the spike every track got the same embedding"
-      - "At low lr λ 0.1 recovered (aggregator rank 30 → 151), λ 0.4 only partly (→ 56)"
-      - "Both T 0.3 runs: all jets get one embedding (rank ≈ 1)"
+      - "The global jet embedding contains the jet-feature embedding as is: JC alone can be solved from pT and η"
+      - "Unclipped: every track got the same embedding (T 0.1); at T 0.3 every jet did (rank ≈ 1)"
+      - "Clipped (violet): no full collapse (rank 79–139); tracks keep some spread, except at T 0.3, λ 0.1"
     decision: "Clip gradients at 1.0 in every pretraining from now on: P1 gets its own grid, clipped, and the P2 grid is rerun clipped. The collapsed T 0.3 runs were stopped."
 
   - layout: plot_full
     title: "S2 probes: pretrained vs random frozen encoders"
     plot: s2_probes
-    decision: "Pending: each pretraining takes the recipe with the lowest probe CE, which must beat frozen random encoders."
+    decision: "P0: T 0.1, λ 0.4 (probe CE 0.635, frozen random encoders 0.656; T 0.1, λ 0.1 close at 0.641, one seed). Unclipped P2 is far worse than random (0.83, 1.17). P1 and the clipped P2: probes running."
 
   - layout: tables
     title: "Decisions so far"
@@ -335,11 +336,12 @@ slides:
           - ["2026-10-19", "2-GPU packs sharing a task queue", "10-GPU-job limit"]
           - ["2026-10-20", "Gradient clipping 1.0 in pretraining; P1 gets its own S2 grid", "S2 loss spikes, P2 collapse"]
           - ["2026-10-20", "P2 grid rerun with clipping; the collapsed unclipped T 0.3 runs stopped", "S2: P2 T 0.3 loss = ln 511, rank ≈ 1"]
+          - ["2026-10-21", "P0 recipe: T 0.1, λ 0.4", "S2 probes: lowest CE, beats frozen random encoders"]
 
   - layout: cards
     title: "Next"
     cards:
-      - {header: "S2 probes", text: "Pick the recipe of P0, P1 and P2 from the probes; check each beats frozen random encoders."}
+      - {header: "S2 probes", text: "P0 done (T 0.1, λ 0.4). Pick the recipe of P1 and P2 when their probes finish; each must beat frozen random encoders."}
       - {header: "S3 learning rates", text: "Each of the 6 arms at 3 learning rates (×2 apart); FT also with the pretrained parts at lr / 10."}
       - {header: "Final runs", text: "P0, P1, P2: 2 pretraining seeds, 30 epochs. Each pretrained arm: 2 × 2 seeds. SC: 4 seeds."}
       - {header: "Final plots", text: "Validation CE per arm; ROC vs GN2v01 with fractions tuned on validation; c-rejection at 77% b-efficiency; embedding quality; GPU-hours per arm."}
