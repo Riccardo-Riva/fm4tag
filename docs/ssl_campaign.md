@@ -12,6 +12,8 @@ P2 T=0.3 runs then collapsed completely (loss = ln 511, embedding rank ~1): they
 stopped and the whole P2 grid is rerun with clipping (`S2_p2clip.cells`, cells `p2c_*`).
 2026-10-21: P0 recipe decided from the S2 probes: T 0.1, λ 0.4 (probe CE 0.635; frozen
 random encoders 0.656; T 0.1, λ 0.1 0.641; T 0.3 worse; unclipped P2 far worse than random).
+P1 recipe, same point: T 0.1, λ 0.4 (0.632; next best T 0.3, λ 0.4 0.647). Full 30-epoch
+pretrainings of P0 and P1 (2 seeds each) launched from `P_full.cells`.
 
 ## 1. The question
 
