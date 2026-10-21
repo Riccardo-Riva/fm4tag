@@ -228,7 +228,7 @@ slides:
         status_col: 3
         rows:
           - ["P0", "contrastive on the feature embeddings (tracks, global jet features)", "not trained", "running: 30 epochs, T 0.1, λ 0.4"]
-          - ["P1", "P0 + JC on the global jet embedding", "trained", "done: S2 grid; best T 0.1, λ 0.4"]
+          - ["P1", "P0 + JC on the global jet embedding", "trained", "queued: 30 epochs, T 0.1, λ 0.4"]
           - ["P2", "JC on the global jet embedding only", "trained", "running: S2 grid rerun, clipped"]
       - caption: "Downstream (train split, 18.6M jets, cross-entropy always on)"
         widths: [4.3, 2.7, 2.7, 2.6]
@@ -337,6 +337,7 @@ slides:
           - ["2026-10-20", "Gradient clipping 1.0 in pretraining; P1 gets its own S2 grid", "S2 loss spikes, P2 collapse"]
           - ["2026-10-20", "P2 grid rerun with clipping; the collapsed unclipped T 0.3 runs stopped", "S2: P2 T 0.3 loss = ln 511, rank ≈ 1"]
           - ["2026-10-21", "P0 recipe: T 0.1, λ 0.4 (confirmed)", "S2 probes: lowest CE, beats frozen random encoders"]
+          - ["2026-10-21", "P1 recipe: T 0.1, λ 0.4 (confirmed); P0 and P1 pretrain for 30 epochs, 2 seeds", "S2 probes: lowest CE of the grid"]
 
   - layout: cards
     title: "Next"
