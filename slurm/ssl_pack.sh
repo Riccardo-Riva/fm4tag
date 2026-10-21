@@ -47,10 +47,12 @@ GPUS_PER_PACK=${GPUS_PER_PACK:-2}
 MAX_GPU_JOBS=${MAX_GPU_JOBS:-10}
 GPU_NODE=${GPU_NODE:-gpu-L40S-open,gpu-A40}
 EXCLUDE_NODES=${EXCLUDE_NODES:-}    # node82 GPU 5 works again (checked 2026-10-20)
-# 7 loader workers per GPU (9 CPUs): node82 often has GPUs free but few CPUs
-# (2026-10-20: 3 GPUs, 18 CPUs); 7 still feed a probe at B 32768 several times over.
-NUM_WORKERS=${NUM_WORKERS:-7}
-CPUS_PER_GPU=$((NUM_WORKERS + 2))
+# 6 loader workers per GPU (8 CPUs): node82 often has GPUs free but few CPUs
+# (2026-10-20: 3 GPUs, 18 CPUs); 6 still feed a probe at B 32768 several times over.
+NUM_WORKERS=${NUM_WORKERS:-6}
+# Even, i.e. whole cores (2 threads per core): with 9 CPUs per GPU the second
+# worker's srun step never got its CPUs and that GPU idled for the whole job.
+CPUS_PER_GPU=$(( (NUM_WORKERS + 3) / 2 * 2 ))
 # Host RAM per GPU: a pretraining uses ~11 GiB anon (10 workers, measured S2);
 # the rest holds the page cache of the train + val files (17 GB).
 MEM_PER_GPU_GB=${MEM_PER_GPU_GB:-32}
