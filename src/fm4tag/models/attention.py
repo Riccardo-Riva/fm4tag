@@ -1,3 +1,4 @@
+import math
 from dataclasses import dataclass
 
 import torch
@@ -233,6 +234,11 @@ class RowAttention(nn.Module):
     contiguous chunks and each sample attends only within its own chunk; the
     ``N`` tokens × ``heads`` become independent heads of one varlen call.
 
+    ``qk_norm`` RMS-normalises queries and keys per head (learnable gain)
+    before the dot product, which bounds the logits.  Without it, contrastive
+    pretraining grew ``to_qkv`` until the logits reached 1e5-1e7: one-hot
+    attention, and gradient blowups once bf16 rounding flipped the argmax.
+
     Args:
         x:      ``(B, N, dim)`` — token grid.
         mask:   ``(B,)`` bool — ``True`` = valid sample, ``False`` = padding.
@@ -240,7 +246,7 @@ class RowAttention(nn.Module):
         groups: Optional :class:`RowGroups` over the ``B`` axis.
     """
 
-    def __init__(self, dim, heads=8, dim_row_head=16, dropout=0.0):
+    def __init__(self, dim, heads=8, dim_row_head=16, dropout=0.0, qk_norm=False):
         super().__init__()
         inner_dim = dim_row_head * heads
         self.heads = heads
@@ -249,27 +255,71 @@ class RowAttention(nn.Module):
         nn.init.zeros_(self.to_out.weight)
         nn.init.zeros_(self.to_out.bias)
         self.dropout = dropout
+        self.qk_norm = qk_norm
+        if qk_norm:
+            self.q_norm = nn.RMSNorm(dim_row_head)
+            self.k_norm = nn.RMSNorm(dim_row_head)
+
+    def project(self, x):
+        """``(B, N, dim)`` → ``q``, ``k``, ``v`` of shape ``(B, N*h, d)``.
+
+        The ``N`` tokens and ``h`` heads are all independent heads attending
+        over the sample axis.
+        """
+        b, n, _ = x.shape
+        q, k, v = (
+            t.reshape(b, n * self.heads, -1) for t in self.to_qkv(x).chunk(3, dim=-1)
+        )
+        if self.qk_norm:
+            # fp32 statistics under autocast; back to the kernel's dtype.
+            q = self.q_norm(q.float()).to(v.dtype)
+            k = self.k_norm(k.float()).to(v.dtype)
+        return q, k, v
+
+    @torch.no_grad()
+    def logit_stats(self, x, groups=None, max_groups=4, head_slice=8):
+        """Largest ``|q·k|/sqrt(d)`` and mean normalised attention entropy.
+
+        Entropy is divided by ``log(group size)``: 1 = uniform, 0 = one-hot;
+        the mean is over every (query, head) of the first ``max_groups``
+        groups (the whole batch as one group without ``groups``), computed
+        ``head_slice`` heads at a time.
+        """
+        q, k, _ = self.project(x)
+        n_samples = q.shape[0]
+        bounds = [0, n_samples] if groups is None else groups.cu_seqlens.tolist()
+        top, ent_sum, n_ent = 0.0, 0.0, 0
+        # fp32 logits even inside a bf16-autocast forward.
+        with torch.autocast(q.device.type, enabled=False):
+            for s, e in list(zip(bounds[:-1], bounds[1:]))[:max_groups]:
+                if e - s < 2:
+                    continue
+                for h0 in range(0, q.shape[1], head_slice):
+                    qs = q[s:e, h0 : h0 + head_slice].float()
+                    ks = k[s:e, h0 : h0 + head_slice].float()
+                    logits = torch.einsum('lhd,mhd->hlm', qs, ks) * qs.shape[-1] ** -0.5
+                    top = max(top, logits.abs().amax().item())
+                    p = logits.softmax(-1)
+                    ent = -(p * p.clamp_min(1e-30).log()).sum(-1) / math.log(e - s)
+                    ent_sum += ent.sum().item()
+                    n_ent += ent.numel()
+        return top, (ent_sum / n_ent if n_ent else float('nan'))
 
     def forward(self, x, mask=None, groups=None):
         h = self.heads
         dropout_p = self.dropout if self.training else 0.0
+        b, n, _ = x.shape
+        q, k, v = self.project(x)
 
         if groups is not None:
             if mask is not None:
                 raise ValueError('RowAttention: pass either mask or groups, not both.')
-            b, n, _ = x.shape
-            # (B, N, 3*h*d) → three (B, N*h, d): the N tokens and h heads are
-            # all independent heads attending over the grouped sample axis.
-            q, k, v = (t.reshape(b, n * h, -1) for t in self.to_qkv(x).chunk(3, dim=-1))
             out = grouped_attention(q, k, v, groups, dropout_p=dropout_p)
             return self.to_out(out.reshape(b, n, -1))
 
-        q, k, v = self.to_qkv(x).chunk(3, dim=-1)
-        # (B, N, h*d) → (N, h, B, d): tokens become a batch dim, the sample axis
+        # (B, N*h, d) → (N, h, B, d): tokens become a batch dim, the sample axis
         # B becomes the attention sequence.
-        q = rearrange(q, 'b n (h d) -> n h b d', h=h)
-        k = rearrange(k, 'b n (h d) -> n h b d', h=h)
-        v = rearrange(v, 'b n (h d) -> n h b d', h=h)
+        q, k, v = (t.reshape(b, n, h, -1).permute(1, 2, 0, 3) for t in (q, k, v))
 
         attn_mask = None
         if mask is not None:

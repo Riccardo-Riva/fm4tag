@@ -72,6 +72,8 @@ class RowMixer(nn.Module):
         nfeats:   Number of tokens ``N``; sizes ``row_dim = N*dim`` in
                   ``concat`` mode.
         row_mode: ``'per_token'`` | ``'concat'`` (see above).
+        qk_norm:  RMS-normalise queries and keys per head (see
+                  :class:`RowAttention`).
     """
 
     def __init__(
@@ -85,6 +87,7 @@ class RowMixer(nn.Module):
         attn_dropout: float,
         ff_dropout: float,
         row_mode: str = 'per_token',
+        qk_norm: bool = False,
     ) -> None:
         super().__init__()
         if row_mode not in ('per_token', 'concat'):
@@ -100,7 +103,11 @@ class RowMixer(nn.Module):
         self.attn = PreNormResidual(
             width,
             RowAttention(
-                width, heads=heads, dim_row_head=dim_row_head, dropout=attn_dropout
+                width,
+                heads=heads,
+                dim_row_head=dim_row_head,
+                dropout=attn_dropout,
+                qk_norm=qk_norm,
             ),
         )
         self.ff = PreNormResidual(
@@ -207,6 +214,8 @@ class RowTransformer(nn.Module):
         ff_dropout:   Dropout rate inside feed-forward.
         row_mode:     ``'per_token'`` | ``'concat'`` — how the row step sees the
                       token grid; see :class:`RowMixer`.
+        row_qk_norm:  RMS-normalise the row attention's queries and keys per
+                      head (see :class:`~fm4tag.models.attention.RowAttention`).
     """
 
     def __init__(
@@ -220,6 +229,7 @@ class RowTransformer(nn.Module):
         attn_dropout: float = 0.0,
         ff_dropout: float = 0.0,
         row_mode: str = 'per_token',
+        row_qk_norm: bool = False,
     ) -> None:
         super().__init__()
         self.blocks = nn.ModuleList(
@@ -233,6 +243,7 @@ class RowTransformer(nn.Module):
                     attn_dropout=attn_dropout,
                     ff_dropout=ff_dropout,
                     row_mode=row_mode,
+                    qk_norm=row_qk_norm,
                 )
                 for _ in range(depth)
             ]
@@ -269,6 +280,8 @@ class RowColTransformer(nn.Module):
         ff_dropout:   Dropout inside both feed-forward sub-layers.
         row_mode:     ``'per_token'`` | ``'concat'`` — how the row step sees the
                       token grid; see :class:`RowMixer`.
+        row_qk_norm:  RMS-normalise the row attention's queries and keys per
+                      head (see :class:`~fm4tag.models.attention.RowAttention`).
     """
 
     def __init__(
@@ -284,6 +297,7 @@ class RowColTransformer(nn.Module):
         attn_dropout: float = 0.0,
         ff_dropout: float = 0.0,
         row_mode: str = 'per_token',
+        row_qk_norm: bool = False,
     ) -> None:
         super().__init__()
         self.blocks = nn.ModuleList(
@@ -311,6 +325,7 @@ class RowColTransformer(nn.Module):
                             attn_dropout=attn_dropout,
                             ff_dropout=ff_dropout,
                             row_mode=row_mode,
+                            qk_norm=row_qk_norm,
                         ),
                     ]
                 )

@@ -15,9 +15,9 @@ from fm4tag.models.backbones.transformers import RowMixer
 B, N, DIM = 10, 5, 16
 
 
-def _row_attn(heads: int = 4) -> RowAttention:
+def _row_attn(heads: int = 4, qk_norm: bool = False) -> RowAttention:
     torch.manual_seed(0)
-    attn = RowAttention(dim=DIM, heads=heads, dim_row_head=8).eval()
+    attn = RowAttention(dim=DIM, heads=heads, dim_row_head=8, qk_norm=qk_norm).eval()
     # ``to_out`` ships zero-initialised (identity-at-init under the residual),
     # which would make every behavioural test below trivially true.
     torch.nn.init.normal_(attn.to_out.weight, std=0.1)
@@ -451,3 +451,71 @@ def test_varlen_slices_beyond_kernel_batch_limit_on_gpu(monkeypatch):
     monkeypatch.setattr(attention_mod, 'MAX_KERNEL_BATCH', 2)
     out = grouped_attention(q, k, v, groups)
     assert torch.allclose(out.float(), ref.float(), atol=1e-2)
+
+
+# ── qk_norm / logit_stats ───────────────────────────────────────────────────
+
+
+def _grown(qk_norm: bool) -> RowAttention:
+    """``to_qkv`` scaled up 1000x, like the unstable pretrainings' first layers."""
+    attn = _row_attn(qk_norm=qk_norm)
+    with torch.no_grad():
+        attn.to_qkv.weight.mul_(1000.0)
+    return attn
+
+
+def test_qk_norm_bounds_the_logits():
+    x = torch.randn(B, N, DIM)
+    top, entropy = _grown(qk_norm=False).logit_stats(x, _groups())
+    assert top > 1e4 and entropy < 0.1  # one-hot attention
+    top, entropy = _grown(qk_norm=True).logit_stats(x, _groups())
+    # Unit-RMS q and k with unit gains: |q·k|/sqrt(d) <= sqrt(d).
+    assert top <= 8**0.5 + 1e-4 and entropy > 0.5
+
+
+def test_qk_norm_off_adds_no_parameters():
+    """Old checkpoints (no q_norm/k_norm) still load into qk_norm=False."""
+    assert not any('norm' in k for k in _row_attn().state_dict())
+    assert {'q_norm.weight', 'k_norm.weight'} <= set(
+        _row_attn(qk_norm=True).state_dict()
+    )
+
+
+def test_qk_norm_grouped_matches_per_chunk_calls_and_ungrouped():
+    attn = _row_attn(qk_norm=True)
+    x = torch.randn(B, N, DIM)
+    with torch.no_grad():
+        out = attn(x, groups=_groups())
+        ref = _per_group(attn, x)
+        whole = attn(x, groups=_groups([0, B]))
+        ungrouped = attn(x)
+    assert torch.allclose(out, ref, atol=1e-5)
+    assert torch.allclose(whole, ungrouped, atol=1e-5)
+
+
+@pytest.mark.parametrize('qk_norm', [False, True])
+def test_logit_stats_matches_brute_force(qk_norm):
+    attn = _grown(qk_norm) if qk_norm else _row_attn()
+    x = torch.randn(B, N, DIM)
+    top, entropy = attn.logit_stats(x, _groups(), max_groups=10)
+    with torch.no_grad():
+        q, k, _ = attn.project(x)  # (B, N*h, d)
+    tops, ents = [], []
+    for s, e in zip(_BOUNDS[:-1], _BOUNDS[1:]):
+        if e - s < 2:
+            continue
+        for h in range(q.shape[1]):
+            logits = q[s:e, h] @ k[s:e, h].T / q.shape[-1] ** 0.5
+            p = logits.softmax(-1)
+            tops.append(logits.abs().max())
+            ents.append(-(p * p.log()).sum(-1) / torch.log(torch.tensor(e - s)))
+    assert top == pytest.approx(max(tops).item(), rel=1e-5)
+    # Mean over every (query, head) of every group.
+    assert entropy == pytest.approx(torch.cat(ents).mean().item(), rel=1e-5)
+
+
+def test_logit_stats_of_uniform_attention():
+    attn = _row_attn()
+    torch.nn.init.zeros_(attn.to_qkv.weight)
+    top, entropy = attn.logit_stats(torch.randn(B, N, DIM), _groups())
+    assert top == 0.0 and entropy == pytest.approx(1.0)
