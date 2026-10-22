@@ -627,6 +627,137 @@ def plot_s2_probes(cfg, style, data, out, rows_cfg):
     return save(fig, out)
 
 
+def plot_full_runs(cfg, style, data, out):
+    """Validation loss and the largest gradient norm of the long pretrainings."""
+    t = cfg['texts']
+    fig, axes = plt.subplots(1, 2, figsize=cfg['size'])
+    drawn = 0
+    for r in cfg['runs']:
+        df = metrics(Path(r['stage']) / r['cell'] / f'seed_{r["seed"]}')
+        if df is None or cfg['val_metric'] not in df:
+            continue
+        kw = {'color': style['colors'][r['key']], 'ls': r.get('ls', '-')}
+        val = per_epoch(df)[cfg['val_metric']].dropna()
+        axes[0].plot(
+            val.index + 1,
+            val.values,
+            marker='o',
+            ms=3.5,
+            lw=1.6,
+            label=r['label'],
+            **kw,
+        )
+        g = df[['step', 'train/grad_norm_max']].dropna()
+        spe = df.loc[df['epoch'] == 0, 'step'].max() + 1
+        axes[1].plot(g['step'] / spe, g['train/grad_norm_max'], lw=1.0, **kw)
+        drawn += 1
+    if not drawn:
+        return None
+    axes[0].set_ylabel(t['ylabel_val'])
+    axes[1].set_yscale('log')
+    axes[1].set_ylabel(t['ylabel_grad'])
+    axes[1].axhline(cfg['spike_level'], color=style['muted'], lw=0.8, ls=':')
+    axes[1].text(
+        0.99,
+        cfg['spike_level'] * 0.85,
+        t['spike_level'],
+        transform=matplotlib.transforms.blended_transform_factory(
+            axes[1].transAxes, axes[1].transData
+        ),
+        ha='right',
+        va='top',
+        fontsize=8.5,
+        color=style['muted'],
+    )
+    for ax in axes:
+        ax.set_xlabel(t['xlabel'])
+        ax.tick_params(labelsize=9)
+    axes[0].legend(fontsize=9)
+    fig.tight_layout(w_pad=2.0)
+    return save(fig, out)
+
+
+def plot_attn_logits(cfg, style, data, out):
+    """Largest logit and entropy of the first row-attention blocks, per checkpoint."""
+    path = Path(data[cfg['table']])
+    if not path.exists():
+        return None
+    df = pd.read_csv(path)
+    t = cfg['texts']
+    fig, axes = plt.subplots(2, 1, figsize=cfg['size'], sharex=True)
+    x, ticks, groups = 0, [], []
+    for g in cfg['groups']:
+        x0 = x
+        for e in g['entries']:
+            rows = df[df['label'] == e['label']]
+            color = style['colors'][e.get('key', g['key'])]
+            for lay in cfg['layers']:
+                row = rows[rows['layer'] == lay['layer']]
+                if row.empty:
+                    continue
+                for ax, col in zip(axes, ('max_logit', 'entropy')):
+                    ax.plot(
+                        x,
+                        row[col].iloc[0],
+                        lay['marker'],
+                        ms=7,
+                        mew=1.6,
+                        color=color,
+                        mfc=color if lay.get('filled', True) else 'white',
+                    )
+            ticks.append((x, e['tick']))
+            x += 1
+        groups.append(((x0 + x - 1) / 2, g['label'], g['key']))
+        x += 0.7
+    axes[0].set_yscale('log')
+    axes[0].set_ylabel(t['ylabel_logit'], fontsize=10)
+    axes[1].set_ylabel(t['ylabel_entropy'], fontsize=10)
+    axes[1].set_ylim(-0.03, 1.03)
+    axes[1].set_xticks([p for p, _ in ticks], [s for _, s in ticks], fontsize=8.5)
+    axes[1].set_xlim(-0.6, x - 0.5)
+    trans = matplotlib.transforms.blended_transform_factory(
+        axes[1].transData, axes[1].transAxes
+    )
+    for gx, name, key in groups:
+        axes[1].text(
+            gx,
+            -0.2,
+            name,
+            transform=trans,
+            ha='center',
+            va='top',
+            fontsize=9,
+            fontweight='bold',
+            color=style['colors'].get(key, style['ink']),
+        )
+    handles = [
+        matplotlib.lines.Line2D(
+            [],
+            [],
+            ls='',
+            marker=lay['marker'],
+            ms=7,
+            mew=1.6,
+            color=style['muted'],
+            mfc=style['muted'] if lay.get('filled', True) else 'white',
+            label=lay['label'],
+        )
+        for lay in cfg['layers']
+    ]
+    fig.legend(
+        handles=handles,
+        fontsize=9,
+        loc='upper center',
+        ncol=len(handles),
+        frameon=False,
+    )
+    for ax in axes:
+        ax.tick_params(axis='y', labelsize=9)
+        ax.grid(axis='x', visible=False)
+    fig.tight_layout(rect=(0, 0, 1, 0.95))
+    return save(fig, out)
+
+
 # ── pptx helpers ─────────────────────────────────────────────────────────────
 def rgb(hex_color: str) -> RGBColor:
     return RGBColor.from_string(hex_color.lstrip('#').upper())
@@ -1150,6 +1281,8 @@ def make_plots(cfg: dict, plot_dir: Path) -> dict[str, Path | None]:
         's2_loss': lambda c, o: plot_s2_loss(c, style, data, o),
         's2_collapse': lambda c, o: plot_s2_collapse(c, style, data, o, rows),
         's2_probes': lambda c, o: plot_s2_probes(c, style, data, o, rows),
+        'full_runs': lambda c, o: plot_full_runs(c, style, data, o),
+        'attn_logits': lambda c, o: plot_attn_logits(c, style, data, o),
     }
     out = {}
     for name, plot_cfg in pc.items():

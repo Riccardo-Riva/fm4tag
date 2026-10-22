@@ -66,6 +66,8 @@ data:
     - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/S2_probe_20261020_112146
     - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/S2_probe_p2T03_*
     - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/S2_p2clip_20261020_145001
+  # Row-attention logits per checkpoint (slurm/smoke/attn_logits.py, 2026-10-22)
+  row_attn_csv: /storage3/DSIP/rriva/research/fm4tag-chunk/docs/slides/ssl_campaign/data/row_attn_logits.csv
 
 # ── Plots ────────────────────────────────────────────────────────────────────
 plots:
@@ -203,6 +205,50 @@ plots:
       CE of the frozen-encoder probe of each pretraining recipe, against the same
       probe on frozen random encoders.
 
+  full_runs:
+    size: [12.3, 4.1]
+    val_metric: val/loss
+    spike_level: 200
+    runs:                                # the stopped 30-epoch pretrainings (lr 1e-3)
+      - {stage: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/P_full_20261021_112456, cell: p0, seed: 42, key: P0, label: "P0, seed 42"}
+      - {stage: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/P_full_20261021_112456, cell: p0, seed: 424, key: P0, label: "P0, seed 424", ls: '--'}
+      - {stage: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/P_full_20261021_161637, cell: p1, seed: 42, key: P1, label: "P1, seed 42"}
+      - {stage: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/P_full_20261021_161637, cell: p1, seed: 424, key: P1, label: "P1, seed 424", ls: '--'}
+    texts:
+      xlabel: "epoch"
+      ylabel_val: "validation loss"
+      ylabel_grad: "largest gradient norm\nper 500 steps (before clipping)"
+      spike_level: "never above this in the clipped S2 runs"
+
+  attn_logits:
+    size: [8.4, 5.6]
+    table: row_attn_csv
+    layers:                              # layer in the CSV: legend label, marker
+      - {layer: L0b0.2, label: "1st intersample block", marker: o}
+      - {layer: L0b1.2, label: "2nd intersample block", marker: s, filled: false}
+    groups:                              # checkpoint labels in the CSV; epochs counted from 1
+      - key: concat                     # S1's SAINT-like colour
+        label: "from scratch"
+        entries: [{label: S1_scratch_s42, tick: "s42"}, {label: S1_scratch_s424, tick: "s424"}]
+      - key: mixed                      # no single colour: label in ink
+        label: "S2 winners"
+        entries: [{label: S2_P0, tick: "P0", key: P0}, {label: S2_P1, tick: "P1", key: P1}, {label: S2_P2c, tick: "P2", key: P2c}]
+      - key: P0
+        label: "P0 s42"
+        entries: [{label: full_P0_s42_ep1, tick: "ep 2"}, {label: full_P0_s42_ep2, tick: "ep 3"}, {label: full_P0_s42_ep4, tick: "ep 5"}]
+      - key: P0
+        label: "P0 s424"
+        entries: [{label: full_P0_s424_ep4, tick: "ep 5"}, {label: full_P0_s424_ep6, tick: "ep 7"}]
+      - key: P1
+        label: "P1 s42"
+        entries: [{label: full_P1_s42_ep5, tick: "ep 6"}, {label: full_P1_s42_ep7, tick: "ep 8"}]
+      - key: P1
+        label: "P1 s424"
+        entries: [{label: full_P1_s424_ep4, tick: "ep 5"}, {label: full_P1_s424_ep6, tick: "ep 7"}]
+    texts:
+      ylabel_logit: "largest logit q·k/√d"
+      ylabel_entropy: "attention entropy\n(1 uniform, 0 one-hot)"
+
 # ── Slides ───────────────────────────────────────────────────────────────────
 # layouts: title | text_plot | plot_full | tables | stages | cards
 slides:
@@ -227,9 +273,9 @@ slides:
         header: ["id", "loss", "aggregator", "status"]
         status_col: 3
         rows:
-          - ["P0", "contrastive on the feature embeddings (tracks, global jet features)", "not trained", "running: 30 epochs, T 0.1, λ 0.4"]
-          - ["P1", "P0 + JC on the global jet embedding", "trained", "queued: 30 epochs, T 0.1, λ 0.4"]
-          - ["P2", "JC on the global jet embedding only", "trained", "running: S2 grid rerun, clipped"]
+          - ["P0", "contrastive on the feature embeddings (tracks, global jet features)", "not trained", "queued: QK-norm pilot, 10 epochs"]
+          - ["P1", "P0 + JC on the global jet embedding", "trained", "queued: QK-norm pilot, 10 epochs"]
+          - ["P2", "JC on the global jet embedding only", "trained", "queued: QK-norm pilot, 10 epochs"]
       - caption: "Downstream (train split, 18.6M jets, cross-entropy always on)"
         widths: [4.3, 2.7, 2.7, 2.6]
         header: ["arm", "without JC", "with JC (weight 0.3)", "status"]
@@ -294,7 +340,8 @@ slides:
           - ["P0", "contrastive on the feature embeddings", "no", "done: best T 0.1, λ 0.4"]
           - ["P1", "P0 + JC (same T for both)", "1.0", "done: best T 0.1, λ 0.4"]
           - ["P2", "JC only", "no", "done: T 0.1; T 0.3 stopped (collapsed)"]
-          - ["P2 rerun", "JC only", "1.0", "running: 3/4 probed"]
+          - ["P2 rerun", "JC only", "1.0", "done: best T 0.1, λ 0.4"]
+          - ["QK‑norm", "P0, P1, P2 at their recipes, QK-norm in the intersample attention", "1.0", "queued: pilot"]
     bullets_title: "How a recipe is judged: a probe"
     bullets:
       - "Freeze the pretrained encoders, train aggregator + head with CE for 15 epochs (B 32768, lr 1e-3); compare the best validation CE"
@@ -320,10 +367,25 @@ slides:
   - layout: plot_full
     title: "S2 probes: pretrained vs random frozen encoders"
     plot: s2_probes
-    decision: "P0: T 0.1, λ 0.4 (probe CE 0.635, frozen random encoders 0.656; T 0.1, λ 0.1 close at 0.641, one seed). P1: T 0.1, λ 0.4 again (0.632; next best 0.647). Unclipped P2 is far worse than random (0.83, 1.17); clipped P2 just beats it at T 0.1 (0.648, 0.651), last point running."
+    decision: "P0: T 0.1, λ 0.4 (probe CE 0.635, frozen random encoders 0.656; T 0.1, λ 0.1 close at 0.641, one seed). P1: T 0.1, λ 0.4 again (0.632; next best 0.647). P2: T 0.1, λ 0.4 (clipped, 0.648; random 0.656). Unclipped P2 is far worse than random (0.83, 1.17)."
+
+  - layout: plot_full
+    title: "30-epoch pretrainings: sudden gradient blowups"
+    plot: full_runs
+    result: "P0 seed 42 collapsed at epoch 5 (every track the same embedding), P0 seed 424 broke at epoch 11, P1 seed 42 spiked at epoch 8; P1 seed 424 was still fine at epoch 7. Each break starts with one step whose gradient norm is 10³–10⁶; after it, blowups recur even at lower lr. All four runs were stopped."
+
+  - layout: text_plot
+    title: "Cause: the intersample attention turns one-hot"
+    plot: attn_logits
+    text_width: 3.7
+    bullets:
+      - "Track encoder, first two intersample blocks: the query/key weights keep growing, logits reach 10⁵–10⁷"
+      - "Each track attends to one other track of its chunk; bf16 rounding flips the winner: gradient blowups"
+      - "From scratch ~20; every pretraining drifts, the S2 winners too. A lower lr only slows it"
+    decision: "QK-norm (q, k RMS-normalised per head) in every arm's intersample attention; largest logit and entropy logged each epoch. First a 10-epoch pilot."
 
   - layout: tables
-    title: "Decisions so far"
+    title: "Decisions so far (1/2)"
     tables:
       - widths: [1.5, 6.2, 4.6]
         header: ["date", "decision", "based on"]
@@ -336,13 +398,24 @@ slides:
           - ["2026-10-19", "2-GPU packs sharing a task queue", "10-GPU-job limit"]
           - ["2026-10-20", "Gradient clipping 1.0 in pretraining; P1 gets its own S2 grid", "S2 loss spikes, P2 collapse"]
           - ["2026-10-20", "P2 grid rerun with clipping; the collapsed unclipped T 0.3 runs stopped", "S2: P2 T 0.3 loss = ln 511, rank ≈ 1"]
+
+  - layout: tables
+    title: "Decisions so far (2/2)"
+    tables:
+      - widths: [1.5, 6.2, 4.6]
+        header: ["date", "decision", "based on"]
+        rows:
           - ["2026-10-21", "P0 recipe: T 0.1, λ 0.4 (confirmed)", "S2 probes: lowest CE, beats frozen random encoders"]
           - ["2026-10-21", "P1 recipe: T 0.1, λ 0.4 (confirmed); P0 and P1 pretrain for 30 epochs, 2 seeds", "S2 probes: lowest CE of the grid"]
+          - ["2026-10-22", "P2 recipe: T 0.1, λ 0.4 (confirmed)", "S2 probes: lowest CE, beats frozen random encoders"]
+          - ["2026-10-22", "30-epoch pretrainings stopped", "gradient blowups; P0 seed 42 collapsed"]
+          - ["2026-10-22", "last.ckpt rewritten every epoch again (Lightning 2.6 kept it at the last val-loss improvement)", "stopped P0: last.ckpt was epoch 5 of 15"]
+          - ["2026-10-22", "QK-norm in every arm's intersample attention; a 10-epoch pilot before the 30-epoch runs", "attention logits 10⁵–10⁷: one-hot attention"]
 
   - layout: cards
     title: "Next"
     cards:
-      - {header: "S2 probes", text: "P0 and P1: T 0.1, λ 0.4; P0 pretrains for 30 epochs. Pick P2's recipe when its last probe finishes; it must beat frozen random encoders."}
+      - {header: "QK-norm pilot", text: "P0, P1, P2 for 10 epochs with probes, the random floor, one from-scratch run (~15 h). Logits bounded, no blowups, probes beat random, from-scratch CE ≈ 0.620?"}
+      - {header: "30-epoch pretrainings", text: "P0, P1, P2 × 2 seeds with QK-norm: lr 1e-3 if the pilot is clean, otherwise 5e-4."}
       - {header: "S3 learning rates", text: "Each of the 6 arms at 3 learning rates (×2 apart); FT also with the pretrained parts at lr / 10."}
-      - {header: "Final runs", text: "P0, P1, P2: 2 pretraining seeds, 30 epochs. Each pretrained arm: 2 × 2 seeds. SC: 4 seeds."}
-      - {header: "Final plots", text: "Validation CE per arm; ROC vs GN2v01 with fractions tuned on validation; c-rejection at 77% b-efficiency; embedding quality; GPU-hours per arm."}
+      - {header: "Final runs and plots", text: "Each pretrained arm 2 × 2 seeds, SC 4 seeds. Validation CE per arm; ROC vs GN2v01; c-rejection at 77% b-efficiency; embedding quality; GPU-hours."}
