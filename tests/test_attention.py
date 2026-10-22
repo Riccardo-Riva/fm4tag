@@ -9,7 +9,12 @@ from __future__ import annotations
 import pytest
 import torch
 
-from fm4tag.models.attention import RowAttention, RowGroups, grouped_attention
+from fm4tag.models.attention import (
+    LeanRMSNorm,
+    RowAttention,
+    RowGroups,
+    grouped_attention,
+)
 from fm4tag.models.backbones.transformers import RowMixer
 
 B, N, DIM = 10, 5, 16
@@ -519,3 +524,54 @@ def test_logit_stats_of_uniform_attention():
     torch.nn.init.zeros_(attn.to_qkv.weight)
     top, entropy = attn.logit_stats(torch.randn(B, N, DIM), _groups())
     assert top == 0.0 and entropy == pytest.approx(1.0)
+
+
+# ── LeanRMSNorm ──────────────────────────────────────────────────────────────
+
+
+def _norms(dim=8):
+    torch.manual_seed(0)
+    ref = torch.nn.RMSNorm(dim)
+    torch.nn.init.normal_(ref.weight, 1.0, 0.3)
+    lean = LeanRMSNorm(dim)
+    lean.load_state_dict(ref.state_dict())  # same key: weight
+    return ref, lean
+
+
+def test_lean_rms_norm_matches_torch():
+    ref, lean = _norms()
+    x = (torch.randn(6, 5, 8) * 3).requires_grad_()
+    x2 = x.detach().clone().requires_grad_()
+    g = torch.randn(6, 5, 8)
+    (ref(x) * g).sum().backward()
+    (lean(x2) * g).sum().backward()
+    assert torch.allclose(lean(x2), ref(x), atol=1e-6)
+    assert torch.allclose(x2.grad, x.grad, atol=1e-5)
+    assert torch.allclose(lean.weight.grad, ref.weight.grad, atol=1e-5)
+
+
+def test_lean_rms_norm_gradcheck():
+    from fm4tag.models.attention import _RMSNormFn
+
+    torch.manual_seed(0)
+    x = torch.randn(3, 4, dtype=torch.float64, requires_grad=True)
+    w = torch.randn(4, dtype=torch.float64, requires_grad=True)
+    assert torch.autograd.gradcheck(lambda x, w: _RMSNormFn.apply(x, w, 1e-6), (x, w))
+
+
+def test_lean_rms_norm_bf16_matches_fp32_statistics_and_saves_no_fp32_copy():
+    ref, lean = _norms()
+    x = torch.randn(64, 4, 8).bfloat16().requires_grad_()
+    saved = []
+
+    def pack(t):
+        saved.append((t.dtype, t.numel()))
+        return t
+
+    with torch.autograd.graph.saved_tensors_hooks(pack, lambda t: t):
+        y = lean(x)
+    assert y.dtype == torch.bfloat16
+    assert torch.equal(y, ref(x.float()).bfloat16())
+    # Only x itself at full size; fp32 tensors are the gain and the per-row rstd.
+    assert (torch.bfloat16, x.numel()) in saved
+    assert all(n < x.numel() for dt, n in saved if dt == torch.float32)

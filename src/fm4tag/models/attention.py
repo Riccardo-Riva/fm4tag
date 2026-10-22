@@ -216,6 +216,46 @@ def grouped_attention(
     return torch.cat(outs, dim=0)
 
 
+class _RMSNormFn(torch.autograd.Function):
+    """RMSNorm over the last dim: fp32 statistics, output in the input's dtype.
+
+    Saves only the input (in its own dtype) and the per-row inverse RMS, and
+    recomputes the rest in backward.  ``nn.RMSNorm`` on an upcast input saves
+    an fp32 copy instead: for bf16 q and k that cost P1 ~2 GiB and its batch.
+    """
+
+    @staticmethod
+    def forward(ctx, x, weight, eps):
+        dt = torch.promote_types(x.dtype, torch.float32)
+        xf = x.to(dt)
+        rstd = torch.rsqrt(xf.pow(2).mean(-1, keepdim=True) + eps)
+        ctx.save_for_backward(x, weight, rstd)
+        return (xf * rstd * weight.to(dt)).to(x.dtype)
+
+    @staticmethod
+    def backward(ctx, grad):
+        x, weight, rstd = ctx.saved_tensors
+        dt = rstd.dtype
+        xhat = x.to(dt) * rstd
+        g = grad.to(dt)
+        grad_w = (g * xhat).reshape(-1, x.shape[-1]).sum(0)
+        g_xhat = g * weight.to(dt)
+        grad_x = rstd * (g_xhat - xhat * (g_xhat * xhat).mean(-1, keepdim=True))
+        return grad_x.to(x.dtype), grad_w.to(weight.dtype), None
+
+
+class LeanRMSNorm(nn.Module):
+    """``nn.RMSNorm`` (learnable gain, fp32 eps) with :class:`_RMSNormFn`'s memory."""
+
+    def __init__(self, dim: int, eps: float | None = None) -> None:
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(dim))
+        self.eps = torch.finfo(torch.float32).eps if eps is None else eps
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return _RMSNormFn.apply(x, self.weight, self.eps)
+
+
 class RowAttention(nn.Module):
     """All-pairs intersample (row) attention over the batch axis.
 
@@ -257,8 +297,8 @@ class RowAttention(nn.Module):
         self.dropout = dropout
         self.qk_norm = qk_norm
         if qk_norm:
-            self.q_norm = nn.RMSNorm(dim_row_head)
-            self.k_norm = nn.RMSNorm(dim_row_head)
+            self.q_norm = LeanRMSNorm(dim_row_head)
+            self.k_norm = LeanRMSNorm(dim_row_head)
 
     def project(self, x):
         """``(B, N, dim)`` → ``q``, ``k``, ``v`` of shape ``(B, N*h, d)``.
@@ -271,9 +311,8 @@ class RowAttention(nn.Module):
             t.reshape(b, n * self.heads, -1) for t in self.to_qkv(x).chunk(3, dim=-1)
         )
         if self.qk_norm:
-            # fp32 statistics under autocast; back to the kernel's dtype.
-            q = self.q_norm(q.float()).to(v.dtype)
-            k = self.k_norm(k.float()).to(v.dtype)
+            # fp32 statistics, output (and saved input) in the kernel's dtype.
+            q, k = self.q_norm(q), self.k_norm(k)
         return q, k, v
 
     @torch.no_grad()
