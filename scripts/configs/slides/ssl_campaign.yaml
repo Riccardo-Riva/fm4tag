@@ -372,7 +372,7 @@ slides:
   - layout: plot_full
     title: "30-epoch pretrainings: sudden gradient blowups"
     plot: full_runs
-    result: "P0 seed 42 collapsed at epoch 5 (every track the same embedding), P0 seed 424 broke at epoch 11, P1 seed 42 spiked at epoch 8; P1 seed 424 was still fine at epoch 7. Each break starts with one step whose gradient norm is 10³–10⁶; after it, blowups recur even at lower lr. All four runs were stopped."
+    result: "P0 seed 42 collapsed at epoch 5 (every track the same embedding), P0 seed 424 broke at epoch 11, P1 seed 42 spiked at epoch 8; P1 seed 424 ran out of GPU memory at epoch 8 (allocator fragmentation). Each break starts with one step whose gradient norm is 10³–10⁶; after it, blowups recur even at lower lr. The other three runs were stopped."
 
   - layout: text_plot
     title: "Cause: the intersample attention turns one-hot"
@@ -411,6 +411,7 @@ slides:
           - ["2026-10-22", "30-epoch pretrainings stopped", "gradient blowups; P0 seed 42 collapsed"]
           - ["2026-10-22", "last.ckpt rewritten every epoch again (Lightning 2.6 kept it at the last val-loss improvement)", "stopped P0: last.ckpt was epoch 5 of 15"]
           - ["2026-10-22", "QK-norm in every arm's intersample attention; a 10-epoch pilot before the 30-epoch runs", "attention logits 10⁵–10⁷: one-hot attention"]
+          - ["2026-10-22", "Memory-lean QK-norm; expandable CUDA allocator segments for every run", "P1 out of GPU memory (QK-norm +3 GiB; 2–4 GiB lost to fragmentation)"]
 
   - layout: cards
     title: "Next"
