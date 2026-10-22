@@ -30,10 +30,22 @@ For notebooks / scripts (Hydra not involved)::
 
 from __future__ import annotations
 
-import hydra
-from omegaconf import DictConfig
+import os
 
-from fm4tag.runner.run import run
+# Packed varlen batches change tensor sizes every step and fragment the CUDA
+# caching allocator: a 30-epoch pretraining died with 4.3 GiB reserved but
+# unusable.  Expandable segments avoid that; a setting in the environment wins.
+# Read at CUDA initialisation, so setting it here (before any CUDA call) works.
+if (
+    'PYTORCH_ALLOC_CONF' not in os.environ
+    and 'PYTORCH_CUDA_ALLOC_CONF' not in os.environ
+):
+    os.environ['PYTORCH_ALLOC_CONF'] = 'expandable_segments:True'
+
+import hydra  # noqa: E402
+from omegaconf import DictConfig  # noqa: E402
+
+from fm4tag.runner.run import run  # noqa: E402
 
 
 @hydra.main(version_base=None, config_path='../configs', config_name='default')
