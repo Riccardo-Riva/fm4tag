@@ -326,7 +326,7 @@ callbacks:
     monitor:    val/loss
     save_top_k: 3
     mode:       min
-    save_last:  true          # also write a `last.ckpt` (latest training state)
+    save_last:  false         # last.ckpt comes from last_checkpoint below
     # The monitored metric 'val/loss' contains a '/'. With
     # auto_insert_metric_name: false only the metric VALUE is interpolated
     # (via the {val/loss:.4f} placeholder) — the metric NAME never reaches the
@@ -335,6 +335,16 @@ callbacks:
     # giving names like `epoch012-step3400-val_loss0.1235.ckpt`.
     filename:   'epoch{epoch:03d}-step{step}-val_loss{val/loss:.4f}'
     auto_insert_metric_name: false
+
+  # `last.ckpt` = the latest training state, rewritten every epoch. Lightning
+  # 2.6's save_last only writes it in epochs that also save a top-k checkpoint,
+  # so after the last val/loss improvement it stopped following training.
+  last_checkpoint:
+    _target_: lightning.pytorch.callbacks.ModelCheckpoint
+    monitor:    null
+    save_top_k: 1
+    filename:   last
+    enable_version_counter: false
 
   early_stopping:
     _target_: lightning.pytorch.callbacks.EarlyStopping
