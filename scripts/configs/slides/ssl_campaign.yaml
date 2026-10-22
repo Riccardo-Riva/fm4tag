@@ -333,7 +333,7 @@ slides:
     title: "S2: choosing each pretraining's recipe"
     tables:
       - caption: "Grid: temperature T {0.1, 0.3} × augmentation strength λ {0.1, 0.4}; 10 epochs, B 12288, lr 1e-3"
-        widths: [0.9, 5.4, 2.6, 3.4]
+        widths: [1.2, 5.1, 2.6, 3.4]
         header: ["id", "loss", "gradient clipping", "status"]
         status_col: 3
         rows:
