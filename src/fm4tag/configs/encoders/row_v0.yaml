@@ -26,6 +26,7 @@ global_encoder:
       attn_dropout: 0.0
       ff_dropout:   0.0
       row_mode:     per_token  # per_token | concat — see RowMixer
+      row_qk_norm:  ${oc.select:row_qk_norm,false}  # top-level switch
 
 constituents:
   tracks:
@@ -44,3 +45,4 @@ constituents:
         attn_dropout:  0.0
         ff_dropout:    0.0
         row_mode:      per_token  # per_token | concat — see RowMixer
+        row_qk_norm:   ${oc.select:row_qk_norm,false}  # top-level switch

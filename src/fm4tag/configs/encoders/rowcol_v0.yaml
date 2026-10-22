@@ -29,6 +29,7 @@ global_encoder:
       attn_dropout: 0.0
       ff_dropout:   0.0
       row_mode:     per_token  # per_token = one row attention per feature token
+      row_qk_norm:  ${oc.select:row_qk_norm,false}  # top-level switch
                                # (see rowcol_concat_v0 for the concat alternative)
 
 constituents:
@@ -50,6 +51,7 @@ constituents:
         attn_dropout:  0.0
         ff_dropout:    0.0
         row_mode:      per_token  # per_token = one row attention per feature
+        row_qk_norm:   ${oc.select:row_qk_norm,false}  # top-level switch
                               # token, at width dim.  concat (SAINT) attends on
                               # the flattened (N*dim) vector instead — a
                               # different model, see rowcol_concat_v0.

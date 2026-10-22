@@ -93,3 +93,31 @@ def test_only_pretraining_clips_gradients():
     assert _cfg('arm=pretrain').trainer.gradient_clip_val == 1.0
     for arm in ('scratch', 'finetune', 'frozen'):
         assert _cfg(f'arm={arm}').trainer.get('gradient_clip_val') is None
+
+
+@pytest.mark.parametrize('arm', ['pretrain', 'scratch', 'finetune', 'frozen'])
+def test_every_arm_has_qk_norm_in_its_row_attention(arm):
+    from fm4tag.models.attention import RowAttention
+
+    attns = [
+        m
+        for m in build_encoders(_cfg(f'arm={arm}')).modules()
+        if isinstance(m, RowAttention)
+    ]
+    assert attns and all(m.qk_norm for m in attns)
+
+
+def test_qk_norm_is_off_outside_the_campaign():
+    """Older run configs rebuild without q_norm/k_norm, so their checkpoints load."""
+    with initialize_config_dir(config_dir=str(cfg_path[0]), version_base=None):
+        cfg = compose(config_name='default')
+    assert cfg.row_qk_norm is False
+    assert not any('q_norm' in k for k in build_encoders(cfg).state_dict())
+
+
+def test_campaign_monitors_row_attention():
+    from fm4tag.callbacks import RowAttentionMonitor
+    from fm4tag.utils import instantiate_callbacks
+
+    callbacks = instantiate_callbacks(_cfg('arm=pretrain').callbacks)
+    assert any(isinstance(cb, RowAttentionMonitor) for cb in callbacks)

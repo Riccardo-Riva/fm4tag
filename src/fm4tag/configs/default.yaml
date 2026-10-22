@@ -126,6 +126,11 @@ datamodule:
 # inference.  null = the whole rank-local batch is one chunk.
 chunk_size: null
 
+# RMS-normalise the row (intersample) attention's queries and keys per head
+# (RowAttention qk_norm).  Read by the row layers of encoders/*.yaml.  Off here
+# so older run configs and checkpoints rebuild unchanged.
+row_qk_norm: false
+
 # ── Backbone architecture ─────────────────────────────────────────────────────
 # The encoder architecture (the per-object embedding transformers) lives in the
 # `encoders` config group under configs/encoders/ and is selected in the

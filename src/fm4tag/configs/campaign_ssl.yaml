@@ -31,6 +31,9 @@ base_path: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_p
 
 chunk_size: 512        # intersample context (jets) — S1: 128 and 512 give the
                        # same tagger; 512 gives pretraining 4x more negatives
+row_qk_norm: true      # every arm (rriva, 2026-10-22): without it contrastive
+                       # pretraining grew the track row-attention logits to
+                       # 1e5-1e7 (one-hot attention) and the 30-epoch runs blew up
 
 datamodule:
   batch_size:  24576   # per arm: the largest multiple of 8*chunk_size under
@@ -65,3 +68,7 @@ callbacks:
   # of steps clipped): S2 showed loss spikes at the lr peak.
   grad_norm_monitor:
     _target_: fm4tag.callbacks.GradNormMonitorCallback
+  # Largest logit and entropy of each row-attention layer, on the first val
+  # batch: the logit growth behind the pretraining blowups (2026-10-22).
+  row_attn_monitor:
+    _target_: fm4tag.callbacks.RowAttentionMonitor
