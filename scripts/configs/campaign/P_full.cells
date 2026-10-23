@@ -4,12 +4,16 @@
 #   P0 = arm=pretrain: recipe T 0.1, lambda 0.4 (pinned in arm/pretrain.yaml), clipping 1.0.
 #   P1 = P0 + JC weight 1.0, JC T 0.1 (S2 recipe T 0.1, lambda 0.4, confirmed 2026-10-21).
 #   P2 = JC only (contrastive 0, JC weight 1.0, JC T 0.1): S2 recipe T 0.1, lambda 0.4, confirmed 2026-10-22.
-# Epoch (39.7M jets): ~4750 s for P0 (S2, A40); ~3750 s for P1 (S2, L40S).
+# The first launch (2026-10-21, no QK-norm) blew up and was stopped; since
+# 455cf7d campaign_ssl.yaml puts QK-norm in every row attention, and the S2_qk
+# pilot (10 epochs, lr 1e-3) had bounded logits and no gradient blowups.
+# Epoch on an A40 with QK-norm (S2_qk): P0 ~84 min, P2 ~83 min, P1 ~103 min,
+# so 30 epochs of P1 take ~52 h: a 3-day walltime (partition limit 7 days).
 #
-#   ENCODERS=rowcol_concat_v0 CHUNK=512 B_PRE=12288 SEEDS="42 424" PACKS=1 \
-#   MEM_PER_GPU_GB=22 MAX_EPOCHS=30 EST_SECONDS_PER_EPOCH=4800 WALLTIME=2-00:00:00 \
-#   CELL_FILTER='^p0$' CELLS=scripts/configs/campaign/P_full.cells bash slurm/ssl_pack.sh
-#   (P1: CELL_FILTER='^p1$' EST_SECONDS_PER_EPOCH=5000; A40 epoch unmeasured, ~1.3x L40S)
+#   ENCODERS=rowcol_concat_v0 CHUNK=512 B_PRE=12288 SEEDS="42 424" PACKS=2 \
+#   MEM_PER_GPU_GB=22 MAX_EPOCHS=30 EST_SECONDS_PER_EPOCH=6300 WALLTIME=3-00:00:00 \
+#   CELL_FILTER='^p[02]$' CELLS=scripts/configs/campaign/P_full.cells bash slurm/ssl_pack.sh
+#   (P1 after its pilot probe: CELL_FILTER='^p1$' PACKS=1)
 p0  arm=pretrain encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=${B_PRE} optimizer.lr=1e-3
 p1  arm=pretrain encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=${B_PRE} optimizer.lr=1e-3 pretrain.loss_weights.jet_contrastive=1.0 pretrain.jet_contrastive_loss.temperature=0.1
 p2  arm=pretrain encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=${B_PRE} optimizer.lr=1e-3 pretrain.loss_weights.contrastive=0.0 pretrain.loss_weights.jet_contrastive=1.0 pretrain.jet_contrastive_loss.temperature=0.1
