@@ -273,17 +273,17 @@ slides:
         header: ["id", "loss", "aggregator", "status"]
         status_col: 3
         rows:
-          - ["P0", "contrastive on the feature embeddings (tracks, global jet features)", "not trained", "queued: QK-norm pilot, 10 epochs"]
-          - ["P1", "P0 + JC on the global jet embedding", "trained", "queued: QK-norm pilot, 10 epochs"]
-          - ["P2", "JC on the global jet embedding only", "trained", "queued: QK-norm pilot, 10 epochs"]
+          - ["P0", "contrastive on the feature embeddings (tracks, global jet features)", "not trained", "done: 30 epochs, 2 seeds (QK-norm)"]
+          - ["P1", "P0 + JC on the global jet embedding", "trained", "running: 30 epochs, 2 seeds (QK-norm)"]
+          - ["P2", "JC on the global jet embedding only", "trained", "done: 30 epochs; no downstream arm for now"]
       - caption: "Downstream (train split, 18.6M jets, cross-entropy always on)"
         widths: [4.3, 2.7, 2.7, 2.6]
         header: ["arm", "without JC", "with JC (weight 0.3)", "status"]
         status_col: 3
         rows:
-          - ["FT: fine-tune the pretrained model", "FT ← P0", "FT ← P1, + JC", "planned: after S3"]
-          - ["SC: whole tagger from scratch", "SC", "SC + JC", "planned: after S3"]
-          - ["FR: encoders frozen, aggregator + head train", "FR ← P0", "FR ← P1, + JC", "planned: after S3"]
+          - ["FT: fine-tune the pretrained model", "FT ← P0", "FT ← P1, + JC", "running: S3 learning rates"]
+          - ["SC: whole tagger from scratch", "SC", "SC + JC", "running: S3 learning rates"]
+          - ["FR: encoders frozen, aggregator + head train", "FR ← P0", "FR ← P1, + JC", "running: S3 learning rates"]
     note: "The JC column switches JC on in pretraining and downstream at once; if it wins, FT ← P1 and FR ← P1 without JC tell which half helped. Data: data_parallel_preprocess_251112_152051, splits disjoint by eventNumber; reference tagger GN2v01."
 
   - layout: text_plot
@@ -303,8 +303,8 @@ slides:
     stages:
       - {name: "S0", what: "benchmark: speed and memory of every arm, both row modes, chunk and batch scans", decides: "chunk candidates, batch per arm", status: done}
       - {name: "S1", what: "from scratch: per-feature vs SAINT-like × C 128 / 512, 2 seeds", decides: "intersample attention, chunk size", status: done}
-      - {name: "S2", what: "P0, P1, P2 × temperature × augmentation, each with a frozen probe", decides: "recipe of each pretraining", status: running}
-      - {name: "S3", what: "learning rate of each of the 6 arms (3 values)", decides: "learning rate per arm", status: planned}
+      - {name: "S2", what: "P0, P1, P2 × temperature × augmentation, each with a frozen probe", decides: "recipe of each pretraining", status: done}
+      - {name: "S3", what: "learning rate of each of the 6 arms (3 values)", decides: "learning rate per arm", status: running}
       - {name: "Final", what: "2 pretraining seeds × 2 downstream seeds per arm; SC × 4 seeds", decides: "the answer", status: planned}
     note: "Every run is identified from its own .hydra config, never from its directory name. At most 10 GPU jobs per user: runs go in 2-GPU packs that share one task queue."
 
@@ -341,7 +341,7 @@ slides:
           - ["P1", "P0 + JC (same T for both)", "1.0", "done: best T 0.1, λ 0.4"]
           - ["P2", "JC only", "no", "done: T 0.1; T 0.3 stopped (collapsed)"]
           - ["P2 rerun", "JC only", "1.0", "done: best T 0.1, λ 0.4"]
-          - ["QK‑norm", "P0, P1, P2 at their recipes, QK-norm in the intersample attention", "1.0", "queued: pilot"]
+          - ["QK‑norm", "P0, P1, P2 at their recipes, QK-norm in the intersample attention", "1.0", "done: all beat random"]
     bullets_title: "How a recipe is judged: a probe"
     bullets:
       - "Freeze the pretrained encoders, train aggregator + head with CE for 15 epochs (B 32768, lr 1e-3); compare the best validation CE"
@@ -412,11 +412,13 @@ slides:
           - ["2026-10-22", "last.ckpt rewritten every epoch again (Lightning 2.6 kept it at the last val-loss improvement)", "stopped P0: last.ckpt was epoch 5 of 15"]
           - ["2026-10-22", "QK-norm in every arm's intersample attention; a 10-epoch pilot before the 30-epoch runs", "attention logits 10⁵–10⁷: one-hot attention"]
           - ["2026-10-22", "Memory-lean QK-norm; expandable CUDA allocator segments for every run", "P1 out of GPU memory (QK-norm +3 GiB; 2–4 GiB lost to fragmentation)"]
+          - ["2026-10-23", "30-epoch P0, P1, P2 with QK-norm at lr 1e-3 (3-day walltime)", "QK-norm pilot: logits ≤ 45, no blowups, probes as before"]
+          - ["2026-10-26", "P2 gets no downstream arm for now; S3: 3 learning rates per arm, a factor 2 apart", "P2 probe ≈ random, its jet-feature embedding collapses"]
 
   - layout: cards
     title: "Next"
     cards:
-      - {header: "QK-norm pilot", text: "P0, P1, P2 for 10 epochs with probes, the random floor, one from-scratch run (~15 h). Logits bounded, no blowups, probes beat random, from-scratch CE ≈ 0.620?"}
-      - {header: "30-epoch pretrainings", text: "P0, P1, P2 × 2 seeds with QK-norm: lr 1e-3 if the pilot is clean, otherwise 5e-4."}
-      - {header: "S3 learning rates", text: "Each of the 6 arms at 3 learning rates (×2 apart); FT also with the pretrained parts at lr / 10."}
+      - {header: "P1, 30 epochs", text: "2 seeds with QK-norm, running since 26 Oct on L40S; done ~27 Oct evening."}
+      - {header: "S3 learning rates", text: "SC, SC + JC, FT ← P0 (pretrained parts at lr and lr / 10), FR ← P0: 15 runs, running. FR ← P1 + JC queued behind P1; FT ← P1 + JC after the FT ← P0 result."}
+      - {header: "Watch", text: "QK-norm gains keep growing in 30-epoch P0: largest logit 3600–6000 in the first track block, attention still near uniform on average. Training stable."}
       - {header: "Final runs and plots", text: "Each pretrained arm 2 × 2 seeds, SC 4 seeds. Validation CE per arm; ROC vs GN2v01; c-rejection at 77% b-efficiency; embedding quality; GPU-hours."}
