@@ -8,7 +8,8 @@
 #   right axis  val/<embedding>/effective_rank of each embedding listed for the run (EmbeddingMetrics: clean
 #               embeddings of up to 8192 validation jets; there is no training-split value)
 #
-# Runs: the S2 recipes with QK-norm (S2_qk pilot, 10 epochs, lr 1e-3, seed 42), the stable pretrainings so far.
+# Runs: the S2 recipes with QK-norm: the S2_qk pilot (10 epochs, seed 42) and the full pretrainings (P_full, 30
+# epochs, 2 seeds), all at lr 1e-3.
 
 pretrain_curves:
   out_dir: plots/pretrain_curves
@@ -34,6 +35,18 @@ pretrain_curves:
     p2_qk:
       dir: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/S2_qk_20261022_113820/qk_p2/seed_42
       embeddings: [tracks_embedding, jets_embedding, aggregator]
+    p0_full_s42:
+      dir: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/P_full_20261023_085735/p0/seed_42
+      embeddings: [tracks_embedding, jets_embedding]
+    p0_full_s424:
+      dir: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/P_full_20261023_085735/p0/seed_424
+      embeddings: [tracks_embedding, jets_embedding]
+    p2_full_s42:
+      dir: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/P_full_20261023_085735/p2/seed_42
+      embeddings: [tracks_embedding, jets_embedding, aggregator]
+    p2_full_s424:
+      dir: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/P_full_20261023_085735/p2/seed_424
+      embeddings: [tracks_embedding, jets_embedding, aggregator]
 
   figsize: [8.0, 5.0]
   linewidth: 1.6
@@ -55,6 +68,10 @@ pretrain_curves:
       p0_qk: 'P0 with QK-norm: contrastive on the feature embeddings (T 0.1, λ 0.4, seed 42)'
       p1_qk: 'P1 with QK-norm: P0 + JC on the global jet embedding (T 0.1, λ 0.4, seed 42)'
       p2_qk: 'P2 with QK-norm: JC on the global jet embedding only (T 0.1, λ 0.4, seed 42)'
+      p0_full_s42: 'P0 (contrastive on the feature embeddings), 30 epochs, seed 42'
+      p0_full_s424: 'P0 (contrastive on the feature embeddings), 30 epochs, seed 424'
+      p2_full_s42: 'P2 (JC on the global jet embedding only), 30 epochs, seed 42'
+      p2_full_s424: 'P2 (JC on the global jet embedding only), 30 epochs, seed 424'
     xlabel: 'Epoch'
     ylabel_left: 'Contrastive loss (sum of the terms)'
     ylabel_right: 'Effective rank (validation)'
