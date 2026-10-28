@@ -1,0 +1,13 @@
+# Low-label regime (rriva, 2026-10-28): does P0 pretraining help when labels are scarce?
+# At the full 18.6M labelled jets FT <- P0 trails SC (S3, seed 42: 0.6297 vs 0.6238).
+# Here both train on 10% of them: the first 1.86M rows of the pre-shuffled training
+# file (datamodule.train_max_rows, 19fbaac); validation stays the full 1.86M jets.
+# S3 winners at full data (SC lr 1.1e-3; FT lr 2.2e-3, pretrained parts at lr / 10),
+# same batch: 64 steps per epoch, so 100 epochs (6400 steps, about as many as SC needs
+# to peak at full data), early stopping on val CE (patience 12) as everywhere.
+#
+#   ENCODERS=rowcol_concat_v0 CHUNK=512 SEEDS=42 PACKS=1 MEM_PER_GPU_GB=22 \
+#   MAX_EPOCHS=100 EST_SECONDS_PER_EPOCH=240 WALLTIME=1-00:00:00 \
+#   CELLS=scripts/configs/campaign/S3_lowlabel.cells bash slurm/ssl_pack.sh
+sc_lr1.1e-3_lab10  arm=scratch encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=28672 datamodule.train_max_rows=1860000 trainer.log_every_n_steps=20 optimizer.lr=1.1e-3
+ft_p0_lr2.2e-3_bb10_lab10  arm=finetune encoder_ckpt=@/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/P_full_20261023_085735/p0/seed_42 encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=28672 datamodule.train_max_rows=1860000 trainer.log_every_n_steps=20 optimizer.lr=2.2e-3 optimizer.backbone_lr=2.2e-4
