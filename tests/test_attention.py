@@ -458,6 +458,68 @@ def test_varlen_slices_beyond_kernel_batch_limit_on_gpu(monkeypatch):
     assert torch.allclose(out.float(), ref.float(), atol=1e-2)
 
 
+def test_varlen_slices_respect_both_launch_limits(monkeypatch):
+    import fm4tag.models.attention as attention_mod
+    from fm4tag.models.attention import _varlen_dq_accum_numel, _varlen_slices
+
+    torch.manual_seed(0)
+    lens = torch.randint(0, 41, (500,))
+    bounds = [0, *lens.cumsum(0).tolist()]
+    assert _varlen_slices(bounds, 4, 64) == [(0, 500)]
+
+    monkeypatch.setattr(attention_mod, 'MAX_KERNEL_BATCH', 120)
+    monkeypatch.setattr(attention_mod, 'MAX_VARLEN_DQ_ACCUM', 40 * 168 * 256)
+    slices = _varlen_slices(bounds, 4, 64)
+    assert slices[0][0] == 0 and slices[-1][1] == 500
+    assert all(a < b for a, b in slices)
+    assert all(b0 == a1 for (_, b0), (a1, _) in zip(slices, slices[1:]))
+    for a, b in slices:
+        assert b - a <= 120
+        assert (
+            _varlen_dq_accum_numel(bounds[b] - bounds[a], b - a, 4, 64)
+            <= 40 * 168 * 256
+        )
+    assert len(slices) > 500 // 120 + 1  # the dq cap, not the group cap, binds
+
+
+def test_varlen_slices_refuse_one_oversized_group(monkeypatch):
+    import fm4tag.models.attention as attention_mod
+    from fm4tag.models.attention import _varlen_slices
+
+    monkeypatch.setattr(attention_mod, 'MAX_VARLEN_DQ_ACCUM', 1000)
+    with pytest.raises(ValueError, match='too large'):
+        _varlen_slices([0, 10, 5000], 1, 32)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason='requires a CUDA device')
+def test_varlen_dq_cap_slices_forward_and_backward_on_gpu(monkeypatch):
+    """Slicing for the dq-buffer cap changes neither the output nor the gradients."""
+    import fm4tag.models.attention as attention_mod
+
+    torch.manual_seed(0)
+    lens = torch.randint(0, 41, (300,))
+    groups = RowGroups.from_boundaries(
+        torch.nn.functional.pad(lens.cumsum(0), (1, 0)).cuda()
+    )
+    t = int(lens.sum())
+    qkv = torch.randn(3, t, 4, 64, device='cuda', dtype=torch.bfloat16)
+    w = torch.randn(t, 4, 64, device='cuda')
+
+    def run():
+        q, k, v = (x.clone().requires_grad_() for x in qkv)
+        out = grouped_attention(q, k, v, groups)
+        (out.float() * w).sum().backward()
+        return out.float(), q.grad.float(), k.grad.float(), v.grad.float()
+
+    ref = run()
+    monkeypatch.setattr(
+        attention_mod, 'MAX_VARLEN_DQ_ACCUM', (t + 128 * 300) * 256 // 3
+    )
+    got = run()
+    for a, b in zip(got, ref):
+        assert torch.allclose(a, b, atol=1e-2)
+
+
 # ── qk_norm / logit_stats ───────────────────────────────────────────────────
 
 

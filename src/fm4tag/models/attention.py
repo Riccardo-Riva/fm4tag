@@ -23,6 +23,15 @@ _FLASH_ATTN_DTYPES = (torch.float16, torch.bfloat16)
 # packed track (~118k at 16k jets), so such calls are split into slices.
 MAX_KERNEL_BATCH = 65535
 
+# flash's varlen backward accumulates dq in an fp32 buffer of (T + 128·K) rows
+# of H·round32(D) floats (T packed samples, K sequences) and indexes it with
+# 32-bit offsets: from 2**31 elements on it writes out of bounds — an illegal
+# memory access, or silently corrupted gradients (the frozen arm at 94208 jets
+# went NaN in its first epoch).  Measured on an A40, torch 2.10: H·D = 4·64
+# faults between 62000 and 65024 aggregator sequences, 8·64 between 30000 and
+# 34000, exactly where this count crosses 2**31.
+MAX_VARLEN_DQ_ACCUM = 2**31 - 1
+
 
 def sdpa(q, k, v, attn_mask=None, dropout_p=0.0):
     """Scaled dot-product attention, routed through FlashAttention-2 when possible.
@@ -169,6 +178,41 @@ def _use_varlen(q: torch.Tensor, dropout_p: float) -> bool:
     )
 
 
+def _varlen_dq_accum_numel(
+    n_samples: int, n_groups: int, heads: int, head_dim: int
+) -> int:
+    return (n_samples + 128 * n_groups) * heads * (-(-head_dim // 32) * 32)
+
+
+def _varlen_slices(
+    bounds: list[int], heads: int, head_dim: int
+) -> list[tuple[int, int]]:
+    """Consecutive group ranges ``[a, b)`` that one varlen launch each can take.
+
+    Every range has at most :data:`MAX_KERNEL_BATCH` groups and a dq
+    accumulator of at most :data:`MAX_VARLEN_DQ_ACCUM` elements.
+    """
+    n_groups = len(bounds) - 1
+    slices = []
+    a = 0
+    while a < n_groups:
+        b = min(a + MAX_KERNEL_BATCH, n_groups)
+        while (
+            numel := _varlen_dq_accum_numel(
+                bounds[b] - bounds[a], b - a, heads, head_dim
+            )
+        ) > MAX_VARLEN_DQ_ACCUM:
+            if b - a == 1:
+                raise ValueError(
+                    f'an attention group of {bounds[b] - bounds[a]} samples is '
+                    'too large for one varlen launch'
+                )
+            b = a + max(1, (b - a) * MAX_VARLEN_DQ_ACCUM // numel)
+        slices.append((a, b))
+        a = b
+    return slices
+
+
 def grouped_attention(
     q: torch.Tensor,
     k: torch.Tensor,
@@ -188,13 +232,18 @@ def grouped_attention(
     cu = groups.cu_seqlens
     if _use_varlen(q, dropout_p):
         n_groups = cu.numel() - 1
-        if n_groups <= MAX_KERNEL_BATCH:
+        h, d = q.shape[1], q.shape[2]
+        if (
+            n_groups <= MAX_KERNEL_BATCH
+            and _varlen_dq_accum_numel(q.shape[0], n_groups, h, d)
+            <= MAX_VARLEN_DQ_ACCUM
+        ):
             return varlen_attn(q, k, v, cu, cu, groups.max_seqlen, groups.max_seqlen)
-        # More sequences than one launch takes: slices of whole groups.
+        # More sequences, or a larger dq buffer, than one launch takes: slices
+        # of whole groups.
         bounds = cu.tolist()
         outs = []
-        for a in range(0, n_groups, MAX_KERNEL_BATCH):
-            b = min(a + MAX_KERNEL_BATCH, n_groups)
+        for a, b in _varlen_slices(bounds, h, d):
             lo, hi = bounds[a], bounds[b]
             sub = RowGroups(cu[a : b + 1] - lo, groups.max_seqlen)
             outs.append(grouped_attention(q[lo:hi], k[lo:hi], v[lo:hi], sub, dropout_p))
