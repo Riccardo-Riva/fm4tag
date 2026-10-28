@@ -118,6 +118,9 @@ datamodule:
   #   >1 = stitched from that many random regions, redrawn every epoch
   reads_per_batch: 8
   seed:            ${seed}
+  # Train on the first N rows of the (pre-shuffled) training file only, e.g. a
+  # low-label regime; null = all of it.  Validation and test stay whole.
+  train_max_rows:  null
 
 # ── Intersample chunks ────────────────────────────────────────────────────────
 # Jets per intersample-attention chunk: each jet, and each of its tracks,

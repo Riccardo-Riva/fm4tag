@@ -26,6 +26,9 @@ class CatConDataModule(L.LightningDataModule):
         persistent_workers: bool = True,
         reads_per_batch: int = 8,
         seed: int = 0,
+        # Train on the first N rows of the training file only (the files are
+        # pre-shuffled, so a random subset); null = all.  Val/test stay whole.
+        train_max_rows: int | None = None,
     ) -> None:
         super().__init__()
         self.save_hyperparameters()
@@ -46,6 +49,7 @@ class CatConDataModule(L.LightningDataModule):
         self._persistent_workers = persistent_workers
         self._reads_per_batch = reads_per_batch
         self._seed = seed
+        self._train_max_rows = train_max_rows
 
         # Loaded once in the main process; shared across both phases.
         self._norm_dict = self._load_yaml(norm_dict_path)
@@ -67,7 +71,9 @@ class CatConDataModule(L.LightningDataModule):
         with open(path, 'r') as f:
             return yaml.safe_load(f)
 
-    def _make_dataloader(self, dataset: DatasetCatCon, *, shuffle: bool) -> DataLoader:
+    def _make_dataloader(
+        self, dataset: DatasetCatCon, *, shuffle: bool, max_rows: int | None = None
+    ) -> DataLoader:
         return make_batch_dataloader(
             dataset,
             batch_size=self._batch_size,
@@ -82,6 +88,7 @@ class CatConDataModule(L.LightningDataModule):
             # — a cold start cost 107 s per loader per epoch when they were not.
             persistent_workers=self._persistent_workers,
             seed=self._seed,
+            max_rows=max_rows,
         )
 
     # ------------------------------------------------------------------
@@ -132,7 +139,9 @@ class CatConDataModule(L.LightningDataModule):
             )
 
     def train_dataloader(self) -> DataLoader:
-        return self._make_dataloader(self._train_dataset, shuffle=True)
+        return self._make_dataloader(
+            self._train_dataset, shuffle=True, max_rows=self._train_max_rows
+        )
 
     def val_dataloader(self) -> DataLoader:
         return self._make_dataloader(self._val_dataset, shuffle=False)
