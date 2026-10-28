@@ -18,6 +18,9 @@
 # Host RAM: the frozen arm at 94208 was killed at 22 GB per GPU (data-loader
 # prefetch of 12 batches of ~0.4 GB each): its cells and the P1 arms run with
 # MEM_PER_GPU_GB=40.
+# FR <- P0 at 94208 then went NaN in its first epoch (S3_lr_20261027_093035_ABORTED_varlen):
+# flash varlen's backward overflowed its 32-bit-indexed dq buffer at >62k aggregator
+# sequences; fixed in 3a22662 (launches sliced under 2**31 elements), then rerun.
 # S3 result (2026-10-27): FT <- P0 is better with the pretrained parts at lr / 10
 # (0.630 vs 0.644), so FT <- P1 + JC uses backbone_lr = lr / 10.
 # Epoch on an A40: SC ~20 min, + JC ~2x, frozen ~9 min.
