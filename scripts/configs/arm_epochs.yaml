@@ -1,0 +1,82 @@
+# Cross-entropy and embedding quality epoch by epoch, for every final run of the compared training methods
+# (scripts/plot_arm_epochs.py):
+#
+#   MPLBACKEND=Agg .venv/bin/python scripts/plot_arm_epochs.py --config scripts/configs/arm_epochs.yaml
+#
+# Runs: every completed run under `stages`, put in an arm by its own .hydra config (never its directory name):
+#   encoder          scratch (no encoder_ckpt) | finetune (encoder_ckpt set, encoders trained) |
+#                    frozen (encoder_ckpt set, finetune.freeze_encoders true: encoders and projectors frozen,
+#                    aggregator and head trained)
+#   pretraining      null for scratch; p0 / p1 / p2 = what the encoder_ckpt run optimised, read from that run's
+#                    own config (P0: contrastive on the feature embeddings; P1: P0 + jet_contrastive)
+#   jet_contrastive  finetune.loss_weights.jet_contrastive of the run (downstream JC weight)
+# Runs in no listed arm (the JC arms while they are commented out) are skipped and counted on stdout.
+#
+# Embeddings (EmbeddingMetrics: clean embeddings of up to 8192 validation jets per epoch; no training value):
+#   tracks_embedding  projector output of each valid track
+#   jets_embedding    projector output of the jet-level features
+#   aggregator        the global jet embedding, read by the classification head
+# In the frozen arm the first two do not change (frozen encoders and projectors): flat lines.
+
+arm_epochs:
+  out_dir: plots/arm_comparison/epochs
+  stages:
+    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235640
+    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235642
+  runs_per_arm: 4
+  epoch_offset: 1                    # Lightning counts epochs from 0; 1 = the first epoch is epoch 1
+
+  arms:                              # drawing order = this order (the last one is drawn on top)
+    sc: {encoder: scratch, pretraining: null, jet_contrastive: 0.0, colour: '#2a78d6'}
+    ft_p0: {encoder: finetune, pretraining: p0, jet_contrastive: 0.0, colour: '#eb6834'}
+    fr_p0: {encoder: frozen, pretraining: p0, jet_contrastive: 0.0, colour: '#1baf7a'}
+    # scjc: {encoder: scratch, pretraining: null, jet_contrastive: 0.3, colour: '#eda100'}
+    # ftjc_p1: {encoder: finetune, pretraining: p1, jet_contrastive: 0.3, colour: '#e87ba4'}
+    # frjc_p1: {encoder: frozen, pretraining: p1, jet_contrastive: 0.3, colour: '#6250d6'}
+
+  ce:
+    filename: ce_train_val.png
+    train_metric: train/head/loss_ce_epoch   # epoch mean of the training CE
+    val_metric: val/head/loss_ce              # also picks each run's best epoch (run_selection.csv)
+    figsize: [8.0, 5.0]
+    # ylim: [0.5, 0.75]                   # y range of `filename`; unset = automatic
+    zoom_filename: ce_train_val_zoom.png    # a copy at y range `zoom_ylim`; null = none
+    zoom_ylim: [0.48, 0.76]
+
+  embedding_figures:                 # metric -> file; panels = `embeddings`, column val/<embedding>/<metric>
+    effective_rank: effective_rank.png
+    uniformity: uniformity.png
+  embeddings: [tracks_embedding, jets_embedding, aggregator]
+  embedding_figsize: [14.0, 4.2]
+
+  linewidth: 1.3
+  alpha: 0.85
+  linestyles: {train: '--', val: '-'}
+  ink: '#333333'                     # the black lines of the train/validation legend entries
+
+  # ---- ALL the wording of the figures lives here --------------------------------------------------------------
+  texts:
+    arm:                             # legend entry per arm (all six, so the JC arms can be switched on)
+      sc: 'From scratch'
+      ft_p0: 'Fine-tuned (P0)'
+      fr_p0: 'Frozen encoders (P0)'
+      scjc: 'From scratch + JC'
+      ftjc_p1: 'Fine-tuned (P1) + JC'
+      frjc_p1: 'Frozen encoders (P1) + JC'
+    xlabel: 'Epoch'
+    ce:
+      title: 'Training and validation cross-entropy, 4 runs per method'   # '' = no title
+      ylabel: 'Cross-entropy'
+      train: 'Training (epoch mean)'
+      val: 'Validation'
+      zoom_title: 'Training and validation cross-entropy, 4 runs per method (zoom)'   # title of the zoomed copy
+    effective_rank:
+      title: 'Effective rank of the embeddings (validation), 4 runs per method'
+      ylabel: 'Effective rank'
+    uniformity:
+      title: 'Uniformity of the embeddings (validation, lower = more uniform), 4 runs per method'
+      ylabel: 'Uniformity'
+    panel:                           # one panel title per embedding
+      tracks_embedding: 'Track embeddings'
+      jets_embedding: 'Jet-feature embedding'
+      aggregator: 'Global jet embedding'
