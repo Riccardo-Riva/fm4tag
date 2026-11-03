@@ -1,0 +1,46 @@
+# Constrained (f_c, f_tau) search for the best seed of each no-JC downstream arm of the SSL campaign (F_final):
+# trained from scratch (SC), fine-tuned from P0 (FT), frozen P0 encoders (FR).  Best seed = lowest best
+# val/head/loss_ce of the arm's 4 runs; the checkpoint is that epoch's.
+#
+# The search runs on the VALIDATION split, so the test ROC (roc_comparison_arms_final.yaml) is not tuned on test.
+# Rule (standing ROC convention): maximise c-rejection at 80% b-efficiency with light and tau rejection
+# >= 1.0 x GN2v01's, GN2v01 at its nominal fractions (f_c 0.2, f_tau 0.01) on the same validation file.
+#
+#   python scripts/fraction_constrained_search.py --config scripts/configs/fraction_constrained_arms_final.yaml \
+#       --output plots/arm_comparison/fraction_search_val --floor-frac 1.0 --workers 8 --device cuda
+
+step: 0.002
+signal: b
+working_point: 0.8
+test_file: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_152051/val/output/pp_output_val.h5
+cuts:
+- [pt, '>', 20000]
+- [pt, '<', 250000]
+- [eta, '>', -2.5]
+- [eta, '<', 2.5]
+
+# bf16 autocast as in training (bf16-mixed): the chunked row attention takes the flash varlen kernel.  The batch
+# must be a multiple of chunk_size 512; with no shuffling, chunk k is rows [512k, 512k+512) as in training-time
+# validation, whatever the batch.
+inference:
+  batch_size: 28672
+  num_workers: 8
+  precision: bf16
+
+models:
+- dir: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235642/sc/seed_4242
+  label: SC
+  checkpoint: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235642/sc/seed_4242/sc/version_0/checkpoints/epoch009-step6480-val_loss_ce0.6217.ckpt
+- dir: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235640/ft_p0s424/seed_4242
+  label: FT
+  checkpoint: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235640/ft_p0s424/seed_4242/ft_p0s424/version_0/checkpoints/epoch005-step3888-val_loss_ce0.6303.ckpt
+- dir: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235640/fr_p0s424/seed_4242
+  label: FR
+  checkpoint: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235640/fr_p0s424/seed_4242/fr_p0s424/version_0/checkpoints/epoch006-step1379-val_loss_ce0.6488.ckpt
+
+roc_comparison:
+  reference_tagger:
+    label: GN2v01
+    file: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_152051/val/output/pp_output_val.h5
+    probs: {b: GN2v01_pb, c: GN2v01_pc, u: GN2v01_pu, tau: GN2v01_ptau}
+    fractions: {c: 0.2, tau: 0.01}

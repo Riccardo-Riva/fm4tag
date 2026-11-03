@@ -1,0 +1,81 @@
+# The P1 version of roc_comparison_arms_final.yaml: test-set ROC of the best seed of each downstream arm WITH
+# the jet-embedding contrastive term (JC 0.3) against GN2v01: from scratch + JC (its only run that did not
+# collapse), fine-tuned from P1 + JC, frozen P1 encoders + JC.  Same runs and checkpoints as
+# fraction_constrained_arms_final_p1.yaml.
+#
+# This file draws every tagger at the nominal fractions (f_c 0.2, f_tau 0.01).  slurm/arm_roc/arm_roc_job.sh
+# also writes roc_comparison_arms_final_p1_optimal.yaml next to its outputs: this file with each model's fractions
+# set to its own constrained optimum from the VALIDATION search, the label from `optimal_label`, and
+# `plot.out_dir` from `optimal_out_dir` (roc_comparison.py ignores both keys).
+#
+#   python scripts/roc_comparison.py --config scripts/configs/roc_comparison_arms_final_p1.yaml --device cuda
+
+models:
+- dir: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235642/scjc/seed_424242
+  label: 'From scratch + JC'
+  checkpoint: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235642/scjc/seed_424242/scjc/version_0/checkpoints/epoch010-step14267-val_loss_ce0.6211.ckpt
+  colour: '#2a78d6'
+- dir: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235640/ftjc_p1s42/seed_4242
+  label: 'Fine-tuned (P1) + JC'
+  checkpoint: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235640/ftjc_p1s42/seed_4242/ftjc_p1s42/version_0/checkpoints/epoch038-step50583-val_loss_ce0.6286.ckpt
+  colour: '#eb6834'
+- dir: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235640/frjc_p1s42/seed_42424
+  label: 'Frozen encoders (P1) + JC'
+  checkpoint: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235640/frjc_p1s42/seed_42424/frjc_p1s42/version_0/checkpoints/epoch024-step8625-val_loss_ce0.6408.ckpt
+  colour: '#1baf7a'
+
+# GN2v01 scores stored in the test file itself (no `file:` = read from test_file).
+reference_taggers:
+- label: 'GN2v01'
+  probs: {b: GN2v01_pb, c: GN2v01_pc, u: GN2v01_pu, tau: GN2v01_ptau}
+  fractions: {c: 0.2, tau: 0.01}
+  colour: '#000000'
+
+# Label of the tagger used as the ratio-panel reference.
+reference: 'GN2v01'
+
+# The fraction-optimised variant (written by slurm/arm_roc/arm_roc_job.sh).  {label} = the model's label above,
+# {f_c} / {f_tau} = its optimum from fraction_constrained_arms_final_p1.yaml.
+optimal_label: '{label} ($f_c$ = {f_c:.3f}, $f_\tau$ = {f_tau:.3f})'
+optimal_reference_label: 'GN2v01 ($f_c$ = 0.2, $f_\tau$ = 0.01)'
+optimal_out_dir: /storage3/DSIP/rriva/research/fm4tag-chunk/plots/arm_comparison_p1/roc_test_optimal
+
+# ── Jets / discriminant ───────────────────────────────────────────────────────
+test_file: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_152051/test/output/pp_output_test.h5
+
+cuts:  # applied to all taggers (pt in MeV)
+- [pt, '>', 20000]
+- [pt, '<', 250000]
+- [eta, '>', -2.5]
+- [eta, '<', 2.5]
+
+signal: b
+backgrounds: [u, c, tau]
+fractions: {c: 0.2, tau: 0.01}  # every tagger in this file
+
+sig_eff: {min: 0.6, max: 1.0, num: 100}
+working_points: [0.70, 0.77, 0.80, 0.85]
+
+# Background rejection / signal efficiency vs pT at a fixed working point.
+eff_vs_pt:
+  working_point: 0.80
+  bins_gev: [20, 30, 40, 60, 85, 110, 140, 175, 250]
+  flat_per_bin: false
+
+# ── Inference / plotting ──────────────────────────────────────────────────────
+# bf16 autocast as in training; batch a multiple of chunk_size 512 (see fraction_constrained_arms_final_p1.yaml).
+inference:
+  batch_size: 28672
+  num_workers: 8
+  precision: bf16
+
+plot:
+  out_dir: /storage3/DSIP/rriva/research/fm4tag-chunk/plots/arm_comparison_p1/roc_test_nominal
+  title: ''
+  atlas_brand: ''
+  atlas_first_tag: 'Simulation Internal'
+  atlas_second_tag: "$\\sqrt{s} = 13.6$ TeV, $t\\bar{t}$\n$20 < p_T < 250$ GeV, $|\\eta| < 2.5$"
+  figsize: [7, 7]
+  y_scale: 1.3
+  dpi: 200
+  disc_plot: {bins: 50, range: [-10, 20], logy: false}
