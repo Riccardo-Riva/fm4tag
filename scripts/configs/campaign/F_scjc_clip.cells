@@ -1,0 +1,9 @@
+# SC+JC rerun with gradient clipping (rriva, 2026-11-03: clip at 5.0).  In F_final, 3 of the 4 SC+JC seeds
+# collapsed after one step with a pre-clip gradient norm of 27-48 (downstream runs had no clipping), and never
+# came back to CE ~0.63.  The arm's median norm is 0.6-2.6, so a clip at 5.0 cuts only the spikes.  Otherwise
+# the F_final scjc cell unchanged, with the same four seeds: the three collapsed ones are retried directly.
+#
+#   ENCODERS=rowcol_concat_v0 CHUNK=512 SEEDS='4242 42424 424242 4242424' PACKS=2 MEM_PER_GPU_GB=22 \
+#   MAX_EPOCHS=40 EST_SECONDS_PER_EPOCH=2500 WALLTIME=2-00:00:00 \
+#   CELLS=scripts/configs/campaign/F_scjc_clip.cells bash slurm/ssl_pack.sh
+scjc_clip5  arm=scratch finetune.loss_weights.jet_contrastive=0.3 encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=14336 optimizer.lr=8e-4 +trainer.gradient_clip_val=5.0 @est=2500
