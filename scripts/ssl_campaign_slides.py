@@ -1286,7 +1286,11 @@ def make_plots(cfg: dict, plot_dir: Path) -> dict[str, Path | None]:
     }
     out = {}
     for name, plot_cfg in pc.items():
-        out[name] = makers[name](plot_cfg, plot_dir / f'{name}.png')
+        if 'file' in plot_cfg:  # a figure made by another script, used as it is
+            path = REPO / plot_cfg['file']
+            out[name] = path if path.is_file() else None
+        else:
+            out[name] = makers[name](plot_cfg, plot_dir / f'{name}.png')
         print(f'  plot {name}: {out[name] or "no data yet (placeholder)"}')
     return out
 
