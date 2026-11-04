@@ -6,4 +6,10 @@
 #   ENCODERS=rowcol_concat_v0 CHUNK=512 SEEDS='4242 42424 424242 4242424' PACKS=2 MEM_PER_GPU_GB=22 \
 #   MAX_EPOCHS=40 EST_SECONDS_PER_EPOCH=2500 WALLTIME=2-00:00:00 \
 #   CELLS=scripts/configs/campaign/F_scjc_clip.cells bash slurm/ssl_pack.sh
+#
+# Outcome (stage F_scjc_clip_20261103_165640): clipping did not fix it.  Seeds 4242 0.6208 and 42424 0.6347 trained
+# normally; 424242 (the unclipped survivor) collapsed at epoch 3, 4242424 at epoch 5.  Same signature: one window
+# with a pre-clip grad norm of 50-77, track embeddings collapse to a point (uniformity 0), CE at the class priors;
+# the encoders' row-attention logits stay at 5-9.  rriva (2026-11-04): stop here, SC+JC is reported as unstable
+# (5 of 8 runs collapse); its healthy runs (0.6208 / 0.6211 / 0.6347) are no better than SC.
 scjc_clip5  arm=scratch finetune.loss_weights.jet_contrastive=0.3 encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=14336 optimizer.lr=8e-4 +trainer.gradient_clip_val=5.0 @est=2500
