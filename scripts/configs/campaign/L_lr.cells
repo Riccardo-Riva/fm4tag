@@ -1,0 +1,22 @@
+# Label-fraction scan, step 1: learning-rate check at 3% of the labels (rriva, 2026-11-04: "ok go" on the plan
+# "wrap up, then a label-fraction scan").  Does P0 pretraining pay off when labels are scarce?  The existing
+# evidence (S3_lowlabel, 10%) is one seed with untuned lrs.
+#
+# At 3% (the first 558,000 rows of the pre-shuffled train file, datamodule.train_max_rows) the full-data batch
+# 28672 would give 19 steps per epoch, so the batch drops to 8192 (68 steps).  The lr prior follows the S3 rule
+# lr(B) = 3e-4 * sqrt(B / 2048) = 6e-4 for every arm (FR's S3 scan was flat over a factor 4); grid x0.5, x1, x2.
+# FT trains its pretrained parts at lr / 10 (S3).  Seed 42 and the P0 seed-42 checkpoint, as in S3.
+# The winner per arm sets that arm's lr factor in L_scan.cells.
+#
+#   ENCODERS=rowcol_concat_v0 CHUNK=512 SEEDS=42 PACKS=2 MEM_PER_GPU_GB=22 \
+#   MAX_EPOCHS=100 EST_SECONDS_PER_EPOCH=150 WALLTIME=1-00:00:00 \
+#   CELLS=scripts/configs/campaign/L_lr.cells bash slurm/ssl_pack.sh
+sc_lab3_lr3e-4  arm=scratch encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=8192 datamodule.train_max_rows=558000 trainer.log_every_n_steps=20 optimizer.lr=3e-4
+sc_lab3_lr6e-4  arm=scratch encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=8192 datamodule.train_max_rows=558000 trainer.log_every_n_steps=20 optimizer.lr=6e-4
+sc_lab3_lr1.2e-3  arm=scratch encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=8192 datamodule.train_max_rows=558000 trainer.log_every_n_steps=20 optimizer.lr=1.2e-3
+ft_p0_lab3_lr3e-4  arm=finetune encoder_ckpt=@/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/P_full_20261023_085735/p0/seed_42 encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=8192 datamodule.train_max_rows=558000 trainer.log_every_n_steps=20 optimizer.lr=3e-4 optimizer.backbone_lr=3e-5
+ft_p0_lab3_lr6e-4  arm=finetune encoder_ckpt=@/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/P_full_20261023_085735/p0/seed_42 encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=8192 datamodule.train_max_rows=558000 trainer.log_every_n_steps=20 optimizer.lr=6e-4 optimizer.backbone_lr=6e-5
+ft_p0_lab3_lr1.2e-3  arm=finetune encoder_ckpt=@/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/P_full_20261023_085735/p0/seed_42 encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=8192 datamodule.train_max_rows=558000 trainer.log_every_n_steps=20 optimizer.lr=1.2e-3 optimizer.backbone_lr=1.2e-4
+fr_p0_lab3_lr3e-4  arm=frozen encoder_ckpt=@/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/P_full_20261023_085735/p0/seed_42 encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=8192 datamodule.train_max_rows=558000 trainer.log_every_n_steps=20 optimizer.lr=3e-4
+fr_p0_lab3_lr6e-4  arm=frozen encoder_ckpt=@/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/P_full_20261023_085735/p0/seed_42 encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=8192 datamodule.train_max_rows=558000 trainer.log_every_n_steps=20 optimizer.lr=6e-4
+fr_p0_lab3_lr1.2e-3  arm=frozen encoder_ckpt=@/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/P_full_20261023_085735/p0/seed_42 encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=8192 datamodule.train_max_rows=558000 trainer.log_every_n_steps=20 optimizer.lr=1.2e-3
