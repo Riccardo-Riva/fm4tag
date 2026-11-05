@@ -275,6 +275,15 @@ plots:
   roc_p0_gn2:
     file: plots/arm_comparison/roc_test_optimal/roc.png
     placeholder: "Run slurm/arm_roc/arm_roc_job.sh"
+  test_rej_nominal:
+    file: plots/arm_comparison/test_metrics/test_rejections_nominal_wp77.png
+    placeholder: "Run scripts/plot_test_rejections.py"
+  test_rej_optimal:
+    file: plots/arm_comparison/test_metrics/test_rejections_optimal_wp77.png
+    placeholder: "Run scripts/plot_test_rejections.py"
+  lr_check_curves:
+    file: plots/label_scan/lr_check/ce_per_epoch.png
+    placeholder: "Run scripts/plot_method_scan.py (method_scan_lr.yaml)"
 
 # ── Slides ───────────────────────────────────────────────────────────────────
 # layouts: title | text_plot | plot_full | tables | stages | cards
@@ -464,6 +473,16 @@ slides:
       - "c-rejection at 80%: from scratch 7.1, fine-tuned 6.1, frozen 3.9 (cannot reach GN2v01's light and τ together), GN2v01 10.4"
       - "GN2v01 is trained by ATLAS on far more jets: a yardstick, not a same-data baseline"
 
+  - layout: plot_full
+    title: "Test set over 4 seeds: fixed fractions"
+    plot: test_rej_nominal
+    result: "Light / c / τ rejection at 77%, mean ± std of 4 runs: from scratch 257 ± 11 / 12.0 ± 0.5 / 37 ± 4, fine-tuned 239 ± 8 / 11.1 ± 0.3 / 35 ± 1, frozen 193 ± 5 / 9.7 ± 0.1 / 26 ± 3; with JC: fine-tuned 257 ± 3 / 11.3 ± 0.02 / 36.3 ± 0.3, frozen 216 ± 6 / 10.1 ± 0.2 / 31 ± 2. From scratch varies most between seeds; the seed on the ROC slides is its best on τ (43 vs a mean of 37)."
+
+  - layout: plot_full
+    title: "Test set over 4 seeds: optimised fractions"
+    plot: test_rej_optimal
+    result: "With light and τ rejection held at GN2v01's level, c-rejection at 77%: from scratch 9.7 ± 0.6, fine-tuned + JC 9.0 ± 0.06, fine-tuned 8.3 ± 0.4, frozen + JC 6.4 ± 0.7, frozen 4.7 (reaches the two floors in none of its runs); GN2v01 15.6. The ranking holds over seeds, but from scratch's worst seed (8.9) sits at fine-tuned + JC's mean. Test CE equals the best val CE within 0.0005 in every run."
+
   - layout: text_plot
     title: "From scratch + JC is unstable"
     plot: curves_p1_full
@@ -490,6 +509,11 @@ slides:
         rows:
           - ["Current model and recipe on 112022 (2.8× more distinct training jets)", "0.604", "within the earlier CE-only runs (best 0.600): the data size sets the level"]
           - ["Batch 2048 (the earlier batch) on the current data", "0.622", "the same as batch 28,672: the batch does not matter"]
+
+  - layout: plot_full
+    title: "3% of the labels: every method overfits within a few epochs"
+    plot: lr_check_curves
+    result: "Learning-rate check (558k jets, lr 3e-4 / 6e-4 / 1.2e-3, one seed). Best val CE: from scratch 0.719, fine-tuned 0.765, frozen 0.780; the lr moves it by ≤ 0.009, the gaps are 6× and 2× those at full data. Best epoch 3–8, then val CE climbs to 0.9 (from scratch) and 1.3–2.1 (pretrained) while training CE falls to 0.1: the pretrained methods memorise fastest."
 
   - layout: tables
     title: "Decisions so far (1/3)"
@@ -534,18 +558,18 @@ slides:
           - ["2026-11-03", "Rerun SC + JC with gradient clipping at 5.0", "3 of 4 final SC + JC runs collapsed"]
           - ["2026-11-04", "Stop SC + JC: reported as unstable", "clipping did not fix it (2 of 4 collapsed)"]
           - ["2026-11-04", "Wrap up; then a label-fraction scan (1–30% of the labels)", "the low-label evidence is one seed"]
+          - ["2026-11-05", "Regularisation check at 3% (weight decay 0.05, dropout 0.1, both) before the label-fraction scan", "lr check: every method overfits in 3–8 epochs; the lr moves the CE ≤ 0.01"]
 
   - layout: cards
     title: "Conclusions"
     cards:
-      - {header: "Pretraining does not help here", text: "With 18.6M labelled jets, training from scratch beats fine-tuning a contrastively pretrained model (by 0.005–0.007 in val CE) and frozen pretrained encoders (0.020–0.026). The test ROC curves agree."}
+      - {header: "Pretraining does not help here", text: "With 18.6M labelled jets, training from scratch beats fine-tuning a contrastively pretrained model (by 0.005–0.007 in val CE) and frozen pretrained encoders (0.020–0.026). The test rejections over 4 seeds agree."}
       - {header: "JC helps the pretrained methods", text: "A contrastive term on the global jet embedding improves them and removes most of their overfitting, but does not close the gap. From scratch + JC is unstable."}
       - {header: "The data sets the level", text: "The CE level (~0.62) is set by the amount of labelled data: the same model reaches 0.604 on a dataset with 2.8× more jets."}
-      - {header: "Fewer labels", text: "At 10% of the labels pretraining did not help either, but on one seed with untuned learning rates: the label-fraction scan will settle it."}
+      - {header: "Fewer labels", text: "At 10% and 3% of the labels pretraining did not help either. At 3% every method overfits within a few epochs, the pretrained ones fastest: regularisation is checked before the label-fraction scan."}
 
   - layout: cards
     title: "Next"
     cards:
-      - {header: "Test results over seeds", text: "All 4 runs of each method on the test set: mean ± spread of the rejections at 77% and 80% b-efficiency."}
-      - {header: "Label-fraction scan", text: "From scratch, fine-tuned and frozen at 1, 3, 10 and 30% of the labels, 3 seeds each, after a learning-rate check at 3%: does pretraining overtake training from scratch at some fraction?"}
-      - {header: "Regularisation (optional)", text: "Every method without JC overfits by epoch 5–10; dropout or more data would improve all of them, but says nothing about pretraining."}
+      - {header: "Regularisation check (running)", text: "Weight decay 0.05, dropout 0.1, or both, at 3% of the labels, each method at its best lr: does regularising narrow the gap to training from scratch?"}
+      - {header: "Label-fraction scan", text: "From scratch, fine-tuned and frozen at 1, 3, 10 and 30% of the labels, 3 seeds each, with the lr and regularisation from the 3% checks: does pretraining overtake training from scratch at some fraction?"}
