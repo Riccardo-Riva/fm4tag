@@ -52,7 +52,9 @@ from __future__ import annotations
 
 import argparse
 import operator
+import os
 import re
+import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -330,8 +332,8 @@ def cached_probs(
     def _usable(path: Path) -> np.ndarray | None:
         try:
             cached = np.load(path, allow_pickle=False)
-        except (OSError, ValueError):
-            return None
+        except (OSError, ValueError, EOFError, zipfile.BadZipFile):
+            return None  # unreadable, e.g. being written by a parallel process
         cached_precision = (
             str(cached['precision']) if 'precision' in cached.files else 'fp32'
         )
@@ -363,13 +365,17 @@ def cached_probs(
 
     probs = compute()
     cache_dir.mkdir(parents=True, exist_ok=True)
-    np.savez(
-        cache_file,
-        probs=probs,
-        ckpt_path=str(ckpt_path),
-        test_file=str(test_file),
-        precision=precision,
-    )
+    # Write then rename: a parallel process scanning the cache never sees a half-written file.
+    partial = cache_file.with_name(f'{cache_file.name}.{os.getpid()}.part')
+    with open(partial, 'wb') as f:
+        np.savez(
+            f,
+            probs=probs,
+            ckpt_path=str(ckpt_path),
+            test_file=str(test_file),
+            precision=precision,
+        )
+    os.replace(partial, cache_file)
     print(f'  cached predictions: {cache_file}')
     return probs
 
