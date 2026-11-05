@@ -51,3 +51,8 @@ test_rejections:
     footnote: |-
       $t\bar{t}$, $\sqrt{s} = 13.6$ TeV, $20 < p_T < 250$ GeV, $|\eta| < 2.5$; test split (1.86M jets before cuts).  Pretrained methods: 2 pretraining seeds x 2 training seeds.
       From scratch + JC is not shown: 5 of its 8 runs collapsed during training.
+    footnote_fractions:                    # added under the footnote, per fractions mode; '' = nothing
+      optimal: |-
+        Optimised fractions: c-rejection maximised on validation with light and τ rejection at least GN2v01's at 80% b-efficiency.
+        Frozen encoders (CE only) reaches both in none of its runs; it is shown at its closest point ($f_c = 0$).
+      nominal: ''

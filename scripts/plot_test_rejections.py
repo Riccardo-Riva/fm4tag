@@ -148,11 +148,14 @@ def main() -> None:
             fontsize=9,
             bbox_to_anchor=(0.5, -0.02),
         )
-        if texts['footnote']:
+        footnote = '\n'.join(
+            t for t in (texts['footnote'], texts['footnote_fractions'][fractions]) if t
+        )
+        if footnote:
             fig.text(
                 0.5,
                 -0.07,
-                texts['footnote'],
+                footnote,
                 ha='center',
                 va='top',
                 fontsize=8,
