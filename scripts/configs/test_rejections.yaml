@@ -1,0 +1,53 @@
+# Test-set rejections of every final run per training method, with their spread over seeds
+# (scripts/plot_test_rejections.py), from the per_run.csv of arm_test_metrics.py:
+#
+#   MPLBACKEND=Agg .venv/bin/python scripts/plot_test_rejections.py --config scripts/configs/test_rejections.yaml
+#
+# Arms as in arm_test_metrics.yaml (4 runs each).  From scratch + JC is not shown: 5 of its 8 runs collapsed, and
+# rriva decided on 2026-11-04 to report it as unstable.
+
+test_rejections:
+  per_run_csv: plots/arm_comparison/test_metrics/per_run.csv
+  out_dir: plots/arm_comparison/test_metrics
+  reference_label: GN2v01                  # its row in per_run.csv
+  flavours: [c, u, tau]                    # panel order: c, light, tau
+
+  # fractions: 'optimal' = each run's own (f_c, f_tau) from the validation search; 'nominal' = f_c 0.2, f_tau 0.01
+  figures:
+    - {filename: test_rejections_optimal_wp77.png, fractions: optimal, working_point: 0.77, reference: false}
+    - {filename: test_rejections_optimal_wp77_gn2.png, fractions: optimal, working_point: 0.77, reference: true}
+    - {filename: test_rejections_nominal_wp77.png, fractions: nominal, working_point: 0.77, reference: false}
+    - {filename: test_rejections_optimal_wp70.png, fractions: optimal, working_point: 0.70, reference: false}
+    - {filename: test_rejections_optimal_wp85.png, fractions: optimal, working_point: 0.85, reference: false}
+
+  arms:
+    sc: {method: scratch, group: no_jc}
+    ft_p0: {method: finetune, group: no_jc}
+    fr_p0: {method: frozen, group: no_jc}
+    ftjc_p1: {method: finetune, group: jc}
+    frjc_p1: {method: frozen, group: jc}
+  methods: [scratch, finetune, frozen]     # x order
+  groups:
+    no_jc: {offset: -0.18, marker: o, filled: true}
+    jc: {offset: 0.18, marker: s, filled: false}
+  jitter: 0.03                             # x spacing of the single runs of one arm
+  colours: {scratch: '#2a78d6', finetune: '#eb6834', frozen: '#1baf7a'}
+  ink: '#333333'
+  figsize: [13.0, 4.6]
+
+  # ---- ALL the wording of the figures lives here --------------------------------------------------------------
+  texts:
+    title: 'Test-set rejection at {wp:.0f}% b-jet efficiency, {fractions}'   # {wp}, {fractions}; '' = no title
+    fractions:
+      optimal: '$f_c$ and $f_\tau$ optimised per run on validation'
+      nominal: '$f_c = 0.2$, $f_\tau = 0.01$'
+    ylabel: 'Background rejection at {wp:.0f}% b-efficiency'
+    flavour: {c: 'c-jet rejection', u: 'Light-jet rejection', tau: 'τ-jet rejection'}
+    method: {scratch: 'From scratch', finetune: 'Fine-tuned', frozen: 'Frozen encoders'}
+    group: {no_jc: 'CE only (pretrained: P0)', jc: 'CE + JC (pretrained: P1)'}
+    run: 'One run'
+    mean: 'Mean ± std of the 4 runs'
+    reference: 'GN2v01 (production tagger, trained on other data)'
+    footnote: |-
+      $t\bar{t}$, $\sqrt{s} = 13.6$ TeV, $20 < p_T < 250$ GeV, $|\eta| < 2.5$; test split (1.86M jets before cuts).  Pretrained methods: 2 pretraining seeds x 2 training seeds.
+      From scratch + JC is not shown: 5 of its 8 runs collapsed during training.
