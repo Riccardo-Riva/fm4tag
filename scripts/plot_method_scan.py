@@ -3,7 +3,9 @@
 Every completed run under ``method_scan.stages`` is put in an arm from its own .hydra config, as in
 ``plot_arm_epochs.py``; its x value is the config key ``x_key`` (``x_null`` when the key is null, e.g. no
 ``train_max_rows`` = the whole train split).  ``extra_runs`` adds runs from other stages (e.g. the full-data final
-runs as the 100% point of a label-fraction scan).  Two figures:
+runs as the 100% point of a label-fraction scan).  With ``x_categories`` instead of ``x_key`` the x axis is
+categorical (e.g. regularisation settings): a run takes the first category whose ``match`` (config key -> value)
+its config satisfies, and runs that match none are left out.  Two figures:
 
   best_vs_x   best val/head/loss_ce of every run (small markers) and the arm's mean ± sample std per x value
               (large markers, joined by a line), one colour per arm
@@ -40,6 +42,25 @@ import plot_arm_epochs as pae  # noqa: E402 -- run config + arm classification
 import plot_val_curves as pvc  # noqa: E402 -- metric readers
 
 
+def category(cfg, categories: list[dict]) -> int | None:
+    """Index of the first category whose every ``match`` value equals the run's config value, else None."""
+    for i, cat in enumerate(categories):
+        values = [(OmegaConf.select(cfg, k), v) for k, v in cat['match'].items()]
+        if all(
+            got is not None and np.isclose(float(got), float(want), rtol=1e-6, atol=0.0)
+            for got, want in values
+        ):
+            return i
+    return None
+
+
+def x_text(ac: dict, x: float) -> str:
+    """Legend / tick text of one x value."""
+    if ac.get('x_categories'):
+        return ac['texts']['x_category'][ac['x_categories'][int(x)]['key']]
+    return ac['texts']['x_value'].format(x=x)
+
+
 def select(ac: dict) -> pd.DataFrame:
     """Completed runs of the listed arms, with their x value and best validation CE."""
     dirs = [d for stage in ac['stages'] for d in sorted(Path(stage).glob('*/seed_*'))]
@@ -62,13 +83,21 @@ def select(ac: dict) -> pd.DataFrame:
         )
         if arm is None:
             continue
-        x = OmegaConf.select(pae.run_config(run_dir), ac['x_key'])
+        cfg = pae.run_config(run_dir)
+        if ac.get('x_categories'):
+            x = category(cfg, ac['x_categories'])
+            if x is None:
+                print(f'no category matches, left out: {run_dir}')
+                continue
+        else:
+            x = OmegaConf.select(cfg, ac['x_key'])
+            x = ac['x_null'] if x is None else x
         val = pvc.read_metric(pvc.find_metrics(run_dir), ac['val_metric'])
         best = val.loc[val['value'].idxmin()]
         rows.append(
             {
                 'arm': arm,
-                'x': float(ac['x_null'] if x is None else x),
+                'x': float(x),
                 'seed': meta['seed'],
                 'run_dir': str(run_dir),
                 'best_val_ce': float(best['value']),
@@ -114,6 +143,10 @@ def plot_best(runs: pd.DataFrame, ac: dict, out_path: Path) -> None:
             )
         )
     ax.set_xscale(ac['x_scale'])
+    if ac.get('x_categories'):
+        ticks = range(len(ac['x_categories']))
+        ax.set_xticks(ticks, [x_text(ac, x) for x in ticks])
+        ax.set_xlim(-0.5, len(ac['x_categories']) - 0.5)
     ax.set_xlabel(texts['xlabel'])
     ax.set_ylabel(texts['ylabel_best'])
     if ac.get('ylim_best'):
@@ -163,7 +196,7 @@ def plot_curves(runs: pd.DataFrame, ac: dict, out_path: Path) -> None:
         ax.set_xlabel(texts['xlabel_curves'])
         ax.grid(True, alpha=0.3)
         handles = [
-            Line2D([], [], color=colours[x], lw=2, label=texts['x_value'].format(x=x))
+            Line2D([], [], color=colours[x], lw=2, label=x_text(ac, x))
             for x in xs
             if ((runs['arm'] == key) & (runs['x'] == x)).any()
         ]

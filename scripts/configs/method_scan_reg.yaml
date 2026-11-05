@@ -1,0 +1,56 @@
+# Regularisation check at 3% of the labels (L_reg.cells), per training method (scripts/plot_method_scan.py):
+#
+#   MPLBACKEND=Agg .venv/bin/python scripts/plot_method_scan.py --config scripts/configs/method_scan_reg.yaml
+#
+# Runs: every completed run under `stages` plus, as the unregularised baseline, each method's L_lr winner
+# (`extra_runs`); put in an arm by its own .hydra config.  x = the regularisation setting, read from the config
+# (`x_categories`: the first category whose `match` values the run's config has).
+
+method_scan:
+  out_dir: plots/label_scan/reg_check
+  filenames: {best_vs_x: best_val_ce_vs_regularisation.png, curves: ce_per_epoch.png}
+  stages:
+    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/L_reg_20261105_105304
+  extra_runs:
+    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/L_lr_20261104_163831/sc_lab3_lr1.2e-3/seed_42
+    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/L_lr_20261104_163831/ft_p0_lab3_lr3e-4/seed_42
+    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/L_lr_20261104_163831/fr_p0_lab3_lr1.2e-3/seed_42
+  x_categories:                      # 5.962613854843877e-05 = the campaign's default weight decay
+    - {key: none, match: {optimizer.weight_decay: 5.962613854843877e-05, aggregator.ff_dropout: 0.0, head.mlp_dropout: 0.02}}
+    - {key: wd, match: {optimizer.weight_decay: 0.05, aggregator.ff_dropout: 0.0, head.mlp_dropout: 0.02}}
+    - {key: do, match: {optimizer.weight_decay: 5.962613854843877e-05, aggregator.ff_dropout: 0.1, head.mlp_dropout: 0.1}}
+    - {key: wddo, match: {optimizer.weight_decay: 0.05, aggregator.ff_dropout: 0.1, head.mlp_dropout: 0.1}}
+  x_scale: linear
+  val_metric: val/head/loss_ce
+  train_metric: train/head/loss_ce_epoch
+  epoch_offset: 1                    # Lightning counts epochs from 0; 1 = the first epoch is epoch 1
+
+  arms:
+    sc: {encoder: scratch, pretraining: null, jet_contrastive: 0.0, colour: '#2a78d6'}
+    ft_p0: {encoder: finetune, pretraining: p0, jet_contrastive: 0.0, colour: '#eb6834'}
+    fr_p0: {encoder: frozen, pretraining: p0, jet_contrastive: 0.0, colour: '#1baf7a'}
+
+  best_figsize: [6.5, 4.5]
+  curves_figsize: [14.0, 4.4]
+  # ylim_best: [0.70, 0.80]
+  # ylim_curves: [0.5, 1.5]
+  legend_loc: best
+  ink: '#333333'
+
+  # ---- ALL the wording of the figures lives here --------------------------------------------------------------
+  texts:
+    arm: {sc: 'From scratch (lr 1.2e-3)', ft_p0: 'Fine-tuned (P0, lr 3e-4)', fr_p0: 'Frozen encoders (P0, lr 1.2e-3)'}
+    x_category:
+      none: 'None'
+      wd: 'Weight decay 0.05'
+      do: 'Dropout 0.1'
+      wddo: 'Both'
+    title_best: 'Regularisation check at 3% of the labels (558k jets), seed 42'   # '' = no title
+    xlabel: 'Regularisation'
+    ylabel_best: 'Best validation cross-entropy'
+    run: 'One run'
+    title_curves: 'Cross-entropy per epoch at 3% of the labels, one run per regularisation setting'
+    xlabel_curves: 'Epoch'
+    ylabel_curves: 'Cross-entropy'
+    val: 'Validation'
+    train: 'Training (epoch mean)'
