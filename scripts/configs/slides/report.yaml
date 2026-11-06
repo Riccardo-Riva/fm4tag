@@ -1,0 +1,551 @@
+# Every plot of the SSL report, one or two per slide, each with the settings of the models it shows
+# (scripts/report_deck.py):
+#
+#   sbatch slurm/plot_job.sh scripts/report_deck.py:scripts/configs/slides/report.yaml
+#
+# The info box of a slide is built from the runs of its `models` only (config, training log, data files); nothing
+# about a model is written here except its label, colour and run directories.  All wording lives here.
+
+output:
+  dir: docs/slides/report              # relative to the repo
+  pptx: ssl_campaign_plots.pptx
+  preview: preview                     # drawings of the slides (subdirectory of dir); null = none
+
+footer: 'SSL campaign plots · fm4tag-chunk, branch feat/chunked-ia'
+updated_label: 'updated'
+plots_dir: plots                       # relative to the repo; slide `plots` are relative to it
+missing_plot: 'Plot not found: {files}'
+
+style:
+  deck_font: Arial
+  measure_fonts: [Liberation Sans, DejaVu Sans]   # the first installed one measures text (Arial metrics or wider)
+  ink: '#1b1d21'
+  muted: '#5b5e66'
+  accent: '#c98500'
+  accent_ink: '#7a4f00'
+  card_tint: '#fbf3e4'
+  header_fill: '#2b2f36'
+  dark_bg: '#1e2227'
+  dark_ink: '#ffffff'
+  dark_muted: '#c9ccd1'
+  status: {}
+  title_size: 26
+  subtitle_size: 13
+  table_size: 11
+  table_label_width: 1.9               # inches
+
+# ── The info box ─────────────────────────────────────────────────────────────
+info:
+  size: 10.5                           # pt
+  space_after: 5                       # pt between paragraphs
+  side_width: 4.0                      # inches, when the box is beside the plots
+  box_fill: '#f3f3f0'
+  join: ' · '
+  label_sep: ': '
+  values_sep: ' / '                    # one value per configuration (or per run, for `per_run` items)
+  common_label: 'All models on this slide'
+  missing: '–'
+  table_corner: ''
+  texts:                               # words the values are built from
+    on_off: {true: 'on', false: 'off'}
+    none: 'none'
+    views_join: ' and '
+    augmentations_join: ' + '
+    start:                             # {seed} = the pretraining run's seed
+      none: 'random'
+      p0: 'P0, pretraining seed {seed}'
+      p1: 'P1, pretraining seed {seed}'
+      p2: 'P2, pretraining seed {seed}'
+    trained:                           # by method; any field of the run can be used
+      scratch: 'all'
+      finetune: 'all; pretrained parts at lr 0 for {unfreeze} epochs, then from {backbone_lr_s}'
+      frozen: 'aggregator and head (encoders frozen)'
+    aggregator: {trained: 'trained', untrained: 'not trained'}
+  # Items in this order; `value` is formatted with the run's fields (scripts/report_deck.py run_fields).
+  # per_run: merge the runs' values (seeds); otherwise one value per configuration.  only_if: skip when 0.
+  items:
+    pretrain:
+      - {key: seed, label: 'seed', value: '{seed}', per_run: true}
+      - {key: params, label: 'parameters', value: '{params_total} ({params_trained} trained)'}
+      - {key: loss, label: 'loss weights', value: 'contrastive {w_contrastive:g} (track and jet-feature embeddings), JC {w_jet_contrastive:g} (global jet embedding), denoising {w_denoising_cat:g} + {w_denoising_con:g}'}
+      - {key: temperature, label: 'temperature', value: '{t_contrastive:g}, JC {t_jet_contrastive:g}'}
+      - {key: views, label: 'views', value: '{views}, λ {lam:g}'}
+      - {key: encoders, label: 'encoders', value: 'dim {enc_dim}, {enc_depth} blocks, intersample attention ({row_mode}) in chunks of {chunk} jets, QK-norm {qk_norm}, projection {proj_out}'}
+      - {key: aggregator, label: 'aggregator', value: '{agg_depth} blocks, {agg_heads} heads × {agg_dim_head}, {agg_state}'}
+      - {key: batch, label: 'batch', value: '{batch:,}'}
+      - {key: lr, label: 'lr', value: '{lr_s}'}
+      - {key: optimiser, label: 'optimiser', value: 'AdamW, weight decay {wd_s}, cosine schedule, {warmup:.0%} warmup'}
+      - {key: epochs, label: 'epochs', value: '{max_epochs}, gradient clipping {clip_s}'}
+      - {key: precision, label: 'precision', value: '{precision}'}
+      - {key: data, label: 'data', value: '{n_train_s} training jets (pretraining split), {n_val_s} validation jets'}
+    finetune:
+      - {key: seed, label: 'seed', value: '{seed}', per_run: true}
+      - {key: start, label: 'init', value: '{start}', per_run: true}
+      - {key: trained, label: 'trained', value: '{trained}'}
+      - {key: params, label: 'parameters', value: '{params_total} ({params_trained} trained)'}
+      - {key: loss, label: 'loss weights', value: 'CE {w_cross_entropy:g}, JC {w_jet_contrastive:g}'}
+      - {key: jc, label: 'JC', value: 'temperature {t_jet_contrastive:g}, views {views}, λ {lam:g}', only_if: w_jet_contrastive}
+      - {key: batch, label: 'batch', value: '{batch:,}'}
+      - {key: lr, label: 'lr', value: '{lr_s}'}
+      - {key: optimiser, label: 'optimiser', value: 'AdamW, weight decay {wd_s}, cosine schedule, {warmup:.0%} warmup'}
+      - {key: epochs, label: 'epochs', value: 'at most {max_epochs}, early-stopping patience {patience} on the validation CE'}
+      - {key: precision, label: 'precision', value: '{precision}'}
+      - {key: encoders, label: 'encoders', value: 'dim {enc_dim}, {enc_depth} blocks, intersample attention ({row_mode}) in chunks of {chunk} jets, QK-norm {qk_norm}, projection {proj_out}'}
+      - {key: aggregator, label: 'aggregator', value: '{agg_depth} blocks, {agg_heads} heads × {agg_dim_head}, dropout {agg_dropout:g}'}
+      - {key: head, label: 'head', value: 'MLP {head_hidden}, dropout {head_dropout:g}'}
+      - {key: data, label: 'data', value: '{n_train_s} training jets, {n_val_s} validation'}
+
+# ── Models: label, colour (as on the plots), run directories (globs) ────────
+# order_by: the configurations of a model with several (lr, regularisation, label fraction) are listed in this order.
+models:
+  p0:
+    label: 'P0'
+    colour: '#1b1d21'
+    runs: [/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/P_full_20261023_085735/p0/seed_*]
+  p1:
+    label: 'P1'
+    colour: '#1b1d21'
+    runs: [/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/P_full_20261026_094445/p1/seed_*]
+  sc:
+    label: 'From scratch'
+    colour: '#2a78d6'
+    runs: [/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235642/sc/seed_*]
+  ft_p0:
+    label: 'Fine-tuned (P0)'
+    colour: '#eb6834'
+    runs: [/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235640/ft_p0s4*/seed_*]
+  fr_p0:
+    label: 'Frozen encoders (P0)'
+    colour: '#1baf7a'
+    runs: [/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235640/fr_p0s4*/seed_*]
+  scjc:
+    label: 'From scratch + JC'
+    colour: '#2a78d6'
+    runs: [/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235642/scjc/seed_*]
+  ftjc_p1:
+    label: 'Fine-tuned (P1) + JC'
+    colour: '#eb6834'
+    runs: [/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235640/ftjc_p1s4*/seed_*]
+  frjc_p1:
+    label: 'Frozen encoders (P1) + JC'
+    colour: '#1baf7a'
+    runs: [/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235640/frjc_p1s4*/seed_*]
+  # The single runs of the test ROCs (roc_comparison_arms_final{,_p1}.yaml)
+  roc_sc:
+    label: 'From scratch'
+    colour: '#2a78d6'
+    runs: [/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235642/sc/seed_4242]
+  roc_ft_p0:
+    label: 'Fine-tuned (P0)'
+    colour: '#eb6834'
+    runs: [/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235640/ft_p0s424/seed_4242]
+  roc_fr_p0:
+    label: 'Frozen encoders (P0)'
+    colour: '#1baf7a'
+    runs: [/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235640/fr_p0s424/seed_4242]
+  roc_scjc:
+    label: 'From scratch + JC'
+    colour: '#2a78d6'
+    runs: [/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235642/scjc/seed_424242]
+  roc_ftjc_p1:
+    label: 'Fine-tuned (P1) + JC'
+    colour: '#eb6834'
+    runs: [/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235640/ftjc_p1s42/seed_4242]
+  roc_frjc_p1:
+    label: 'Frozen encoders (P1) + JC'
+    colour: '#1baf7a'
+    runs: [/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235640/frjc_p1s42/seed_42424]
+  # 3% of the labels: learning-rate check, regularisation check (+ the best run of the lr check), label-fraction scan
+  lr_sc:
+    label: 'From scratch'
+    colour: '#2a78d6'
+    order_by: [lr]
+    runs: [/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/L_lr_20261104_163831/sc_lab3_lr*/seed_42]
+  lr_ft:
+    label: 'Fine-tuned (P0)'
+    colour: '#eb6834'
+    order_by: [lr]
+    runs: [/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/L_lr_20261104_163831/ft_p0_lab3_lr*/seed_42]
+  lr_fr:
+    label: 'Frozen encoders (P0)'
+    colour: '#1baf7a'
+    order_by: [lr]
+    runs: [/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/L_lr_20261104_163831/fr_p0_lab3_lr*/seed_42]
+  reg_sc:
+    label: 'From scratch'
+    colour: '#2a78d6'
+    order_by: [agg_dropout, wd]          # none, weight decay, dropout, both: the order on the plot
+    runs:
+      - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/L_reg_20261105_105304/sc_lab3_*/seed_42
+      - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/L_lr_20261104_163831/sc_lab3_lr1.2e-3/seed_42
+  reg_ft:
+    label: 'Fine-tuned (P0)'
+    colour: '#eb6834'
+    order_by: [agg_dropout, wd]
+    runs:
+      - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/L_reg_20261105_105304/ft_p0_lab3_*/seed_42
+      - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/L_lr_20261104_163831/ft_p0_lab3_lr3e-4/seed_42
+  reg_fr:
+    label: 'Frozen encoders (P0)'
+    colour: '#1baf7a'
+    order_by: [agg_dropout, wd]
+    runs:
+      - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/L_reg_20261105_105304/fr_p0_lab3_*/seed_42
+      - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/L_lr_20261104_163831/fr_p0_lab3_lr1.2e-3/seed_42
+  scan_sc:
+    label: 'From scratch'
+    colour: '#2a78d6'
+    order_by: [n_train]
+    runs:
+      - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/L_scan_20261105_151751/sc_lab*/seed_*
+      - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235642/sc/seed_*
+  scan_ft:
+    label: 'Fine-tuned (P0)'
+    colour: '#eb6834'
+    order_by: [n_train]
+    runs:
+      - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/L_scan_20261105_151751/ft_p0_lab*/seed_*
+      - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235640/ft_p0s4*/seed_*
+  scan_fr:
+    label: 'Frozen encoders (P0)'
+    colour: '#1baf7a'
+    order_by: [n_train]
+    runs:
+      - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/L_scan_20261105_151751/fr_p0_lab*/seed_*
+      - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235640/fr_p0s4*/seed_*
+
+# ── Slides ───────────────────────────────────────────────────────────────────
+# layouts: title | section | models_table | plots (1 or 2 `plots`, the `models` they show, optional `info_items`)
+slides:
+  - layout: title
+    title: 'SSL campaign: the plots'
+    subtitle: 'Contrastive pretraining of the fm4tag encoders (P0, P1) and three ways to train the tagger on it. Every plot, with the settings of the models it shows.'
+
+  - layout: models_table
+    title: 'The two pretrainings'
+    subtitle: 'Settings read from each run''s configuration, training log and data files; parameters as counted by Lightning at the start of training.'
+    models: [p0, p1]
+  - layout: models_table
+    title: 'The six training methods'
+    subtitle: 'CE only (pretrained ones from P0) and CE + JC (pretrained ones from P1), 4 runs each; same sources.'
+    models: [sc, ft_p0, fr_p0, scjc, ftjc_p1, frjc_p1]
+
+  # ---- Pretraining ----
+  - layout: section
+    title: 'Pretraining'
+    subtitle: 'P0: contrastive loss on the feature embeddings (tracks and jet features). P1: P0 + JC, a contrastive loss on the global jet embedding. 30 epochs on the 39.7M-jet pretraining split, 2 seeds each.'
+  - layout: plots
+    title: 'P0: total loss and its terms'
+    subtitle: 'Seed 42 (left) and 424 (right). Training dashed (mean over the epoch), validation solid; the total is the weighted sum of the terms.'
+    plots: [pretrain_curves/final/p0_s42_loss_terms.png, pretrain_curves/final/p0_s424_loss_terms.png]
+    models: [p0]
+  - layout: plots
+    title: 'P0: loss and effective rank of the embeddings'
+    subtitle: 'Seed 42 (left) and 424 (right). Left axis: total loss. Right axis, dashed: effective rank of each trained embedding on 8192 validation jets (at most the embedding size).'
+    plots: [pretrain_curves/final/p0_s42_loss_and_effective_rank.png, pretrain_curves/final/p0_s424_loss_and_effective_rank.png]
+    models: [p0]
+  - layout: plots
+    title: 'P0: loss and uniformity of the embeddings'
+    subtitle: 'Seed 42 (left) and 424 (right). Left axis: total loss. Right axis, dashed: uniformity of each trained embedding on 8192 validation jets (lower = more evenly spread).'
+    plots: [pretrain_curves/final/p0_s42_loss_and_uniformity.png, pretrain_curves/final/p0_s424_loss_and_uniformity.png]
+    models: [p0]
+  - layout: plots
+    title: 'P1: total loss and its terms'
+    subtitle: 'Seed 42 (left) and 424 (right). Training dashed (mean over the epoch), validation solid; the total is the weighted sum of the terms, JC included.'
+    plots: [pretrain_curves/final/p1_s42_loss_terms.png, pretrain_curves/final/p1_s424_loss_terms.png]
+    models: [p1]
+  - layout: plots
+    title: 'P1: loss and effective rank of the embeddings'
+    subtitle: 'Seed 42 (left) and 424 (right). Left axis: total loss. Right axis, dashed: effective rank on 8192 validation jets; P1 also trains the global jet embedding.'
+    plots: [pretrain_curves/final/p1_s42_loss_and_effective_rank.png, pretrain_curves/final/p1_s424_loss_and_effective_rank.png]
+    models: [p1]
+  - layout: plots
+    title: 'P1: loss and uniformity of the embeddings'
+    subtitle: 'Seed 42 (left) and 424 (right). Left axis: total loss. Right axis, dashed: uniformity on 8192 validation jets (lower = more evenly spread).'
+    plots: [pretrain_curves/final/p1_s42_loss_and_uniformity.png, pretrain_curves/final/p1_s424_loss_and_uniformity.png]
+    models: [p1]
+
+  # ---- Training, CE only ----
+  - layout: section
+    title: 'Training, CE only'
+    subtitle: 'From scratch, fine-tuned from P0, and frozen P0 encoders (only the aggregator and the head train), with the cross-entropy alone: 4 runs each on 18.6M labelled jets.'
+  - layout: plots
+    title: 'CE only: training and validation cross-entropy'
+    subtitle: 'Every run (4 per method): training dashed (mean over the epoch), validation solid. Right: the same, zoomed.'
+    plots: [arm_comparison/epochs/ce_train_val.png, arm_comparison/epochs/ce_train_val_zoom.png]
+    models: [sc, ft_p0, fr_p0]
+  - layout: plots
+    title: 'CE only: effective rank of the embeddings'
+    subtitle: 'Track, jet-feature and global jet embeddings on 8192 validation jets, every run. Frozen encoders: flat lines.'
+    plots: [arm_comparison/epochs/effective_rank.png]
+    models: [sc, ft_p0, fr_p0]
+  - layout: plots
+    title: 'CE only: uniformity of the embeddings'
+    subtitle: 'Track, jet-feature and global jet embeddings on 8192 validation jets (lower = more evenly spread), every run.'
+    plots: [arm_comparison/epochs/uniformity.png]
+    models: [sc, ft_p0, fr_p0]
+  - layout: plots
+    title: 'CE only: test ROC, fixed fractions'
+    subtitle: 'Test set (1.86M jets), one run per method, f_c = 0.2 and f_τ = 0.01. Ratio panels: to from scratch (left), to GN2v01 (right).'
+    plots: [arm_comparison/roc_test_nominal_noref/roc.png, arm_comparison/roc_test_nominal/roc.png]
+    models: [roc_sc, roc_ft_p0, roc_fr_p0]
+  - layout: plots
+    title: 'CE only: test ROC, optimised fractions'
+    subtitle: 'Each model at its own (f_c, f_τ) from the validation set: the largest c-rejection at 80% b-efficiency with light and τ rejection at least GN2v01''s. Ratio to from scratch (left), to GN2v01 (right).'
+    plots: [arm_comparison/roc_test_optimal_noref/roc.png, arm_comparison/roc_test_optimal/roc.png]
+    models: [roc_sc, roc_ft_p0, roc_fr_p0]
+
+  # ---- Training, CE + JC ----
+  - layout: section
+    title: 'Training, CE + JC'
+    subtitle: 'The same three methods with the JC term (weight 0.3) on the global jet embedding; the pretrained ones start from P1. 4 runs each.'
+  - layout: plots
+    title: 'CE + JC: training and validation cross-entropy'
+    subtitle: 'Every run (4 per method): training dashed, validation solid. From scratch + JC: 3 of its 4 runs collapsed (cross-entropy about 1.29), off scale on the right.'
+    plots: [arm_comparison/epochs_p1/ce_train_val.png, arm_comparison/epochs_p1/ce_train_val_zoom.png]
+    models: [scjc, ftjc_p1, frjc_p1]
+  - layout: plots
+    title: 'CE + JC: effective rank of the embeddings'
+    subtitle: 'Track, jet-feature and global jet embeddings on 8192 validation jets, every run (the collapsed from-scratch runs drop to a rank of about 2).'
+    plots: [arm_comparison/epochs_p1/effective_rank.png]
+    models: [scjc, ftjc_p1, frjc_p1]
+  - layout: plots
+    title: 'CE + JC: uniformity of the embeddings'
+    subtitle: 'Track, jet-feature and global jet embeddings on 8192 validation jets (lower = more evenly spread), every run.'
+    plots: [arm_comparison/epochs_p1/uniformity.png]
+    models: [scjc, ftjc_p1, frjc_p1]
+  - layout: plots
+    title: 'CE + JC: test ROC, fixed fractions'
+    subtitle: 'Test set (1.86M jets), one run per method, f_c = 0.2 and f_τ = 0.01. Ratio panels: to from scratch + JC (left), to GN2v01 (right).'
+    plots: [arm_comparison_p1/roc_test_nominal_noref/roc.png, arm_comparison_p1/roc_test_nominal/roc.png]
+    models: [roc_scjc, roc_ftjc_p1, roc_frjc_p1]
+  - layout: plots
+    title: 'CE + JC: test ROC, optimised fractions'
+    subtitle: 'Each model at its own (f_c, f_τ) from the validation set, as for CE only. Ratio to from scratch + JC (left), to GN2v01 (right).'
+    plots: [arm_comparison_p1/roc_test_optimal_noref/roc.png, arm_comparison_p1/roc_test_optimal/roc.png]
+    models: [roc_scjc, roc_ftjc_p1, roc_frjc_p1]
+
+  # ---- Both groups ----
+  - layout: section
+    title: 'CE only and CE + JC together'
+    subtitle: 'Best validation cross-entropy and test rejections of every run, the two groups side by side.'
+  - layout: plots
+    title: 'Best validation cross-entropy per method'
+    subtitle: 'Every run (small) and the mean ± std of the runs shown (large). Filled: CE only (pretrained from P0); open: CE + JC (pretrained from P1). The 3 collapsed from-scratch + JC runs are not shown.'
+    plots: [arm_comparison/summary/best_val_ce_per_method.png]
+    models: [sc, ft_p0, fr_p0, scjc, ftjc_p1, frjc_p1]
+    info_items: [start, trained, params, loss, batch, lr, epochs, data]
+  - layout: plots
+    title: 'Test rejection at 77% b-efficiency, fixed fractions'
+    subtitle: 'c-, light- and τ-jet rejection on the test set with f_c = 0.2 and f_τ = 0.01: every run (small) and mean ± std (large). From scratch + JC is not shown (unstable).'
+    plots: [arm_comparison/test_metrics/test_rejections_nominal_wp77.png]
+    models: [sc, ft_p0, fr_p0, ftjc_p1, frjc_p1]
+    info_items: [start, trained, params, loss, batch, lr, epochs, data]
+  - layout: plots
+    title: 'Test rejection at 77% b-efficiency, optimised fractions'
+    subtitle: 'The same, each run at its own (f_c, f_τ) from the validation search.'
+    plots: [arm_comparison/test_metrics/test_rejections_optimal_wp77.png]
+    models: [sc, ft_p0, fr_p0, ftjc_p1, frjc_p1]
+    info_items: [start, trained, params, loss, batch, lr, epochs, data]
+  - layout: plots
+    title: 'Test rejection at 77%, optimised fractions, with GN2v01'
+    subtitle: 'As before; dashed line: GN2v01 at f_c = 0.2 and f_τ = 0.01 (the production tagger, trained on other data).'
+    plots: [arm_comparison/test_metrics/test_rejections_optimal_wp77_gn2.png]
+    models: [sc, ft_p0, fr_p0, ftjc_p1, frjc_p1]
+    info_items: [start, trained, params, loss, batch, lr, epochs, data]
+  - layout: plots
+    title: 'Test rejection at 70% b-efficiency, optimised fractions'
+    subtitle: 'Each run at its own (f_c, f_τ) from the validation search.'
+    plots: [arm_comparison/test_metrics/test_rejections_optimal_wp70.png]
+    models: [sc, ft_p0, fr_p0, ftjc_p1, frjc_p1]
+    info_items: [start, trained, params, loss, batch, lr, epochs, data]
+  - layout: plots
+    title: 'Test rejection at 85% b-efficiency, optimised fractions'
+    subtitle: 'Each run at its own (f_c, f_τ) from the validation search.'
+    plots: [arm_comparison/test_metrics/test_rejections_optimal_wp85.png]
+    models: [sc, ft_p0, fr_p0, ftjc_p1, frjc_p1]
+    info_items: [start, trained, params, loss, batch, lr, epochs, data]
+
+  # ---- Fewer labels ----
+  - layout: section
+    title: 'Fewer labels'
+    subtitle: 'From scratch, fine-tuned from P0 and frozen P0 encoders with 1–30% of the labelled jets: learning-rate and regularisation checks at 3%, then the label-fraction scan.'
+  - layout: plots
+    title: 'Learning-rate check at 3% of the labels'
+    subtitle: 'Best validation cross-entropy of each run (one seed) against the learning rate of the head; fine-tuning trains its pretrained parts at lr / 10.'
+    plots: [label_scan/lr_check/best_val_ce_vs_lr.png]
+    models: [lr_sc, lr_ft, lr_fr]
+  - layout: plots
+    title: 'Learning-rate check: cross-entropy per epoch'
+    subtitle: 'One panel per method, one run per learning rate: validation solid, training dashed; lighter = lower learning rate.'
+    plots: [label_scan/lr_check/ce_per_epoch.png]
+    models: [lr_sc, lr_ft, lr_fr]
+  - layout: plots
+    title: 'Regularisation check at 3% of the labels'
+    subtitle: 'Best validation cross-entropy per setting, each method at its best learning rate (one seed). None = the best run of the learning-rate check.'
+    plots: [label_scan/reg_check/best_val_ce_vs_regularisation.png]
+    models: [reg_sc, reg_ft, reg_fr]
+  - layout: plots
+    title: 'Regularisation check: cross-entropy per epoch'
+    subtitle: 'One panel per method, one run per setting: validation solid, training dashed; lighter to darker: none, weight decay, dropout, both.'
+    plots: [label_scan/reg_check/ce_per_epoch.png]
+    models: [reg_sc, reg_ft, reg_fr]
+  - layout: plots
+    title: 'Label-fraction scan: best validation cross-entropy'
+    subtitle: 'Every run (small) and mean ± std per fraction (large). 1–30%: 3 seeds each, the pretrained methods from P0 seed 42; 100%: the final runs (4 each).'
+    plots: [label_scan/learning_curve/best_val_ce_vs_labelled_jets.png]
+    models: [scan_sc, scan_ft, scan_fr]
+  - layout: plots
+    title: 'Label-fraction scan: cross-entropy per epoch'
+    subtitle: 'One panel per method, every run: validation solid, training dashed; lighter = fewer labelled jets.'
+    plots: [label_scan/learning_curve/ce_per_epoch.png]
+    models: [scan_sc, scan_ft, scan_fr]
+
+  # ---- Backup: the test-set details of the ROC runs ----
+  - layout: section
+    title: 'Backup: test-set details'
+    subtitle: 'For the runs of the ROC slides (one per method): rejection and b-efficiency per pT bin at the inclusive 80% b-efficiency working point, and the distributions of the b-tagging discriminant D_b.'
+  # CE only, fixed fractions
+  - layout: plots
+    title: 'CE only, fixed fractions: c and light rejection vs pT'
+    subtitle: 'Per pT bin at the inclusive 80% working point, f_c = 0.2, f_τ = 0.01; ratio to from scratch.'
+    plots: [arm_comparison/roc_test_nominal_noref/rej_vs_pt_c.png, arm_comparison/roc_test_nominal_noref/rej_vs_pt_u.png]
+    models: [roc_sc, roc_ft_p0, roc_fr_p0]
+  - layout: plots
+    title: 'CE only, fixed fractions: τ rejection and b-efficiency vs pT'
+    subtitle: 'Per pT bin at the inclusive 80% working point, f_c = 0.2, f_τ = 0.01; ratio to from scratch.'
+    plots: [arm_comparison/roc_test_nominal_noref/rej_vs_pt_tau.png, arm_comparison/roc_test_nominal_noref/sig_eff_vs_pt.png]
+    models: [roc_sc, roc_ft_p0, roc_fr_p0]
+  - layout: plots
+    title: 'CE only, fixed fractions: c and light rejection vs pT, against GN2v01'
+    subtitle: 'The same with GN2v01; ratio to GN2v01.'
+    plots: [arm_comparison/roc_test_nominal/rej_vs_pt_c.png, arm_comparison/roc_test_nominal/rej_vs_pt_u.png]
+    models: [roc_sc, roc_ft_p0, roc_fr_p0]
+  - layout: plots
+    title: 'CE only, fixed fractions: τ rejection and b-efficiency vs pT, against GN2v01'
+    subtitle: 'The same with GN2v01; ratio to GN2v01.'
+    plots: [arm_comparison/roc_test_nominal/rej_vs_pt_tau.png, arm_comparison/roc_test_nominal/sig_eff_vs_pt.png]
+    models: [roc_sc, roc_ft_p0, roc_fr_p0]
+  - layout: plots
+    title: 'CE only, fixed fractions: discriminant of the b-jets'
+    subtitle: 'Left: D_b of the b-jets for every model; right: GN2v01, all flavours.'
+    plots: [arm_comparison/roc_test_nominal/disc_signal.png, arm_comparison/roc_test_nominal/disc_gn2v01.png]
+    models: [roc_sc, roc_ft_p0, roc_fr_p0]
+  - layout: plots
+    title: 'CE only, fixed fractions: discriminant per flavour'
+    subtitle: 'D_b of b-, c-, light- and τ-jets: from scratch (left), fine-tuned (right).'
+    plots: [arm_comparison/roc_test_nominal/disc_from_scratch.png, arm_comparison/roc_test_nominal/disc_fine_tuned_p0.png]
+    models: [roc_sc, roc_ft_p0]
+  - layout: plots
+    title: 'CE only, fixed fractions: discriminant per flavour, frozen encoders'
+    subtitle: 'D_b of b-, c-, light- and τ-jets.'
+    plots: [arm_comparison/roc_test_nominal/disc_frozen_encoders_p0.png]
+    models: [roc_fr_p0]
+  # CE only, optimised fractions
+  - layout: plots
+    title: 'CE only, optimised fractions: c and light rejection vs pT'
+    subtitle: 'Per pT bin at the inclusive 80% working point, each model at its own (f_c, f_τ); ratio to from scratch.'
+    plots: [arm_comparison/roc_test_optimal_noref/rej_vs_pt_c.png, arm_comparison/roc_test_optimal_noref/rej_vs_pt_u.png]
+    models: [roc_sc, roc_ft_p0, roc_fr_p0]
+  - layout: plots
+    title: 'CE only, optimised fractions: τ rejection and b-efficiency vs pT'
+    subtitle: 'Per pT bin at the inclusive 80% working point, each model at its own (f_c, f_τ); ratio to from scratch.'
+    plots: [arm_comparison/roc_test_optimal_noref/rej_vs_pt_tau.png, arm_comparison/roc_test_optimal_noref/sig_eff_vs_pt.png]
+    models: [roc_sc, roc_ft_p0, roc_fr_p0]
+  - layout: plots
+    title: 'CE only, optimised fractions: c and light rejection vs pT, against GN2v01'
+    subtitle: 'The same with GN2v01 (f_c = 0.2, f_τ = 0.01); ratio to GN2v01.'
+    plots: [arm_comparison/roc_test_optimal/rej_vs_pt_c.png, arm_comparison/roc_test_optimal/rej_vs_pt_u.png]
+    models: [roc_sc, roc_ft_p0, roc_fr_p0]
+  - layout: plots
+    title: 'CE only, optimised fractions: τ rejection and b-efficiency vs pT, against GN2v01'
+    subtitle: 'The same with GN2v01 (f_c = 0.2, f_τ = 0.01); ratio to GN2v01.'
+    plots: [arm_comparison/roc_test_optimal/rej_vs_pt_tau.png, arm_comparison/roc_test_optimal/sig_eff_vs_pt.png]
+    models: [roc_sc, roc_ft_p0, roc_fr_p0]
+  - layout: plots
+    title: 'CE only, optimised fractions: discriminant of the b-jets'
+    subtitle: 'Left: D_b of the b-jets for every model, each at its own fractions; right: GN2v01, all flavours.'
+    plots: [arm_comparison/roc_test_optimal/disc_signal.png, arm_comparison/roc_test_optimal/disc_gn2v01_f_c_0_2_f_tau_0_01.png]
+    models: [roc_sc, roc_ft_p0, roc_fr_p0]
+  - layout: plots
+    title: 'CE only, optimised fractions: discriminant per flavour'
+    subtitle: 'D_b of b-, c-, light- and τ-jets: from scratch (left), fine-tuned (right), each at its own fractions.'
+    plots: [arm_comparison/roc_test_optimal/disc_from_scratch_f_c_0_048_f_tau_0_032.png, arm_comparison/roc_test_optimal/disc_fine_tuned_p0_f_c_0_024_f_tau_0_048.png]
+    models: [roc_sc, roc_ft_p0]
+  - layout: plots
+    title: 'CE only, optimised fractions: discriminant per flavour, frozen encoders'
+    subtitle: 'D_b of b-, c-, light- and τ-jets at the closest point to the light and τ floors (f_c = 0).'
+    plots: [arm_comparison/roc_test_optimal/disc_frozen_encoders_p0_f_c_0_000_f_tau_0_058.png]
+    models: [roc_fr_p0]
+  # CE + JC, fixed fractions
+  - layout: plots
+    title: 'CE + JC, fixed fractions: c and light rejection vs pT'
+    subtitle: 'Per pT bin at the inclusive 80% working point, f_c = 0.2, f_τ = 0.01; ratio to from scratch + JC.'
+    plots: [arm_comparison_p1/roc_test_nominal_noref/rej_vs_pt_c.png, arm_comparison_p1/roc_test_nominal_noref/rej_vs_pt_u.png]
+    models: [roc_scjc, roc_ftjc_p1, roc_frjc_p1]
+  - layout: plots
+    title: 'CE + JC, fixed fractions: τ rejection and b-efficiency vs pT'
+    subtitle: 'Per pT bin at the inclusive 80% working point, f_c = 0.2, f_τ = 0.01; ratio to from scratch + JC.'
+    plots: [arm_comparison_p1/roc_test_nominal_noref/rej_vs_pt_tau.png, arm_comparison_p1/roc_test_nominal_noref/sig_eff_vs_pt.png]
+    models: [roc_scjc, roc_ftjc_p1, roc_frjc_p1]
+  - layout: plots
+    title: 'CE + JC, fixed fractions: c and light rejection vs pT, against GN2v01'
+    subtitle: 'The same with GN2v01; ratio to GN2v01.'
+    plots: [arm_comparison_p1/roc_test_nominal/rej_vs_pt_c.png, arm_comparison_p1/roc_test_nominal/rej_vs_pt_u.png]
+    models: [roc_scjc, roc_ftjc_p1, roc_frjc_p1]
+  - layout: plots
+    title: 'CE + JC, fixed fractions: τ rejection and b-efficiency vs pT, against GN2v01'
+    subtitle: 'The same with GN2v01; ratio to GN2v01.'
+    plots: [arm_comparison_p1/roc_test_nominal/rej_vs_pt_tau.png, arm_comparison_p1/roc_test_nominal/sig_eff_vs_pt.png]
+    models: [roc_scjc, roc_ftjc_p1, roc_frjc_p1]
+  - layout: plots
+    title: 'CE + JC, fixed fractions: discriminant of the b-jets'
+    subtitle: 'Left: D_b of the b-jets for every model; right: GN2v01, all flavours.'
+    plots: [arm_comparison_p1/roc_test_nominal/disc_signal.png, arm_comparison_p1/roc_test_nominal/disc_gn2v01.png]
+    models: [roc_scjc, roc_ftjc_p1, roc_frjc_p1]
+  - layout: plots
+    title: 'CE + JC, fixed fractions: discriminant per flavour'
+    subtitle: 'D_b of b-, c-, light- and τ-jets: from scratch + JC (left), fine-tuned (P1) + JC (right).'
+    plots: [arm_comparison_p1/roc_test_nominal/disc_from_scratch_jc.png, arm_comparison_p1/roc_test_nominal/disc_fine_tuned_p1_jc.png]
+    models: [roc_scjc, roc_ftjc_p1]
+  - layout: plots
+    title: 'CE + JC, fixed fractions: discriminant per flavour, frozen encoders'
+    subtitle: 'D_b of b-, c-, light- and τ-jets.'
+    plots: [arm_comparison_p1/roc_test_nominal/disc_frozen_encoders_p1_jc.png]
+    models: [roc_frjc_p1]
+  # CE + JC, optimised fractions
+  - layout: plots
+    title: 'CE + JC, optimised fractions: c and light rejection vs pT'
+    subtitle: 'Per pT bin at the inclusive 80% working point, each model at its own (f_c, f_τ); ratio to from scratch + JC.'
+    plots: [arm_comparison_p1/roc_test_optimal_noref/rej_vs_pt_c.png, arm_comparison_p1/roc_test_optimal_noref/rej_vs_pt_u.png]
+    models: [roc_scjc, roc_ftjc_p1, roc_frjc_p1]
+  - layout: plots
+    title: 'CE + JC, optimised fractions: τ rejection and b-efficiency vs pT'
+    subtitle: 'Per pT bin at the inclusive 80% working point, each model at its own (f_c, f_τ); ratio to from scratch + JC.'
+    plots: [arm_comparison_p1/roc_test_optimal_noref/rej_vs_pt_tau.png, arm_comparison_p1/roc_test_optimal_noref/sig_eff_vs_pt.png]
+    models: [roc_scjc, roc_ftjc_p1, roc_frjc_p1]
+  - layout: plots
+    title: 'CE + JC, optimised fractions: c and light rejection vs pT, against GN2v01'
+    subtitle: 'The same with GN2v01 (f_c = 0.2, f_τ = 0.01); ratio to GN2v01.'
+    plots: [arm_comparison_p1/roc_test_optimal/rej_vs_pt_c.png, arm_comparison_p1/roc_test_optimal/rej_vs_pt_u.png]
+    models: [roc_scjc, roc_ftjc_p1, roc_frjc_p1]
+  - layout: plots
+    title: 'CE + JC, optimised fractions: τ rejection and b-efficiency vs pT, against GN2v01'
+    subtitle: 'The same with GN2v01 (f_c = 0.2, f_τ = 0.01); ratio to GN2v01.'
+    plots: [arm_comparison_p1/roc_test_optimal/rej_vs_pt_tau.png, arm_comparison_p1/roc_test_optimal/sig_eff_vs_pt.png]
+    models: [roc_scjc, roc_ftjc_p1, roc_frjc_p1]
+  - layout: plots
+    title: 'CE + JC, optimised fractions: discriminant of the b-jets'
+    subtitle: 'Left: D_b of the b-jets for every model, each at its own fractions; right: GN2v01, all flavours.'
+    plots: [arm_comparison_p1/roc_test_optimal/disc_signal.png, arm_comparison_p1/roc_test_optimal/disc_gn2v01_f_c_0_2_f_tau_0_01.png]
+    models: [roc_scjc, roc_ftjc_p1, roc_frjc_p1]
+  - layout: plots
+    title: 'CE + JC, optimised fractions: discriminant per flavour'
+    subtitle: 'D_b of b-, c-, light- and τ-jets: from scratch + JC (left), fine-tuned (P1) + JC (right), each at its own fractions.'
+    plots: [arm_comparison_p1/roc_test_optimal/disc_from_scratch_jc_f_c_0_044_f_tau_0_032.png, arm_comparison_p1/roc_test_optimal/disc_fine_tuned_p1_jc_f_c_0_030_f_tau_0_054.png]
+    models: [roc_scjc, roc_ftjc_p1]
+  - layout: plots
+    title: 'CE + JC, optimised fractions: discriminant per flavour, frozen encoders'
+    subtitle: 'D_b of b-, c-, light- and τ-jets at its own fractions.'
+    plots: [arm_comparison_p1/roc_test_optimal/disc_frozen_encoders_p1_jc_f_c_0_012_f_tau_0_070.png]
+    models: [roc_frjc_p1]
