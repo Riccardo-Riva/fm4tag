@@ -5,7 +5,8 @@ Every completed run under ``method_scan.stages`` is put in an arm from its own .
 ``train_max_rows`` = the whole train split).  ``extra_runs`` adds runs from other stages (e.g. the full-data final
 runs as the 100% point of a label-fraction scan).  With ``x_categories`` instead of ``x_key`` the x axis is
 categorical (e.g. regularisation settings): a run takes the first category whose ``match`` (config key -> value)
-its config satisfies, and runs that match none are left out.  Two figures:
+its config satisfies, and runs that match none are left out.  ``ticks_at_x`` puts one tick per x value of the runs
+(``texts.x_tick``; ``x_ref`` adds {r} = x / x_ref to the texts, e.g. the fraction of the labels).  Two figures:
 
   best_vs_x   best val/head/loss_ce of every run (small markers) and the arm's mean ± sample std per x value
               (large markers, joined by a line), one colour per arm
@@ -36,6 +37,7 @@ from omegaconf import OmegaConf
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt  # noqa: E402 -- after use()
 from matplotlib.lines import Line2D  # noqa: E402
+from matplotlib.ticker import NullLocator  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).parent))
 import plot_arm_epochs as pae  # noqa: E402 -- run config + arm classification
@@ -54,11 +56,12 @@ def category(cfg, categories: list[dict]) -> int | None:
     return None
 
 
-def x_text(ac: dict, x: float) -> str:
-    """Legend / tick text of one x value."""
+def x_text(ac: dict, x: float, key: str = 'x_value') -> str:
+    """Legend (``x_value``) or tick (``x_tick``) text of one x value: {x}, and {r} = x / ``x_ref`` when set."""
     if ac.get('x_categories'):
         return ac['texts']['x_category'][ac['x_categories'][int(x)]['key']]
-    return ac['texts']['x_value'].format(x=x)
+    ref = ac.get('x_ref')
+    return ac['texts'][key].format(x=x, r=x / float(ref) if ref else None)
 
 
 def select(ac: dict) -> pd.DataFrame:
@@ -147,6 +150,11 @@ def plot_best(runs: pd.DataFrame, ac: dict, out_path: Path) -> None:
         ticks = range(len(ac['x_categories']))
         ax.set_xticks(ticks, [x_text(ac, x) for x in ticks])
         ax.set_xlim(-0.5, len(ac['x_categories']) - 0.5)
+    elif ac.get('ticks_at_x'):
+        # One tick per x value of the runs, written with texts.x_tick.
+        xs = sorted(runs['x'].unique())
+        ax.set_xticks(xs, [x_text(ac, x, 'x_tick') for x in xs])
+        ax.xaxis.set_minor_locator(NullLocator())
     ax.set_xlabel(texts['xlabel'])
     ax.set_ylabel(texts['ylabel_best'])
     if ac.get('ylim_best'):
