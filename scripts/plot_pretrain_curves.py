@@ -12,6 +12,10 @@ For each run of ``pretrain_curves.runs`` and each entry of ``pretrain_curves.fig
                embedding on a twin right axis.  An embedding listed in ``trained_if`` is drawn only when that loss
                weight is > 0: P0 never trains the aggregator, so its metrics there describe random weights.
 
+With ``best_marker`` set, a star marks the lowest validation loss (the total) and, at that same epoch, every other
+validation curve of the figure: the terms, and the embedding metric on the right axis (which need not be at their
+own extreme there).
+
 A figure entry may override any top-level style key (figsize, marker, linestyles, ylim_left, ylim_right, legend).
 Every word on the figures comes from ``pretrain_curves.texts``; a missing key is an error, and nothing in this file
 puts words on a figure.
@@ -101,24 +105,55 @@ def plot_curve(ax, s, st: dict, **kwargs) -> list:
     )
 
 
+def best_epoch(csv_path: Path, st: dict) -> tuple[int, float] | None:
+    """Epoch (as logged, from 0) and value of the lowest validation loss; None without ``best_marker``."""
+    if not st.get('best_marker'):
+        return None
+    val = pvc.read_metric(csv_path, st['loss_metrics']['val'])
+    best = val.loc[val['value'].idxmin()]
+    return int(best['epoch']), float(best['value'])
+
+
+def value_at(s, epoch: int) -> float | None:
+    row = s.loc[s['epoch'] == epoch, 'value']
+    return float(row.iloc[0]) if len(row) else None
+
+
+def star_style(color: str, st: dict) -> dict:
+    m = st['best_marker']
+    return {
+        'linestyle': 'none',
+        'marker': m['marker'],
+        'markersize': float(m['size']),
+        'color': color,
+        'markeredgecolor': m['edge'],
+        'markeredgewidth': float(m['edge_width']),
+    }
+
+
+def star(ax, epoch: int, value: float | None, color: str, st: dict) -> None:
+    """The best-epoch star on one curve; nothing when the curve has no value at that epoch."""
+    if value is not None:
+        x = epoch + int(st['epoch_offset'])
+        ax.plot([x], [value], zorder=6, **star_style(color, st))
+
+
 def plot_loss_terms(
     csv_path: Path, meta: dict, st: dict, texts: dict, ax
 ) -> list[Line2D]:
     """Total and terms on ``ax``; returns the legend handles (terms by colour, splits by line style)."""
     colors, styles, ink = st['colors'], st['linestyles'], st['ink']
     terms = [e for e in st['embeddings'] if term_weight(e, meta, st) > 0]
+    best = best_epoch(csv_path, st)
     for split in SPLITS:
         check_total(csv_path, split, terms, meta, st)
         curves = [('total', st['loss_metrics'][split])]
         curves += [(e, st['term_metrics'][split].format(embedding=e)) for e in terms]
         for name, column in curves:
-            plot_curve(
-                ax,
-                pvc.read_metric(csv_path, column),
-                st,
-                color=colors[name],
-                linestyle=styles[split],
-            )
+            s = pvc.read_metric(csv_path, column)
+            plot_curve(ax, s, st, color=colors[name], linestyle=styles[split])
+            if best and split == 'val':
+                star(ax, best[0], value_at(s, best[0]), colors[name], st)
     ax.set_ylabel(texts['ylabel'])
 
     formula = texts['formula_join'].join(
@@ -144,6 +179,10 @@ def plot_loss_terms(
         Line2D([], [], color=ink, ls=styles[s], lw=width, label=texts[s])
         for s in SPLITS
     ]
+    if best:
+        epoch = best[0] + int(st['epoch_offset'])
+        label = texts['best'].format(best=best[1], epoch=epoch)
+        handles.append(Line2D([], [], label=label, **star_style(ink, st)))
     return handles
 
 
@@ -153,12 +192,15 @@ def plot_loss_and_metric(
     """Losses on ``ax``, ``metric`` of every trained embedding on a twin right axis; returns the handles."""
     colors, styles = st['colors'], st['linestyles']
     right = ax.twinx()
+    best = best_epoch(csv_path, st)
     handles = []
     for split in SPLITS:
         s = pvc.read_metric(csv_path, st['loss_metrics'][split])
         handles += plot_curve(
             ax, s, st, color=colors[split], linestyle=styles[split], label=texts[split]
         )
+        if best and split == 'val':
+            star(ax, best[0], best[1], colors['val'], st)
     for emb in st['embeddings']:
         if not is_trained(emb, meta, st):
             continue
@@ -168,6 +210,15 @@ def plot_loss_and_metric(
         label = texts['embedding'][emb].format(dim=meta['dims'][emb])
         handles += plot_curve(
             right, s, st, color=colors[emb], linestyle=styles['right'], label=label
+        )
+        if best:
+            star(right, best[0], value_at(s, best[0]), colors[emb], st)
+    if best:
+        epoch = best[0] + int(st['epoch_offset'])
+        label = texts['best'].format(best=best[1], epoch=epoch)
+        handles.append(Line2D([], [], label=label, **star_style(colors['val'], st)))
+        handles.append(
+            Line2D([], [], label=texts['best_metric'], **star_style(st['ink'], st))
         )
     ax.set_ylabel(texts['ylabel_left'])
     right.set_ylabel(texts['ylabel_right'])

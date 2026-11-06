@@ -63,6 +63,9 @@ pretrain_curves:
     aggregator: '#8c564b'
   linestyles: {train: '-', val: '-', right: '--'}
   ink: '#333333'
+  # A star on the lowest validation loss (the total) and, at that epoch, on every other validation curve: the
+  # terms, and the embedding metric (not necessarily at its own extreme there).  null = no stars.
+  best_marker: {marker: '*', size: 13, edge: white, edge_width: 0.6}
   # ylim_left: [5.4, 7.2]
   # ylim_right: [0, 260]
   legend: {loc: upper center, anchor: [0.5, -0.15], ncol: 3, fontsize: 9, frame: false}
@@ -77,6 +80,7 @@ pretrain_curves:
     xlabel: 'Epoch'
     loss_terms:
       title: '{run}: total loss and its terms'   # '' = no title
+      best: 'Lowest validation total: {best:.3f} (epoch {epoch}); its terms at that epoch'   # {best}, {epoch}
       ylabel: 'Contrastive loss'
       total: 'Total = {formula}'     # {formula} = the weighted sum, written with formula_term and formula_join
       formula_term: '{w:g}·{symbol}' # {w} = the term's weight in this run, {symbol} = symbol below
@@ -93,6 +97,8 @@ pretrain_curves:
       val: 'Validation'
     effective_rank:
       title: '{run}: loss and effective rank of the embeddings'
+      best: 'Lowest validation loss: {best:.3f} (epoch {epoch})'
+      best_metric: 'Effective rank at that epoch'
       ylabel_left: 'Contrastive loss (total)'
       ylabel_right: 'Effective rank (validation)'
       train: 'Training loss (epoch mean)'
@@ -103,6 +109,8 @@ pretrain_curves:
         aggregator: 'Effective rank: global jet embedding (of {dim})'
     uniformity:
       title: '{run}: loss and uniformity of the embeddings'
+      best: 'Lowest validation loss: {best:.3f} (epoch {epoch})'
+      best_metric: 'Uniformity at that epoch'
       ylabel_left: 'Contrastive loss (total)'
       ylabel_right: 'Uniformity (validation; lower = more uniform)'
       train: 'Training loss (epoch mean)'

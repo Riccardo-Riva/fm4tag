@@ -16,8 +16,10 @@ Figures, one line per run, coloured by arm:
   effective_rank    ``val/<embedding>/effective_rank``, one panel per embedding
   uniformity        ``val/<embedding>/uniformity``, one panel per embedding
 
-plus ``run_selection.csv`` (the runs of each arm, their seed, pretraining run and best validation CE).  Every
-word on the figures comes from ``arm_epochs.texts``; a missing key is an error.
+plus ``run_selection.csv`` (the runs of each arm, their seed, pretraining run and best validation CE).  With
+``best_marker`` set, a star marks each run's lowest validation CE (its evaluated checkpoint) and, at that same
+epoch, each of its embedding curves.  Every word on the figures comes from ``arm_epochs.texts``; a missing key is
+an error.
 
 Usage::
 
@@ -145,6 +147,18 @@ def arm_handles(ac: dict) -> list[Line2D]:
     ]
 
 
+def star_style(color: str, marker: dict) -> dict:
+    """The best-epoch star (``best_marker``: marker, size, edge colour and width)."""
+    return {
+        'linestyle': 'none',
+        'marker': marker['marker'],
+        'markersize': float(marker['size']),
+        'color': color,
+        'markeredgecolor': marker['edge'],
+        'markeredgewidth': float(marker['edge_width']),
+    }
+
+
 def plot_ce(
     runs: pd.DataFrame,
     ac: dict,
@@ -155,18 +169,27 @@ def plot_ce(
     """Training (dashed) and validation (solid) CE of every run, one panel."""
     cc, texts = ac['ce'], ac['texts']
     offset = int(ac['epoch_offset'])
+    marker = ac.get('best_marker')
     fig, ax = plt.subplots(figsize=tuple(cc['figsize']))
     for run in runs.itertuples():
         csv_path = pvc.find_metrics(Path(run.run_dir))
+        colour = ac['arms'][run.arm]['colour']
         for split in ('train', 'val'):
             s = pvc.read_metric(csv_path, cc[f'{split}_metric'])
             ax.plot(
                 s['epoch'] + offset,
                 s['value'],
-                color=ac['arms'][run.arm]['colour'],
+                color=colour,
                 linestyle=ac['linestyles'][split],
                 linewidth=float(ac['linewidth']),
                 alpha=float(ac['alpha']),
+            )
+        if marker:  # best_epoch already counts from epoch_offset
+            ax.plot(
+                [run.best_epoch],
+                [run.best_val_ce],
+                zorder=6,
+                **star_style(colour, marker),
             )
     split_handles = [
         Line2D(
@@ -179,6 +202,10 @@ def plot_ce(
         )
         for split in ('val', 'train')
     ]
+    if marker:
+        split_handles.append(
+            Line2D([], [], label=texts['ce']['best'], **star_style(ac['ink'], marker))
+        )
     ax.set_xlabel(texts['xlabel'])
     ax.set_ylabel(texts['ce']['ylabel'])
     if title:
@@ -205,20 +232,31 @@ def plot_embedding_metric(
     """``val/<embedding>/<metric>`` of every run, one panel per embedding."""
     texts, embeddings = ac['texts'], ac['embeddings']
     offset = int(ac['epoch_offset'])
+    marker = ac.get('best_marker')
     fig, axes = plt.subplots(
         1, len(embeddings), figsize=tuple(ac['embedding_figsize']), sharex=True
     )
     for run in runs.itertuples():
         csv_path = pvc.find_metrics(Path(run.run_dir))
+        colour = ac['arms'][run.arm]['colour']
         for ax, emb in zip(axes, embeddings):
             s = pvc.read_metric(csv_path, f'val/{emb}/{metric}')
             ax.plot(
                 s['epoch'] + offset,
                 s['value'],
-                color=ac['arms'][run.arm]['colour'],
+                color=colour,
                 linewidth=float(ac['linewidth']),
                 alpha=float(ac['alpha']),
             )
+            # The run's best validation CE epoch, which need not be an extreme of this curve.
+            at_best = s.loc[s['epoch'] + offset == run.best_epoch, 'value']
+            if marker and len(at_best):
+                ax.plot(
+                    [run.best_epoch],
+                    [float(at_best.iloc[0])],
+                    zorder=6,
+                    **star_style(colour, marker),
+                )
     for ax, emb in zip(axes, embeddings):
         ax.set_title(texts['panel'][emb], fontsize=10)
         ax.set_xlabel(texts['xlabel'])
@@ -226,11 +264,16 @@ def plot_embedding_metric(
     axes[0].set_ylabel(texts[metric]['ylabel'])
     if texts[metric]['title']:
         fig.suptitle(texts[metric]['title'], fontsize=11)
+    handles = arm_handles(ac)
+    if marker:
+        handles.append(
+            Line2D([], [], label=texts['best_epoch'], **star_style(ac['ink'], marker))
+        )
     fig.legend(
-        handles=arm_handles(ac),
+        handles=handles,
         loc='lower center',
         bbox_to_anchor=(0.5, -0.06),
-        ncol=len(ac['arms']),
+        ncol=len(handles),
         frameon=False,
         fontsize=9,
     )

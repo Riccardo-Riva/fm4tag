@@ -11,7 +11,7 @@ its config satisfies, and runs that match none are left out.  ``ticks_at_x`` put
   best_vs_x   best val/head/loss_ce of every run (small markers) and the arm's mean ± sample std per x value
               (large markers, joined by a line), one colour per arm
   curves      one panel per arm: validation CE (solid) and training CE (dashed) per epoch of every run, shaded
-              light to dark by x value
+              light to dark by x value; with ``best_marker``, a star on each run's lowest validation CE
 
 plus ``run_selection.csv``.  Every word on the figures comes from ``method_scan.texts``; a missing key is an error.
 
@@ -182,11 +182,23 @@ def plot_best(runs: pd.DataFrame, ac: dict, out_path: Path) -> None:
 
 def plot_curves(runs: pd.DataFrame, ac: dict, out_path: Path) -> None:
     texts, offset = ac['texts'], int(ac['epoch_offset'])
+    marker = ac.get('best_marker')  # a star on each run's lowest validation CE
     arms = [k for k in ac['arms'] if k in set(runs['arm'])]
     xs = sorted(runs['x'].unique())
     fig, axes = plt.subplots(
         1, len(arms), figsize=tuple(ac['curves_figsize']), sharey=True, squeeze=False
     )
+
+    def star(colour):
+        return {
+            'linestyle': 'none',
+            'marker': marker['marker'],
+            'markersize': float(marker['size']),
+            'color': colour,
+            'markeredgecolor': marker['edge'],
+            'markeredgewidth': float(marker['edge_width']),
+        }
+
     for ax, key in zip(axes[0], arms):
         colours = dict(zip(xs, shades(ac['arms'][key]['colour'], len(xs))))
         for run in runs[runs['arm'] == key].itertuples():
@@ -200,6 +212,13 @@ def plot_curves(runs: pd.DataFrame, ac: dict, out_path: Path) -> None:
                     lw=1.2,
                     color=colours[run.x],
                 )
+            if marker:  # best_epoch already counts from epoch_offset
+                ax.plot(
+                    [run.best_epoch],
+                    [run.best_val_ce],
+                    zorder=6,
+                    **star(colours[run.x]),
+                )
         ax.set_title(texts['arm'][key], fontsize=10)
         ax.set_xlabel(texts['xlabel_curves'])
         ax.grid(True, alpha=0.3)
@@ -212,6 +231,8 @@ def plot_curves(runs: pd.DataFrame, ac: dict, out_path: Path) -> None:
             Line2D([], [], color=ac['ink'], ls='-', lw=1.2, label=texts['val']),
             Line2D([], [], color=ac['ink'], ls='--', lw=1.2, label=texts['train']),
         ]
+        if marker:
+            handles.append(Line2D([], [], label=texts['best'], **star(ac['ink'])))
         ax.legend(handles=handles, frameon=False, fontsize=8, loc=ac['legend_loc'])
     axes[0][0].set_ylabel(texts['ylabel_curves'])
     if ac.get('ylim_curves'):

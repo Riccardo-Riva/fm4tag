@@ -36,6 +36,7 @@ method_scan:
   # ylim_curves: [0.5, 1.5]
   legend_loc: best
   ink: '#333333'
+  best_marker: {marker: '*', size: 10, edge: white, edge_width: 0.5}   # on each run's lowest validation CE; null = none
 
   # ---- ALL the wording of the figures lives here --------------------------------------------------------------
   texts:
@@ -54,3 +55,4 @@ method_scan:
     ylabel_curves: 'Cross-entropy'
     val: 'Validation'
     train: 'Training (epoch mean)'
+    best: 'Lowest validation CE of each run'   # legend of the stars
