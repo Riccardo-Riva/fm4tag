@@ -1,0 +1,30 @@
+# From scratch + JC with a stabilised recipe: the control that the CE + JC group is missing.
+#
+# Why: from scratch + JC (the baseline of fine-tuned (P1) + JC and frozen (P1) + JC) has 3 healthy runs out of 8
+# (F_final, no clipping: 1 of 4; F_scjc_clip, clip 5.0: 2 of 4).  Without it, "pretrained from P1 + JC beats / loses
+# to from scratch + JC" cannot be said, and the gain of the P1 group cannot be split into pretraining and JC.
+#
+# What the 8 runs show (val CE, largest gradient norm of each 100-step window):
+#   * every run has one window with a norm of 35-56 in epoch 1 (random init, warmup) and then 2-5 in epochs 2-4;
+#   * a run collapses when a window with a norm of 27-66 comes back in epochs 2-5 (while the lr is still at its
+#     peak): the norm then stays at 20-450, the val CE jumps to 0.85-1.29 and never returns; the 3 healthy runs
+#     (424242 without clipping, 4242 and 42424 with clip 5.0) have norms of 1-5 in every epoch from 2 on;
+#   * the same JC loss on the same encoders was stable in the P1 pretraining (2 seeds, 30 epochs, lr 1e-3, batch
+#     12,288), which clips the global gradient norm at 1.0; the downstream runs clipped at 5.0 or not at all.
+#
+# Three recipes, 4 seeds each (the seeds of the from-scratch CE-only runs, so the runs pair up), everything else as
+# in F_final's scjc cell (JC weight 0.3, batch 14,336, lr 8e-4, at most 40 epochs, early stopping on val CE):
+#   scjc_clip1       clip the gradient norm at 1.0, as in pretraining (the primary candidate: the smallest change)
+#   scjc_clip1_wu10  clip 1.0 + a 10% warmup (4 epochs instead of 0.8), so epochs 2-5 run at a lower lr
+#   scjc_clip1_lr4   clip 1.0 + half the peak lr (4e-4)
+# Decision rule, before looking: scjc_clip1 with 0 of 4 collapsed becomes the from-scratch + JC baseline.  If it
+# collapses, the stable one of the other two does (and the recipe difference is stated on the plots); if none is
+# stable, from scratch + JC stays "unstable" with this evidence.  A run counts as collapsed when its val CE rises
+# above 0.85 after its best epoch has passed within the first 6 epochs, listed by name.
+#
+#   ENCODERS=rowcol_concat_v0 CHUNK=512 SEEDS='4242 42424 424242 4242424' PACKS=6 MEM_PER_GPU_GB=22 \
+#   MAX_EPOCHS=40 EST_SECONDS_PER_EPOCH=2500 WALLTIME=2-00:00:00 \
+#   CELLS=scripts/configs/campaign/F_scjc_stab.cells bash slurm/ssl_pack.sh
+scjc_clip1  arm=scratch finetune.loss_weights.jet_contrastive=0.3 encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=14336 optimizer.lr=8e-4 +trainer.gradient_clip_val=1.0 @est=2500
+scjc_clip1_wu10  arm=scratch finetune.loss_weights.jet_contrastive=0.3 encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=14336 optimizer.lr=8e-4 +trainer.gradient_clip_val=1.0 finetune.warmup_frac=0.1 @est=2500
+scjc_clip1_lr4  arm=scratch finetune.loss_weights.jet_contrastive=0.3 encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=14336 optimizer.lr=4e-4 +trainer.gradient_clip_val=1.0 @est=2500
