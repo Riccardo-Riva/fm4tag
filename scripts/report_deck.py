@@ -59,8 +59,6 @@ PAD = 0.12  # inside the info box
 TEXT_MARGIN = 0.02  # python-pptx text frame margin set by scs.Deck.text
 LINE = 1.22  # line height / font size: PowerPoint's single spacing, with a margin
 CELL_PAD_X, CELL_PAD_Y = 0.08, 0.04
-# Characters that belong to a value (numbers like 1.2e-3 or 18,600,000): a merged list of values never splits them.
-WORD_CHARS = set('0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.,-+%×')
 
 
 # ── Text measurement ─────────────────────────────────────────────────────────
@@ -209,7 +207,7 @@ class ReportDeck(scs.Deck):
             heights.append(max(hs))
         return cols, spans, heights
 
-    def spec_table(self, slide, box, header, rows, size) -> float:
+    def spec_table(self, slide, box, header, rows, size, header_fills=None) -> float:
         """A table whose rows grow with their text; equal neighbouring cells after the label column are merged."""
         x, y, w, _ = box
         cols, spans, heights = self.table_layout(header, rows, w, size)
@@ -239,6 +237,8 @@ class ReportDeck(scs.Deck):
                 fill, ink, bold = '#ffffff', self.s['ink'], a == 0 and i > 0
                 if i == 0:
                     fill, ink, bold = self.s['header_fill'], '#ffffff', True
+                    if header_fills and a > 0:  # a column of a model: its colour
+                        fill = header_fills[a - 1]
                 elif i % 2 == 0:
                     fill = '#f7f7f5'
                 cell.fill.solid()
@@ -384,6 +384,11 @@ def run_fields(run_dir: Path, texts: dict, cache: dict) -> dict:
         )
         f['start'] = texts['start'][meta['pretraining'] or 'none'].format(seed=pre_seed)
         f['trained'] = texts['trained'][meta['encoder']].format(**f)
+        f['lr_text'] = (  # fine-tuning: the pretrained parts have their own (lower) lr
+            texts['lr_pretrained'].format(lr=f['lr_s'], backbone=f['backbone_lr_s'])
+            if meta['encoder'] == 'finetune'
+            else f['lr_s']
+        )
         data_path = sel('train_dataset_path')
     full = h5_rows(data_path, cfg.global_object, cache)
     max_rows = sel('datamodule.train_max_rows')
@@ -399,25 +404,37 @@ def run_fields(run_dir: Path, texts: dict, cache: dict) -> dict:
 def merge(values: list[str], sep: str) -> str:
     """One text for several values of a setting: the shared start and end once, the differing middles joined.
 
-    ``['lr 3e-4', 'lr 6e-4']`` -> ``'lr 3e-4 / 6e-4'``; a value (number) is never split.
+    ``['lr 3e-4', 'lr 6e-4']`` -> ``'lr 3e-4 / 6e-4'``.  The shared start and end are cut at word boundaries, so
+    a value (``1.2e-3``, ``28,672``) is never split; a punctuation mark every middle ends with (a comma) goes
+    after the joined values.
     """
     if len(set(values)) == 1:
         return values[0]
     pre = os.path.commonprefix(values)
-    while pre and pre[-1] in WORD_CHARS:
-        pre = pre[:-1]
+    pre = pre[: pre.rfind(' ') + 1]  # whole words only ('' without a space)
     rest = [v[len(pre) :] for v in values]
     suf = os.path.commonprefix([r[::-1] for r in rest])[::-1]
-    while suf and suf[0] in WORD_CHARS:
-        suf = suf[1:]
-    return pre + sep.join(r[: len(r) - len(suf)] for r in rest) + suf
+    suf = suf[suf.find(' ') :] if ' ' in suf else ''
+    mids = [r[: len(r) - len(suf)] for r in rest]
+    trail = ''
+    while all(m and m[-1] in ',;:' for m in mids) and len({m[-1] for m in mids}) == 1:
+        trail = mids[0][-1] + trail
+        mids = [m[:-1] for m in mids]
+    return pre + sep.join(mids) + trail + suf
 
 
 class Model:
-    """One model of the YAML: its runs, and the text of every info item over them."""
+    """One model of the YAML: its runs, grouped into configurations, and the text of every info item.
+
+    A configuration is a set of runs whose non-``per_run`` info texts are equal (one learning rate, one label
+    fraction, ...); ``per_run`` items (seeds, the pretraining seed) are merged over the runs of a configuration.
+    ``order_by`` (run fields) orders the configurations, ``config_labels`` names them in that order (the labels
+    of the plot's x axis), and ``short`` is the model's name inside a table cell.
+    """
 
     def __init__(self, key: str, spec: dict, info: dict, cache: dict):
         self.key, self.label, self.colour = key, spec['label'], spec['colour']
+        self.short = spec.get('short', self.label)
         dirs = [Path(d) for p in spec['runs'] for d in sorted(glob.glob(p))]
         if not dirs:
             raise FileNotFoundError(f'model {key}: no run matches {spec["runs"]}')
@@ -427,9 +444,15 @@ class Model:
             raise ValueError(f'model {key}: runs of several phases {phases}')
         self.phase = phases.pop()
         self.items = info['items'][self.phase]
-        self.values = self._values(spec.get('order_by') or [], info)
+        self.configs = self._configs(spec.get('order_by') or [], info['values_sep'])
+        self.config_labels = spec.get('config_labels')
+        if self.config_labels and len(self.config_labels) != len(self.configs):
+            raise ValueError(
+                f'model {key}: {len(self.config_labels)} config_labels for {len(self.configs)} configurations'
+            )
+        self.values = self._values(info['values_sep'])
 
-    def _values(self, order_by: list[str], info: dict) -> dict[str, str]:
+    def _configs(self, order_by: list[str], sep: str) -> list[dict]:
         def text(item, run):
             if item.get('only_if') and not run.get(item['only_if']):
                 return None
@@ -437,71 +460,170 @@ class Model:
 
         texts = [{it['key']: text(it, run) for it in self.items} for run in self.runs]
         shared = [it['key'] for it in self.items if not it.get('per_run')]
-        configs: dict[tuple, int] = {}  # one entry per configuration: its first run
+        groups: dict[tuple, list[int]] = {}
         for i, t in enumerate(texts):
-            configs.setdefault(tuple(t[k] for k in shared), i)
-        order = list(configs.values())
+            groups.setdefault(tuple(t[k] for k in shared), []).append(i)
+        order = list(groups.values())
         if order_by:
-            order.sort(key=lambda i: tuple(self.runs[i][f] for f in order_by))
+            order.sort(key=lambda g: tuple(self.runs[g[0]][f] for f in order_by))
+        configs = []
+        for group in order:
+            config = {}
+            for it in self.items:
+                k = it['key']
+                vals = list(dict.fromkeys(texts[i][k] for i in group))
+                vals = [v for v in vals if v is not None]
+                if not vals:
+                    config[k] = None
+                elif it.get('per_run'):
+                    config[k] = merge(vals, sep)
+                else:
+                    config[k] = vals[0]
+            configs.append(config)
+        return configs
+
+    def _values(self, sep: str) -> dict[str, str]:
+        """One text per item over all configurations (the settings tables of single-configuration models)."""
         values = {}
         for it in self.items:
-            k = it['key']
-            if it.get('per_run'):
-                vals = list(dict.fromkeys(t[k] for t in texts if t[k] is not None))
-            else:
-                vals = [texts[i][k] for i in order]
-                if all(v is None for v in vals):
-                    continue
-                vals = [info['missing'] if v is None else v for v in vals]
+            vals = [c[it['key']] for c in self.configs if c[it['key']] is not None]
             if vals:
-                values[k] = merge(vals, info['values_sep'])
+                values[it['key']] = merge(vals, sep)
         return values
 
     def label_of(self, key: str) -> str:
         return next(it['label'] for it in self.items if it['key'] == key)
 
 
-def info_paragraphs(
-    models: list[Model], keys: list[str] | None, deck: ReportDeck
-) -> list:
-    """The info box: settings shared by every model once, then each model's own (model names in their colour)."""
-    info = deck.cfg['info']
-    sep, lsep = info['join'], info['label_sep']
+class Info:
+    """What a slide says about its models: shared settings as one paragraph, the rest as a table.
+
+    ``common`` is a list of paragraphs (runs of (text, options)), ``header`` / ``fills`` / ``rows`` the table (or
+    None): its columns are the models, or - when a model has several configurations - the configurations.
+    """
+
+    def __init__(self, common, header=None, fills=None, rows=None):
+        self.common, self.header, self.fills, self.rows = common, header, fills, rows
+
+
+def build_info(models: list[Model], keys: list[str] | None, deck: ReportDeck) -> Info:
+    """The info of a slide's models, restricted to ``keys`` when given (in the order of the models' items)."""
+    cfg, st = deck.cfg['info'], deck.s
     order = []
     for m in models:
         order += [it['key'] for it in m.items if it['key'] not in order]
     if keys:
         order = [k for k in order if k in keys]
+    order = [k for k in order if any(k in m.values for m in models)]
+    label = {k: next(m.label_of(k) for m in models if k in m.values) for k in order}
 
-    def phrase(m, k):
-        return f'{m.label_of(k)} {m.values[k]}'
-
-    common = []
-    if len(models) > 1:
-        common = [
-            k
-            for k in order
-            if all(k in m.values for m in models)
-            and len({m.values[k] for m in models}) == 1
-        ]
-    paragraphs = []
-    if common:
-        paragraphs.append(
-            [
-                (info['common_label'] + lsep, {'bold': True}),
-                (sep.join(phrase(models[0], k) for k in common), {}),
-            ]
-        )
-    for m in models:
-        own = [k for k in order if k in m.values and k not in common]
-        if own:
-            paragraphs.append(
-                [
-                    (m.label + lsep, {'bold': True, 'color': m.colour}),
-                    (sep.join(phrase(m, k) for k in own), {}),
-                ]
+    multi = [m for m in models if len(m.configs) > 1]
+    if multi:
+        n = len(multi[0].configs)
+        if any(len(m.configs) != n for m in multi):
+            raise ValueError('models with different numbers of configurations')
+        if not multi[0].config_labels:
+            raise ValueError(
+                f'model {multi[0].key}: several configurations, no config_labels'
             )
-    return paragraphs
+        header, fills = list(multi[0].config_labels), None
+        columns = [
+            [(m, m.configs[j if len(m.configs) > 1 else 0]) for m in models]
+            for j in range(n)
+        ]
+    else:
+        header, fills = [m.label for m in models], [m.colour for m in models]
+        columns = [[(m, m.configs[0])] for m in models]
+
+    def cell(k, column):
+        parts = [(m, c.get(k)) for m, c in column if c.get(k) is not None]
+        if not parts:
+            return None
+        if len({t for _, t in parts}) == 1:
+            return parts[0][1]
+        return ' · '.join(f'{m.short}: {t}' for m, t in parts)
+
+    cells = {k: [cell(k, col) for col in columns] for k in order}
+    cells = {k: v for k, v in cells.items() if any(t is not None for t in v)}
+    one_column = len(columns) == 1
+    common = [
+        k
+        for k, v in cells.items()
+        if one_column or (None not in v and len(set(v)) == 1)
+    ]
+
+    runs = []
+    if len(models) == 1:
+        runs.append(
+            (
+                models[0].label + cfg['common_sep'],
+                {'bold': True, 'color': models[0].colour},
+            )
+        )
+    else:
+        runs.append((cfg['common_label'] + cfg['common_sep'], {'bold': True}))
+    for i, k in enumerate(common):
+        if i:
+            runs.append((cfg['join'], {'color': st['muted']}))
+        runs.append(
+            (label[k] + cfg['label_sep'], {'bold': True, 'color': st['accent_ink']})
+        )
+        runs.append((cells[k][0], {}))
+    paragraphs = [runs] if common else []
+
+    rows = [
+        [label[k][:1].upper() + label[k][1:]]
+        + [t if t is not None else cfg['missing'] for t in v]
+        for k, v in cells.items()
+        if k not in common
+    ]
+    if not rows:
+        return Info(paragraphs)
+    return Info(
+        paragraphs, header=[cfg['table_corner']] + header, fills=fills, rows=rows
+    )
+
+
+def info_height(
+    info: Info, width: float, fs: tuple[float, float], deck: ReportDeck
+) -> float:
+    """Height of the info box of ``width``: text of ``fs[0]`` pt, table of ``fs[1]`` pt."""
+    inner = width - 2 * PAD
+    h = 2 * PAD
+    if info.common:
+        h += deck.text_height(info.common, inner, fs[0])
+    if info.rows:
+        h += (0.08 if info.common else 0.0) + sum(
+            deck.table_layout(info.header, info.rows, inner, fs[1])[2]
+        )
+    return h
+
+
+def draw_info(
+    deck: ReportDeck, slide, box, info: Info, fs: tuple[float, float]
+) -> None:
+    x, y, w, _ = box
+    deck.rect(slide, box, deck.cfg['info']['box_fill'], name='Model info')
+    cy = y + PAD
+    if info.common:
+        th = deck.text_height(info.common, w - 2 * PAD, fs[0])
+        deck.text(
+            slide,
+            (x + PAD, cy, w - 2 * PAD, th),
+            info.common,
+            size=fs[0],
+            space_after=0,
+        )
+        cy += th + 0.08
+    if info.rows:
+        deck.spec_table(
+            slide,
+            (x + PAD, cy, w - 2 * PAD, 0),
+            info.header,
+            info.rows,
+            fs[1],
+            info.fills,
+        )
 
 
 # ── Plot placement ───────────────────────────────────────────────────────────
@@ -625,39 +747,58 @@ def build_plots(deck, s, ctx):
     present = [p for p in paths if p.is_file()]
     sizes = [native_size(p) for p in present]
     models = [ctx['models'][k] for k in s.get('models') or []]
-    paragraphs = info_paragraphs(models, s.get('info_items'), deck) if models else []
-    info = deck.cfg['info']
-    size, space = float(info['size']), float(info['space_after'])
-    side_w = float(info['side_width'])
+    info = build_info(models, s.get('info_items'), deck) if models else None
+    cfg = deck.cfg['info']
 
-    layouts = []
-    if paragraphs:
-        h = (
-            deck.text_height(paragraphs, side_w - 2 * PAD, size, space_after=space)
-            + 2 * PAD
-        )
-        if h <= height:
-            plot_box = (MARGIN, top, BODY_W - side_w - GAP, height)
-            info_box = (MARGIN + BODY_W - side_w, top, side_w, h)
-            layouts.append(('side', *place_images(sizes, plot_box), info_box))
-        h = (
-            deck.text_height(paragraphs, BODY_W - 2 * PAD, size, space_after=space)
-            + 2 * PAD
-        )
-        if h <= height - 1.0:
-            plot_box = (MARGIN, top, BODY_W, height - h - GAP)
-            info_box = (MARGIN, BODY_BOTTOM - h, BODY_W, h)
-            layouts.append(('bottom', *place_images(sizes, plot_box), info_box))
-        if not layouts:
-            raise ValueError(
-                f'slide "{s["title"]}": the info does not fit; list fewer info_items'
+    # The layout that shows the plots largest: the info under them (full width) or beside them (one of the
+    # `side_widths`), at the largest font of `font_sizes` that still leaves the plots `min_plot_scale` of their
+    # size (else the layout with the largest plots over all fonts).
+    best = None
+    for fs in cfg['font_sizes']:
+        fs = (float(fs[0]), float(fs[1]))
+        cands = []
+        if info is None:
+            cands.append(
+                ('none', *place_images(sizes, (MARGIN, top, BODY_W, height)), None)
             )
-    else:
-        layouts.append(
-            ('none', *place_images(sizes, (MARGIN, top, BODY_W, height)), None)
+        else:
+            h = info_height(info, BODY_W, fs, deck)
+            if h <= height - 1.0:
+                box = (MARGIN, top, BODY_W, height - h - GAP)
+                cands.append(
+                    (
+                        'bottom',
+                        *place_images(sizes, box),
+                        (MARGIN, BODY_BOTTOM - h, BODY_W, h),
+                    )
+                )
+            for w in cfg['side_widths']:
+                h = info_height(info, float(w), fs, deck)
+                if h <= height:
+                    box = (MARGIN, top, BODY_W - float(w) - GAP, height)
+                    cands.append(
+                        (
+                            'side',
+                            *place_images(sizes, box),
+                            (MARGIN + BODY_W - float(w), top, float(w), h),
+                        )
+                    )
+        if not cands:
+            continue
+        pick = max(cands, key=lambda c: c[1])
+        if best is None or pick[1] > best[1][1]:
+            best = (fs, pick)
+        if pick[1] >= float(cfg['min_plot_scale']):
+            best = (fs, pick)
+            break
+    if best is None:
+        raise ValueError(
+            f'slide "{s["title"]}": the info fits nowhere; list fewer info_items'
         )
-    name, scale, boxes, info_box = max(layouts, key=lambda lay: lay[1])
-    print(f'  {deck.n:2d} {s["title"]}: {name}, plots at {scale:.0%} of their size')
+    fs, (name, scale, boxes, info_box) = best
+    print(
+        f'  {deck.n:2d} {s["title"]}: {name}, plots at {scale:.0%} of their size, info {fs[0]:g}/{fs[1]:g} pt'
+    )
 
     for path, box in zip(present, boxes):
         deck.image(slide, path, box)
@@ -670,15 +811,7 @@ def build_plots(deck, s, ctx):
             color=deck.s['muted'],
         )
     if info_box:
-        x, y, w, h = info_box
-        deck.rect(slide, info_box, info['box_fill'], name='Model info')
-        deck.text(
-            slide,
-            (x + PAD, y + PAD, w - 2 * PAD, h - 2 * PAD),
-            paragraphs,
-            size=size,
-            space_after=space,
-        )
+        draw_info(deck, slide, info_box, info, fs)
     deck.footer(slide)
 
 
