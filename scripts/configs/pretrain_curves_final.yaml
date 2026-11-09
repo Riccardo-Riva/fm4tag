@@ -65,7 +65,9 @@ pretrain_curves:
   ink: '#333333'
   # A star on the lowest validation loss (the total) and, at that epoch, on every other validation curve: the
   # terms, and the embedding metric (not necessarily at its own extreme there).  null = no stars.
-  best_marker: {marker: '*', size: 13, edge: white, edge_width: 0.6}
+  # size_metric: the stars on the right-axis (embedding) curves, larger than the loss star so that a loss star lying
+  # on one of them leaves a ring of the metric's colour.
+  best_marker: {marker: '*', size: 13, size_metric: 19, edge: white, edge_width: 0.6}
   # ylim_left: [5.4, 7.2]
   # ylim_right: [0, 260]
   legend: {loc: upper center, anchor: [0.5, -0.15], ncol: 3, fontsize: 9, frame: false}

@@ -119,23 +119,27 @@ def value_at(s, epoch: int) -> float | None:
     return float(row.iloc[0]) if len(row) else None
 
 
-def star_style(color: str, st: dict) -> dict:
+def star_style(color: str, st: dict, metric: bool = False) -> dict:
+    """Marker style of a star; ``metric`` (a right-axis curve) uses ``size_metric``, larger than the loss star's
+    ``size``, so a loss star lying on a metric star leaves a ring of the metric's colour."""
     m = st['best_marker']
     return {
         'linestyle': 'none',
         'marker': m['marker'],
-        'markersize': float(m['size']),
+        'markersize': float(m['size_metric'] if metric else m['size']),
         'color': color,
         'markeredgecolor': m['edge'],
         'markeredgewidth': float(m['edge_width']),
     }
 
 
-def star(ax, epoch: int, value: float | None, color: str, st: dict) -> None:
+def star(
+    ax, epoch: int, value: float | None, color: str, st: dict, metric: bool = False
+) -> None:
     """The best-epoch star on one curve; nothing when the curve has no value at that epoch."""
     if value is not None:
         x = epoch + int(st['epoch_offset'])
-        ax.plot([x], [value], zorder=6, **star_style(color, st))
+        ax.plot([x], [value], zorder=6, **star_style(color, st, metric))
 
 
 def plot_loss_terms(
@@ -212,13 +216,15 @@ def plot_loss_and_metric(
             right, s, st, color=colors[emb], linestyle=styles['right'], label=label
         )
         if best:
-            star(right, best[0], value_at(s, best[0]), colors[emb], st)
+            star(right, best[0], value_at(s, best[0]), colors[emb], st, metric=True)
     if best:
         epoch = best[0] + int(st['epoch_offset'])
         label = texts['best'].format(best=best[1], epoch=epoch)
         handles.append(Line2D([], [], label=label, **star_style(colors['val'], st)))
         handles.append(
-            Line2D([], [], label=texts['best_metric'], **star_style(st['ink'], st))
+            Line2D(
+                [], [], label=texts['best_metric'], **star_style(st['ink'], st, True)
+            )
         )
     ax.set_ylabel(texts['ylabel_left'])
     right.set_ylabel(texts['ylabel_right'])

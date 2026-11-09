@@ -11,7 +11,8 @@ its config satisfies, and runs that match none are left out.  ``ticks_at_x`` put
   best_vs_x   best val/head/loss_ce of every run (small markers) and the arm's mean ± sample std per x value
               (large markers, joined by a line), one colour per arm
   curves      one panel per arm: validation CE (solid) and training CE (dashed) per epoch of every run, shaded
-              light to dark by x value; with ``best_marker``, a star on each run's lowest validation CE
+              light to dark by x value; with ``best_marker``, a star on each run's lowest validation CE; the
+              legend sits below the panel (``curves_legend``); with ``curves_zoom`` a copy at a narrower y range
 
 plus ``run_selection.csv``.  Every word on the figures comes from ``method_scan.texts``; a missing key is an error.
 
@@ -180,8 +181,17 @@ def plot_best(runs: pd.DataFrame, ac: dict, out_path: Path) -> None:
     plt.close(fig)
 
 
-def plot_curves(runs: pd.DataFrame, ac: dict, out_path: Path) -> None:
+def plot_curves(
+    runs: pd.DataFrame,
+    ac: dict,
+    out_path: Path,
+    ylim: list[float] | None = None,
+    title: str | None = None,
+) -> None:
+    """One panel per arm; ``ylim`` / ``title`` default to ``ylim_curves`` / ``texts.title_curves``."""
     texts, offset = ac['texts'], int(ac['epoch_offset'])
+    title = texts['title_curves'] if title is None else title
+    ylim = ylim or ac.get('ylim_curves')
     marker = ac.get('best_marker')  # a star on each run's lowest validation CE
     arms = [k for k in ac['arms'] if k in set(runs['arm'])]
     xs = sorted(runs['x'].unique())
@@ -233,12 +243,20 @@ def plot_curves(runs: pd.DataFrame, ac: dict, out_path: Path) -> None:
         ]
         if marker:
             handles.append(Line2D([], [], label=texts['best'], **star(ac['ink'])))
-        ax.legend(handles=handles, frameon=False, fontsize=8, loc=ac['legend_loc'])
+        lg = ac['curves_legend']  # outside the panel, so it never covers a curve
+        ax.legend(
+            handles=handles,
+            frameon=False,
+            fontsize=lg['fontsize'],
+            loc=lg['loc'],
+            bbox_to_anchor=tuple(lg['anchor']) if lg.get('anchor') else None,
+            ncol=int(lg['ncol']),
+        )
     axes[0][0].set_ylabel(texts['ylabel_curves'])
-    if ac.get('ylim_curves'):
-        axes[0][0].set_ylim(*ac['ylim_curves'])
-    if texts['title_curves']:
-        fig.suptitle(texts['title_curves'], fontsize=11)
+    if ylim:
+        axes[0][0].set_ylim(*ylim)
+    if title:
+        fig.suptitle(title, fontsize=11)
     fig.tight_layout()
     fig.savefig(out_path, dpi=200, bbox_inches='tight')
     plt.close(fig)
@@ -261,6 +279,11 @@ def main() -> None:
     for name, plot in (('best_vs_x', plot_best), ('curves', plot_curves)):
         path = out_dir / ac['filenames'][name]
         plot(runs, ac, path)
+        print(f'Saved {path}')
+    zoom = ac.get('curves_zoom')
+    if zoom:  # the same panels at a y range around the minima
+        path = out_dir / zoom['filename']
+        plot_curves(runs, ac, path, zoom['ylim'], ac['texts']['title_curves_zoom'])
         print(f'Saved {path}')
 
 

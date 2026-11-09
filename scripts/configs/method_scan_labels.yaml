@@ -47,7 +47,10 @@ method_scan:
   # ylim_curves: [0.4, 1.2]
   legend_loc: best
   ink: '#333333'
-  best_marker: {marker: '*', size: 10, edge: white, edge_width: 0.5}   # on each run's lowest validation CE; null = none
+  best_marker: {marker: '*', size: 11, edge: '#222222', edge_width: 0.9}   # on each run's lowest validation CE; null = none
+  # The legend of each panel sits below it, so it never covers a curve.
+  curves_legend: {loc: upper center, anchor: [0.5, -0.2], ncol: 2, fontsize: 8}
+  curves_zoom: {filename: ce_per_epoch_zoom.png, ylim: [0.58, 0.95]}   # the curves figure at this y range; null = none
 
   # ---- ALL the wording of the figures lives here --------------------------------------------------------------
   texts:
@@ -64,3 +67,4 @@ method_scan:
     val: 'Validation'
     train: 'Training (epoch mean)'
     best: 'Lowest validation CE of each run'   # legend of the stars
+    title_curves_zoom: 'Cross-entropy per epoch, every run of the label-fraction scan (zoom)'
