@@ -3,8 +3,8 @@
 #
 #   MPLBACKEND=Agg .venv/bin/python scripts/plot_test_rejections.py --config scripts/configs/test_rejections.yaml
 #
-# Arms as in arm_test_metrics.yaml (4 runs each).  From scratch + JC is not shown: 5 of its 8 runs collapsed, and
-# rriva decided on 2026-11-04 to report it as unstable.
+# Arms as in arm_test_metrics.yaml (4 runs each), from scratch + JC with the stabilised recipe (gradient norm
+# clipped at 1.0).
 
 test_rejections:
   per_run_csv: plots/arm_comparison/test_metrics/per_run.csv
@@ -24,12 +24,16 @@ test_rejections:
     sc: {method: scratch, group: no_jc}
     ft_p0: {method: finetune, group: no_jc}
     fr_p0: {method: frozen, group: no_jc}
+    ft_p1: {method: finetune, group: no_jc_p1}
+    fr_p1: {method: frozen, group: no_jc_p1}
+    scjc: {method: scratch, group: jc}
     ftjc_p1: {method: finetune, group: jc}
     frjc_p1: {method: frozen, group: jc}
   methods: [scratch, finetune, frozen]     # x order
   groups:
-    no_jc: {offset: -0.18, marker: o, filled: true}
-    jc: {offset: 0.18, marker: s, filled: false}
+    no_jc: {offset: -0.27, marker: o, filled: true}
+    no_jc_p1: {offset: 0.0, marker: D, filled: true}
+    jc: {offset: 0.27, marker: s, filled: false}
   jitter: 0.03                             # x spacing of the single runs of one arm
   colours: {scratch: '#2a78d6', finetune: '#eb6834', frozen: '#1baf7a'}
   ink: '#333333'
@@ -44,13 +48,13 @@ test_rejections:
     ylabel: 'Background rejection at {wp:.0f}% b-efficiency'
     flavour: {c: 'c-jet rejection', u: 'Light-jet rejection', tau: 'τ-jet rejection'}
     method: {scratch: 'From scratch', finetune: 'Fine-tuned', frozen: 'Frozen encoders'}
-    group: {no_jc: 'CE only (pretrained: P0)', jc: 'CE + JC (pretrained: P1)'}
+    group: {no_jc: 'CE only (pretrained: P0)', no_jc_p1: 'CE only (pretrained: P1)', jc: 'CE + JC (pretrained: P1)'}
     run: 'One run'
     mean: 'Mean ± std of the 4 runs'
     reference: 'GN2v01 (production tagger, trained on other data)'
     footnote: |-
       $t\bar{t}$, $\sqrt{s} = 13.6$ TeV, $20 < p_T < 250$ GeV, $|\eta| < 2.5$; test split (1.86M jets before cuts).  Pretrained methods: 2 pretraining seeds x 2 training seeds.
-      From scratch + JC is not shown: 5 of its 8 runs collapsed during training.
+      From scratch + JC: gradient norm clipped at 1.0 (earlier recipes collapsed in 5 of 8 runs; those runs are not scored).
     footnote_fractions:                    # added under the footnote, per fractions mode; '' = nothing
       optimal: |-
         Optimised fractions: c-rejection maximised on validation with light and τ rejection at least GN2v01's at 80% b-efficiency.

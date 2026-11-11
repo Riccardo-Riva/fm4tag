@@ -735,12 +735,21 @@ def build_models_table(deck, s, ctx):
     deck.footer(slide)
 
 
+def resolve_plot(plots_dir: Path, spec: str) -> Path:
+    """``plots_dir / spec``; with a ``*`` in ``spec`` (a file name that carries fitted numbers, such as the optimised
+    fractions) the newest matching file, so a rerun that moved the numbers wins over its stale predecessor."""
+    if '*' not in spec:
+        return plots_dir / spec
+    found = sorted(plots_dir.glob(spec), key=lambda f: f.stat().st_mtime)
+    return found[-1] if found else plots_dir / spec
+
+
 def build_plots(deck, s, ctx):
     slide = deck.new()
     deck.title(slide, s['title'])
     top = subtitle(deck, slide, s.get('subtitle'))
     height = BODY_BOTTOM - top
-    paths = [ctx['plots_dir'] / p for p in s['plots']]
+    paths = [resolve_plot(ctx['plots_dir'], p) for p in s['plots']]
     missing = [p for p in paths if not p.is_file()]
     for p in missing:
         print(f'  MISSING plot {p}')

@@ -1,5 +1,6 @@
 # The P1 version of fraction_constrained_arms_final.yaml: the best seed of each downstream arm WITH the
-# jet-embedding contrastive term (JC 0.3): from scratch + JC (SC+JC; its only run that did not collapse),
+# jet-embedding contrastive term (JC 0.3): from scratch + JC (SC+JC; the stabilised recipe of F_scjc_stab,
+# gradient norm clipped at 1.0),
 # fine-tuned from P1 + JC (FT+JC), frozen P1 encoders + JC (FR+JC).  Best seed = lowest best val/head/loss_ce
 # of the arm's 4 runs; the checkpoint is that epoch's.
 #
@@ -29,9 +30,9 @@ inference:
   precision: bf16
 
 models:
-- dir: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235642/scjc/seed_424242
+- dir: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_scjc_stab_20261109_175800/scjc_clip1/seed_424242
   label: SCJC
-  checkpoint: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235642/scjc/seed_424242/scjc/version_0/checkpoints/epoch010-step14267-val_loss_ce0.6211.ckpt
+  checkpoint: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_scjc_stab_20261109_175800/scjc_clip1/seed_424242/scjc_clip1/version_0/checkpoints/epoch010-step14267-val_loss_ce0.6208.ckpt
 - dir: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235640/ftjc_p1s42/seed_4242
   label: FTJC
   checkpoint: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235640/ftjc_p1s42/seed_4242/ftjc_p1s42/version_0/checkpoints/epoch038-step50583-val_loss_ce0.6286.ckpt

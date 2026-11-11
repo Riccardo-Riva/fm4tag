@@ -1,6 +1,7 @@
-# Constrained (f_c, f_tau) search for the best seed of each no-JC downstream arm of the SSL campaign (F_final):
-# trained from scratch (SC), fine-tuned from P0 (FT), frozen P0 encoders (FR).  Best seed = lowest best
-# val/head/loss_ce of the arm's 4 runs; the checkpoint is that epoch's.
+# Constrained (f_c, f_tau) search for the best seed of each no-JC downstream arm of the SSL campaign (F_final,
+# F_p1_nojc): trained from scratch (SC), fine-tuned from P0 (FT), frozen P0 encoders (FR), fine-tuned from P1
+# (FT P1), frozen P1 encoders (FR P1).  Best seed = lowest best val/head/loss_ce of the arm's 4 runs; the
+# checkpoint is that epoch's.
 #
 # The search runs on the VALIDATION split, so the test ROC (roc_comparison_arms_final.yaml) is not tuned on test.
 # Rule (standing ROC convention): maximise c-rejection at 80% b-efficiency with light and tau rejection
@@ -37,6 +38,12 @@ models:
 - dir: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235640/fr_p0s424/seed_4242
   label: FR
   checkpoint: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235640/fr_p0s424/seed_4242/fr_p0s424/version_0/checkpoints/epoch006-step1379-val_loss_ce0.6488.ckpt
+- dir: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_p1_nojc_20261109_175801/ft_p1s424/seed_4242
+  label: FT P1
+  checkpoint: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_p1_nojc_20261109_175801/ft_p1s424/seed_4242/ft_p1s424/version_0/checkpoints/epoch039-step25920-val_loss_ce0.6156.ckpt
+- dir: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_p1_nojc_20261109_175801/fr_p1s42/seed_4242
+  label: FR P1
+  checkpoint: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_p1_nojc_20261109_175801/fr_p1s42/seed_4242/fr_p1s42/version_0/checkpoints/epoch020-step4137-val_loss_ce0.6335.ckpt
 
 roc_comparison:
   reference_tagger:

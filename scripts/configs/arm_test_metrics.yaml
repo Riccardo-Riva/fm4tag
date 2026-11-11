@@ -5,14 +5,18 @@
 #   .venv/bin/python scripts/arm_test_metrics.py --config scripts/configs/arm_test_metrics.yaml --metrics --workers 16
 #
 # Runs and arms: as in arm_epochs.yaml (every completed run under `stages`, put in an arm by its own .hydra
-# config; 4 runs per arm).  From scratch + JC is not scored: 5 of its 8 runs collapsed (with or without gradient
-# clipping), and rriva decided on 2026-11-04 to report it as unstable.
+# config and, where recipes differ, by its campaign cell; 4 runs per arm).  2026-11-11: + fine-tuned and frozen
+# encoders from P1 with CE only (F_p1_nojc) and from scratch + JC with the stabilised recipe (F_scjc_stab, cell
+# scjc_clip1: gradient norm clipped at 1.0, 0 of 4 collapsed).  The earlier from-scratch + JC runs (5 of 8
+# collapsed) are not scored.  The runs scored before are read from the inference cache.
 
 arm_test_metrics:
   out_dir: plots/arm_comparison/test_metrics
   stages:
     - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235640
     - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235642
+    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_p1_nojc_20261109_175801
+    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_scjc_stab_20261109_175800
   runs_per_arm: 4
   epoch_offset: 1
   ce: {val_metric: val/head/loss_ce}       # picks each run's best epoch (and its checkpoint)
@@ -20,6 +24,9 @@ arm_test_metrics:
     sc: {encoder: scratch, pretraining: null, jet_contrastive: 0.0}
     ft_p0: {encoder: finetune, pretraining: p0, jet_contrastive: 0.0}
     fr_p0: {encoder: frozen, pretraining: p0, jet_contrastive: 0.0}
+    ft_p1: {encoder: finetune, pretraining: p1, jet_contrastive: 0.0}
+    fr_p1: {encoder: frozen, pretraining: p1, jet_contrastive: 0.0}
+    scjc: {encoder: scratch, pretraining: null, jet_contrastive: 0.3, cells: [scjc_clip1]}
     ftjc_p1: {encoder: finetune, pretraining: p1, jet_contrastive: 0.3}
     frjc_p1: {encoder: frozen, pretraining: p1, jet_contrastive: 0.3}
 

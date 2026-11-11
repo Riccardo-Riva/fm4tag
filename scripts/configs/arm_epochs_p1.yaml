@@ -3,8 +3,9 @@
 #
 #   MPLBACKEND=Agg .venv/bin/python scripts/plot_arm_epochs.py --config scripts/configs/arm_epochs_p1.yaml
 #
-# 3 of the 4 'from scratch + JC' runs collapsed (one gradient spike, no clipping downstream; CE ~1.29 = class
-# priors afterwards); they are drawn like the others.
+# 'From scratch + JC' is the stabilised recipe of F_scjc_stab (cell scjc_clip1: gradient norm clipped at 1.0, the
+# pretraining's value; 0 of 4 runs collapsed).  The earlier recipes (no clipping: 3 of 4 collapsed; clipping at 5.0:
+# 2 of 4) are drawn in arm_epochs_scjc.yaml.
 #
 # Runs: every completed run under `stages`, put in an arm by its own .hydra config (never its directory name):
 #   encoder          scratch (no encoder_ckpt) | finetune (encoder_ckpt set, encoders trained) |
@@ -13,7 +14,7 @@
 #   pretraining      null for scratch; p0 / p1 / p2 = what the encoder_ckpt run optimised, read from that run's
 #                    own config (P0: contrastive on the feature embeddings; P1: P0 + jet_contrastive)
 #   jet_contrastive  finetune.loss_weights.jet_contrastive of the run (downstream JC weight)
-# Runs in no listed arm (the JC arms while they are commented out) are skipped and counted on stdout.
+# Runs in no listed arm (the CE-only arms, the other from-scratch + JC recipes) are skipped and counted on stdout.
 #
 # Embeddings (EmbeddingMetrics: clean embeddings of up to 8192 validation jets per epoch; no training value):
 #   tracks_embedding  projector output of each valid track
@@ -25,12 +26,12 @@ arm_epochs:
   out_dir: plots/arm_comparison/epochs_p1
   stages:
     - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235640
-    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235642
+    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_scjc_stab_20261109_175800
   runs_per_arm: 4
   epoch_offset: 1                    # Lightning counts epochs from 0; 1 = the first epoch is epoch 1
 
   arms:                              # drawing order = this order (the last one is drawn on top)
-    scjc: {encoder: scratch, pretraining: null, jet_contrastive: 0.3, colour: '#2a78d6'}
+    scjc: {encoder: scratch, pretraining: null, jet_contrastive: 0.3, cells: [scjc_clip1], colour: '#2a78d6'}
     ftjc_p1: {encoder: finetune, pretraining: p1, jet_contrastive: 0.3, colour: '#eb6834'}
     frjc_p1: {encoder: frozen, pretraining: p1, jet_contrastive: 0.3, colour: '#1baf7a'}
 
@@ -59,11 +60,8 @@ arm_epochs:
 
   # ---- ALL the wording of the figures lives here --------------------------------------------------------------
   texts:
-    arm:                             # legend entry per arm (all six, so the JC arms can be switched on)
-      sc: 'From scratch'
-      ft_p0: 'Fine-tuned (P0)'
-      fr_p0: 'Frozen encoders (P0)'
-      scjc: 'From scratch + JC'
+    arm:                             # legend entry per arm
+      scjc: 'From scratch + JC (clip 1.0)'
       ftjc_p1: 'Fine-tuned (P1) + JC'
       frjc_p1: 'Frozen encoders (P1) + JC'
     xlabel: 'Epoch'
@@ -74,7 +72,7 @@ arm_epochs:
       train: 'Training (epoch mean)'
       val: 'Validation'
       best: 'Lowest validation CE of each run'   # legend of the stars
-      zoom_title: 'Training and validation cross-entropy, with JC, 4 runs per method (zoom; collapsed runs off scale)'   # title of the zoomed copy
+      zoom_title: 'Training and validation cross-entropy, with JC, 4 runs per method (zoom)'   # title of the zoomed copy
     effective_rank:
       title: 'Effective rank of the embeddings (validation), with JC, 4 runs per method'
       ylabel: 'Effective rank'

@@ -1,6 +1,6 @@
 # The P1 version of roc_comparison_arms_final.yaml: test-set ROC of the best seed of each downstream arm WITH
-# the jet-embedding contrastive term (JC 0.3) against GN2v01: from scratch + JC (its only run that did not
-# collapse), fine-tuned from P1 + JC, frozen P1 encoders + JC.  Same runs and checkpoints as
+# the jet-embedding contrastive term (JC 0.3) against GN2v01: from scratch + JC (the stabilised recipe of
+# F_scjc_stab, gradient norm clipped at 1.0), fine-tuned from P1 + JC, frozen P1 encoders + JC.  Same runs and checkpoints as
 # fraction_constrained_arms_final_p1.yaml.
 #
 # This file draws every tagger at the nominal fractions (f_c 0.2, f_tau 0.01).  slurm/arm_roc/arm_roc_job.sh
@@ -11,9 +11,9 @@
 #   python scripts/roc_comparison.py --config scripts/configs/roc_comparison_arms_final_p1.yaml --device cuda
 
 models:
-- dir: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235642/scjc/seed_424242
+- dir: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_scjc_stab_20261109_175800/scjc_clip1/seed_424242
   label: 'From scratch + JC'
-  checkpoint: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235642/scjc/seed_424242/scjc/version_0/checkpoints/epoch010-step14267-val_loss_ce0.6211.ckpt
+  checkpoint: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_scjc_stab_20261109_175800/scjc_clip1/seed_424242/scjc_clip1/version_0/checkpoints/epoch010-step14267-val_loss_ce0.6208.ckpt
   colour: '#2a78d6'
 - dir: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235640/ftjc_p1s42/seed_4242
   label: 'Fine-tuned (P1) + JC'

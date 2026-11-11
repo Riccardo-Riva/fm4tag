@@ -3,7 +3,9 @@
 #   MPLBACKEND=Agg .venv/bin/python scripts/plot_arm_summary.py --config scripts/configs/arm_summary.yaml
 #
 # Runs and arms: as in arm_epochs.yaml (every completed run under `stages`, put in an arm by its own .hydra
-# config; 4 runs per arm).  Each arm is drawn at its `method` (x) in its `group` (marker, offset).
+# config, and by its campaign cell where recipes differ; 4 runs per arm).  Each arm is drawn at its `method` (x) in
+# its `group` (marker, offset): CE only from P0 (and from scratch), CE only from P1, CE + JC (from scratch with
+# the stabilised recipe: gradient norm clipped at 1.0).
 
 arm_summary:
   out_dir: plots/arm_comparison/summary
@@ -11,6 +13,8 @@ arm_summary:
   stages:
     - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235640
     - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235642
+    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_p1_nojc_20261109_175801
+    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_scjc_stab_20261109_175800
   runs_per_arm: 4
   epoch_offset: 1
   ce: {val_metric: val/head/loss_ce}
@@ -19,13 +23,16 @@ arm_summary:
     sc: {encoder: scratch, pretraining: null, jet_contrastive: 0.0, method: scratch, group: no_jc}
     ft_p0: {encoder: finetune, pretraining: p0, jet_contrastive: 0.0, method: finetune, group: no_jc}
     fr_p0: {encoder: frozen, pretraining: p0, jet_contrastive: 0.0, method: frozen, group: no_jc}
-    scjc: {encoder: scratch, pretraining: null, jet_contrastive: 0.3, method: scratch, group: jc}
+    ft_p1: {encoder: finetune, pretraining: p1, jet_contrastive: 0.0, method: finetune, group: no_jc_p1}
+    fr_p1: {encoder: frozen, pretraining: p1, jet_contrastive: 0.0, method: frozen, group: no_jc_p1}
+    scjc: {encoder: scratch, pretraining: null, jet_contrastive: 0.3, cells: [scjc_clip1], method: scratch, group: jc}
     ftjc_p1: {encoder: finetune, pretraining: p1, jet_contrastive: 0.3, method: finetune, group: jc}
     frjc_p1: {encoder: frozen, pretraining: p1, jet_contrastive: 0.3, method: frozen, group: jc}
   methods: [scratch, finetune, frozen]     # x order
   groups:
-    no_jc: {offset: -0.18, marker: o, filled: true}
-    jc: {offset: 0.18, marker: s, filled: false}
+    no_jc: {offset: -0.27, marker: o, filled: true}
+    no_jc_p1: {offset: 0.0, marker: D, filled: true}
+    jc: {offset: 0.27, marker: s, filled: false}
   jitter: 0.03                             # x spacing of the single runs of one arm
   mean_offset: 0.0                         # x shift of the mean marker from the arm's position
   colours: {scratch: '#2a78d6', finetune: '#eb6834', frozen: '#1baf7a'}
@@ -33,22 +40,19 @@ arm_summary:
   figsize: [7.0, 5.0]
   # ylim: [0.615, 0.655]
 
-  # Collapsed runs, left out by name (never by a threshold): one gradient spike sent the training CE to the class
-  # priors (1.29) and it never came back.  No other final run collapsed.
-  exclude:
-    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235642/scjc/seed_4242
-    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235642/scjc/seed_42424
-    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235642/scjc/seed_4242424
+  # Runs left out by name (never by a threshold).  None: no run of these arms collapsed.
+  exclude: []
 
   # ---- ALL the wording of the figure lives here --------------------------------------------------------------
   texts:
     title: 'Best validation cross-entropy per training method'   # '' = no title
     ylabel: 'Best validation cross-entropy'
     method: {scratch: 'From scratch', finetune: 'Fine-tuned', frozen: 'Frozen encoders'}
-    group: {no_jc: 'CE only (pretrained: P0)', jc: 'CE + JC (pretrained: P1)'}
+    group: {no_jc: 'CE only (pretrained: P0)', no_jc_p1: 'CE only (pretrained: P1)', jc: 'CE + JC (pretrained: P1)'}
     run: 'One run'
     mean: 'Mean ± std of the runs shown'
     excluded: '+{n} collapsed'           # next to an arm with excluded runs; {n} = how many
     footnote: |-
       4 runs per method; the pretrained methods use 2 pretraining seeds x 2 training seeds.
-      From scratch + JC: 3 of its 4 runs collapsed and are not shown (a rerun with gradient clipping at 5.0 collapsed in 2 of 4).
+      From scratch + JC: gradient norm clipped at 1.0 (without clipping 3 of 4 runs collapsed, with clipping at 5.0 2 of 4).
+      Fine-tuned runs from P1 (with or without JC) were still improving at the 40-epoch limit.

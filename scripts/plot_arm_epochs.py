@@ -9,6 +9,9 @@ directory name:
                    the feature embeddings), ``p1`` (P0 + jet_contrastive), ``p2`` (jet_contrastive only)
   jet_contrastive  ``finetune.loss_weights.jet_contrastive`` of the run itself
 
+An arm may also list ``cells`` (names of the campaign cells = the run directories' parents): needed when runs with
+the same three values were trained with different recipes, e.g. from scratch + JC with and without gradient clipping.
+
 Figures, one line per run, coloured by arm:
 
   ce_train_val      training CE (epoch mean, dashed) and validation CE (solid); optionally a copy with a
@@ -105,6 +108,7 @@ def select_runs(ac: dict) -> pd.DataFrame:
                     if a['encoder'] == meta['encoder']
                     and a['pretraining'] == meta['pretraining']
                     and float(a['jet_contrastive']) == meta['jet_contrastive']
+                    and (a.get('cells') is None or run_dir.parent.name in a['cells'])
                 ),
                 None,
             )
