@@ -448,37 +448,37 @@ slides:
     subtitle: 'Every run (small) and the mean ± std of the runs shown (large). Circles: CE only (from scratch, or pretrained from P0); diamonds: CE only pretrained from P1; open squares: CE + JC (pretrained from P1; from scratch with gradient clipping at 1.0).'
     plots: [arm_comparison/summary/best_val_ce_per_method.png]
     models: [sc, ft_p0, fr_p0, ft_p1, fr_p1, scjc, ftjc_p1, frjc_p1]
-    info_items: [start, loss, batch, lr, clip]
+    info_items: [start, batch, lr]
   - layout: plots
     title: 'Test rejection at 77% b-efficiency, fixed fractions'
     subtitle: 'c-, light- and τ-jet rejection on the test set with f_c = 0.2 and f_τ = 0.01: every run (small) and mean ± std (large). Circles: CE only (from scratch, P0); diamonds: CE only from P1; open squares: CE + JC.'
     plots: [arm_comparison/test_metrics/test_rejections_nominal_wp77.png]
     models: [sc, ft_p0, fr_p0, ft_p1, fr_p1, scjc, ftjc_p1, frjc_p1]
-    info_items: [start, loss, batch, lr, clip]
+    info_items: [start, batch, lr]
   - layout: plots
     title: 'Test rejection at 77% b-efficiency, optimised fractions'
     subtitle: 'The same, each run at its own (f_c, f_τ) from the validation search.'
     plots: [arm_comparison/test_metrics/test_rejections_optimal_wp77.png]
     models: [sc, ft_p0, fr_p0, ft_p1, fr_p1, scjc, ftjc_p1, frjc_p1]
-    info_items: [start, loss, batch, lr, clip]
+    info_items: [start, batch, lr]
   - layout: plots
     title: 'Test rejection at 77%, optimised fractions, with GN2v01'
     subtitle: 'As before; dashed line: GN2v01 at f_c = 0.2 and f_τ = 0.01 (the production tagger, trained on other data).'
     plots: [arm_comparison/test_metrics/test_rejections_optimal_wp77_gn2.png]
     models: [sc, ft_p0, fr_p0, ft_p1, fr_p1, scjc, ftjc_p1, frjc_p1]
-    info_items: [start, loss, batch, lr, clip]
+    info_items: [start, batch, lr]
   - layout: plots
     title: 'Test rejection at 70% b-efficiency, optimised fractions'
     subtitle: 'Each run at its own (f_c, f_τ) from the validation search.'
     plots: [arm_comparison/test_metrics/test_rejections_optimal_wp70.png]
     models: [sc, ft_p0, fr_p0, ft_p1, fr_p1, scjc, ftjc_p1, frjc_p1]
-    info_items: [start, loss, batch, lr, clip]
+    info_items: [start, batch, lr]
   - layout: plots
     title: 'Test rejection at 85% b-efficiency, optimised fractions'
     subtitle: 'Each run at its own (f_c, f_τ) from the validation search.'
     plots: [arm_comparison/test_metrics/test_rejections_optimal_wp85.png]
     models: [sc, ft_p0, fr_p0, ft_p1, fr_p1, scjc, ftjc_p1, frjc_p1]
-    info_items: [start, loss, batch, lr, clip]
+    info_items: [start, batch, lr]
 
   # ---- Fewer labels ----
   - layout: section
