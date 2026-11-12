@@ -48,15 +48,16 @@ test_rejections:
     ylabel: 'Background rejection at {wp:.0f}% b-efficiency'
     flavour: {c: 'c-jet rejection', u: 'Light-jet rejection', tau: 'τ-jet rejection'}
     method: {scratch: 'From scratch', finetune: 'Fine-tuned', frozen: 'Frozen encoders'}
-    group: {no_jc: 'CE only (pretrained: P0)', no_jc_p1: 'CE only (pretrained: P1)', jc: 'CE + JC (pretrained: P1)'}
+    group: {no_jc: 'CE only (P0 pretraining)', no_jc_p1: 'CE only (P1 pretraining)', jc: 'CE + JC (P1 pretraining)'}
     run: 'One run'
     mean: 'Mean ± std of the 4 runs'
     reference: 'GN2v01 (production tagger, trained on other data)'
     footnote: |-
-      $t\bar{t}$, $\sqrt{s} = 13.6$ TeV, $20 < p_T < 250$ GeV, $|\eta| < 2.5$; test split (1.86M jets before cuts).  Pretrained methods: 2 pretraining seeds x 2 training seeds.
+      $t\bar{t}$, $\sqrt{s} = 13.6$ TeV, $20 < p_T < 250$ GeV, $|\eta| < 2.5$; test split (1.86M jets before cuts).
+      P0 / P1: pretraining of the fine-tuned and frozen methods (2 pretraining seeds x 2 training seeds); from scratch has none.
       From scratch + JC: gradient norm clipped at 1.0 (earlier recipes collapsed in 5 of 8 runs; those runs are not scored).
     footnote_fractions:                    # added under the footnote, per fractions mode; '' = nothing
       optimal: |-
         Optimised fractions: c-rejection maximised on validation with light and τ rejection at least GN2v01's at 80% b-efficiency.
-        Frozen encoders (CE only) reaches both in none of its runs; it is shown at its closest point ($f_c = 0$).
+        Frozen encoders (P0) reach both in none of their 4 runs and are shown at their closest point ($f_c = 0$); every other method reaches both.
       nominal: ''

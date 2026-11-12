@@ -48,11 +48,12 @@ arm_summary:
     title: 'Best validation cross-entropy per training method'   # '' = no title
     ylabel: 'Best validation cross-entropy'
     method: {scratch: 'From scratch', finetune: 'Fine-tuned', frozen: 'Frozen encoders'}
-    group: {no_jc: 'CE only (pretrained: P0)', no_jc_p1: 'CE only (pretrained: P1)', jc: 'CE + JC (pretrained: P1)'}
+    group: {no_jc: 'CE only (P0 pretraining)', no_jc_p1: 'CE only (P1 pretraining)', jc: 'CE + JC (P1 pretraining)'}
     run: 'One run'
     mean: 'Mean ± std of the runs shown'
     excluded: '+{n} collapsed'           # next to an arm with excluded runs; {n} = how many
     footnote: |-
-      4 runs per method; the pretrained methods use 2 pretraining seeds x 2 training seeds.
+      4 runs per method.  P0 / P1: pretraining of the fine-tuned and frozen methods (2 pretraining seeds x
+      2 training seeds); from scratch has none.
       From scratch + JC: gradient norm clipped at 1.0 (without clipping 3 of 4 runs collapsed, with clipping at 5.0 2 of 4).
       Fine-tuned runs from P1 (with or without JC) were still improving at the 40-epoch limit.

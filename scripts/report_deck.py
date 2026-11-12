@@ -782,6 +782,12 @@ def build_plots(deck, s, ctx):
                     )
                 )
             for w in cfg['side_widths']:
+                if info.rows:  # a beside-table whose model columns are too narrow to read is not a candidate
+                    cols = deck.table_layout(
+                        info.header, info.rows, float(w) - 2 * PAD, fs[1]
+                    )[0]
+                    if min(cols[1:]) < float(cfg['min_column_width']):
+                        continue
                 h = info_height(info, float(w), fs, deck)
                 if h <= height:
                     box = (MARGIN, top, BODY_W - float(w) - GAP, height)

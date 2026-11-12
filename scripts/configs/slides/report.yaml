@@ -42,6 +42,7 @@ info:
   font_sizes: [[10, 9.5], [9.5, 9], [9, 8.5], [8.5, 8]]
   side_widths: [3.4, 4.2, 5.2, 6.4, 7.4]
   min_plot_scale: 0.5
+  min_column_width: 0.8                # a beside-table with narrower model columns (inches) is not tried: its text overflows
   box_fill: '#f3f3f0'
   join: ' · '
   label_sep: ': '
