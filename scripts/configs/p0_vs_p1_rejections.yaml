@@ -1,0 +1,66 @@
+# Test-set rejections of the six P0 vs P1 cases (scripts/plot_test_rejections.py), absolute and relative to from
+# scratch (CE only), from the per_run.csv of arm_test_metrics.py:
+#
+#   MPLBACKEND=Agg .venv/bin/python scripts/plot_test_rejections.py --config scripts/configs/p0_vs_p1_rejections.yaml
+#
+# From scratch, fine-tuned and frozen encoders, each from P0 (CE only) and from P1 (CE + JC downstream; from scratch
+# + JC with the gradient norm clipped at 1.0).  'relative_to: sc' divides every rejection of a panel by the mean of
+# the 4 from-scratch (CE only) runs.
+
+test_rejections:
+  per_run_csv: plots/arm_comparison/test_metrics/per_run.csv
+  out_dir: plots/p0_vs_p1/test_rejections
+  reference_label: GN2v01                  # its row in per_run.csv
+  flavours: [c, u, tau]                    # panel order: c, light, tau
+
+  # fractions: 'optimal' = each run's own (f_c, f_tau) from the validation search; 'nominal' = f_c 0.2, f_tau 0.01
+  figures:
+    - {filename: relative_optimal_wp77.png, fractions: optimal, working_point: 0.77, reference: false, relative_to: sc}
+    - {filename: relative_nominal_wp77.png, fractions: nominal, working_point: 0.77, reference: false, relative_to: sc}
+    - {filename: relative_optimal_wp70.png, fractions: optimal, working_point: 0.70, reference: false, relative_to: sc}
+    - {filename: relative_optimal_wp85.png, fractions: optimal, working_point: 0.85, reference: false, relative_to: sc}
+    - {filename: absolute_optimal_wp77.png, fractions: optimal, working_point: 0.77, reference: false}
+
+  arms:
+    sc: {method: scratch, group: p0}
+    ft_p0: {method: finetune, group: p0}
+    fr_p0: {method: frozen, group: p0}
+    scjc: {method: scratch, group: p1}
+    ftjc_p1: {method: finetune, group: p1}
+    frjc_p1: {method: frozen, group: p1}
+  methods: [scratch, finetune, frozen]     # x order
+  groups:
+    p0: {offset: -0.2, marker: o, filled: true}
+    p1: {offset: 0.2, marker: s, filled: false}
+  jitter: 0.03                             # x spacing of the single runs of one arm
+  colours: {scratch: '#2a78d6', finetune: '#eb6834', frozen: '#1baf7a'}
+  ink: '#333333'
+  figsize: [13.0, 4.6]
+
+  # ---- ALL the wording of the figures lives here --------------------------------------------------------------
+  texts:
+    title: 'Test-set rejection at {wp:.0f}% b-jet efficiency, {fractions}'   # {wp}, {fractions}; '' = no title
+    fractions:
+      optimal: '$f_c$ and $f_\tau$ optimised per run on validation'
+      nominal: '$f_c = 0.2$, $f_\tau = 0.01$'
+    ylabel: 'Background rejection at {wp:.0f}% b-efficiency'
+    relative:                              # figures with relative_to
+      title: 'Test-set rejection relative to from scratch at {wp:.0f}% b-jet efficiency, {fractions}'
+      ylabel: 'Rejection / mean rejection of from scratch ({wp:.0f}% b-efficiency)'
+      baseline: 'Mean of from scratch (CE only) = 1'
+      footnote: 'Each rejection is divided by the mean of the 4 from-scratch (CE only) runs, per flavour.'
+    flavour: {c: 'c-jet rejection', u: 'Light-jet rejection', tau: 'τ-jet rejection'}
+    method: {scratch: 'From scratch', finetune: 'Fine-tuned', frozen: 'Frozen encoders'}
+    group: {p0: 'P0 pretraining, CE only', p1: 'P1 pretraining, CE + JC'}
+    run: 'One run'
+    mean: 'Mean ± std of the 4 runs'
+    reference: 'GN2v01 (production tagger, trained on other data)'
+    footnote: |-
+      $t\bar{t}$, $\sqrt{s} = 13.6$ TeV, $20 < p_T < 250$ GeV, $|\eta| < 2.5$; test split (1.86M jets before cuts).
+      P0 / P1: pretraining of the fine-tuned and frozen methods (2 pretraining seeds x 2 training seeds); from scratch has none (its P1 case is from scratch + JC).
+      JC: jet-level contrastive loss, weight 0.3 downstream; from scratch + JC with the gradient norm clipped at 1.0.
+    footnote_fractions:                    # added under the footnote, per fractions mode; '' = nothing
+      optimal: |-
+        Optimised fractions: c-rejection maximised on validation with light and τ rejection at least GN2v01's at 80% b-efficiency.
+        Frozen encoders (P0) reach both in none of their 4 runs and are shown at their closest point ($f_c = 0$); every other case reaches both.
+      nominal: ''
