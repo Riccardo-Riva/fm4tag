@@ -155,8 +155,8 @@ class RowGroups:
     ``max_seqlen`` is the longest group, which flash's varlen kernel needs on
     the host.  Build it once per batch and reuse it across views and layers.
 
-    ``plans`` caches what attention dropout needs per batch (the length
-    buckets of :func:`_padded_attention`), so the layers sharing these groups
+    ``plans`` caches what attention dropout needs per batch (the equal-length
+    buckets of :func:`_bucketed_attention`), so the layers sharing these groups
     pay its host syncs once.
     """
 
@@ -218,25 +218,19 @@ def _varlen_slices(
     return slices
 
 
-# Attention dropout: the groups are padded to a few lengths (bucket edges 16,
-# 32, 64, ...), and each bucket is one batched masked SDPA call.  A Python loop
-# over the groups would be one launch per jet in the aggregator (14k-94k).
-_PAD_MULTIPLE = 16
-_BUCKET_EDGE_MIN = 16
-
-
-def _padded_plan(
+# Attention dropout: flash's varlen kernel has none.  Groups of the SAME length are stacked into one
+# (K_b, L, H, D) batch each and attended by one plain SDPA call: no padding, no mask (so the memory is that of the
+# varlen path and flash's dropout kernel can run).  A loop over the groups would be one launch per jet in the
+# aggregator (14k-94k); the distinct lengths there are at most the slot count (40), and in the row attention at
+# most the number of chunks.
+def _length_plan(
     cu: torch.Tensor, total: int
-) -> tuple[list[tuple[torch.Tensor, torch.Tensor]], torch.Tensor]:
-    """Length buckets of the non-empty groups, for :func:`_padded_attention`.
+) -> tuple[list[torch.Tensor], torch.Tensor]:
+    """Buckets of the non-empty groups of equal length, for :func:`_bucketed_attention`.
 
-    Returns ``([(rows, valid), ...], inverse)``: per bucket the packed row of
-    every slot ``rows (K_b, L)`` (padding slots point at a neighbouring row,
-    they are masked) and ``valid (K_b, L)``; ``inverse`` puts the bucket-major
-    outputs back in packed order.  A group with length ``n`` goes to the bucket
-    of the smallest edge ``>= n``, so no group is padded to more than twice
-    its length (up to the 16-slot minimum).  One host sync for the sizes, and
-    one more per bucket for the boolean indexing.
+    Returns ``([rows, ...], inverse)``: per distinct length ``L`` the packed row of every sample of
+    its groups, ``rows (K_b, L)``; ``inverse`` puts the bucket-major outputs back in packed order.
+    One host sync for the lengths and counts.
     """
     cu = cu.to(torch.long)
     lens = cu[1:] - cu[:-1]
@@ -244,55 +238,41 @@ def _padded_plan(
     if nonempty.numel() == 0:
         return [], torch.zeros(0, dtype=torch.long, device=cu.device)
     ln = lens[nonempty]
-    edges = [_BUCKET_EDGE_MIN]
-    top = int(ln.max())
-    while edges[-1] < top:
-        edges.append(edges[-1] * 2)
-    bucket = torch.bucketize(ln, torch.tensor(edges, device=ln.device))
-    n_buckets = len(edges)
-    counts = torch.bincount(bucket, minlength=n_buckets)
-    longest = torch.zeros(n_buckets, dtype=torch.long, device=ln.device)
-    longest.scatter_reduce_(0, bucket, ln, reduce='amax', include_self=True)
-    counts_h, longest_h = torch.stack([counts, longest]).tolist()
-    ids_by_bucket = torch.split(nonempty[torch.argsort(bucket, stable=True)], counts_h)
-    buckets, order = [], []
-    for ids, n_ids, top_b in zip(ids_by_bucket, counts_h, longest_h):
-        if n_ids == 0:
-            continue
-        width = -(-top_b // _PAD_MULTIPLE) * _PAD_MULTIPLE
-        slot = torch.arange(width, device=cu.device)
-        valid = slot[None, :] < lens[ids][:, None]
-        rows = (cu[ids][:, None] + slot[None, :]).clamp_(max=total - 1)
-        buckets.append((rows, valid))
-        order.append(rows[valid])
-    return buckets, torch.argsort(torch.cat(order))
+    order = torch.argsort(ln, stable=True)
+    values, counts = torch.unique_consecutive(ln[order], return_counts=True)
+    values_h, counts_h = values.tolist(), counts.tolist()
+    ids_by_length = torch.split(nonempty[order], counts_h)
+    buckets = [
+        cu[ids][:, None] + torch.arange(length, device=cu.device)[None, :]
+        for ids, length in zip(ids_by_length, values_h)
+    ]
+    assert sum(r.numel() for r in buckets) == total
+    return buckets, torch.argsort(torch.cat([r.reshape(-1) for r in buckets]))
 
 
-def _padded_attention(
+def _bucketed_attention(
     q: torch.Tensor,
     k: torch.Tensor,
     v: torch.Tensor,
     groups: RowGroups,
     dropout_p: float = 0.0,
 ) -> torch.Tensor:
-    """:func:`grouped_attention` as batched masked SDPA over padded length buckets.
+    """:func:`grouped_attention` as one SDPA call per distinct group length.
 
-    The path of attention dropout (flash's varlen kernel has none).  Same
-    result as the group loop at ``dropout_p == 0``.  Every group sees only its
-    own keys (key-padding mask), and each non-empty group has at least one, so
-    no softmax row is empty.
+    The path of attention dropout.  Same result as the group loop at
+    ``dropout_p == 0``; each group sees only its own samples.
     """
-    plan = groups.plans.get('padded')
+    plan = groups.plans.get('length')
     if plan is None:
-        plan = groups.plans['padded'] = _padded_plan(groups.cu_seqlens, q.shape[0])
+        plan = groups.plans['length'] = _length_plan(groups.cu_seqlens, q.shape[0])
     buckets, inverse = plan
     if not buckets:  # no group has a sample
         return q.clone()
     outs = []
-    for rows, valid in buckets:
+    for rows in buckets:
         qb, kb, vb = (x[rows].transpose(1, 2) for x in (q, k, v))  # (K_b, H, L, D)
-        o = sdpa(qb, kb, vb, attn_mask=valid[:, None, None, :], dropout_p=dropout_p)
-        outs.append(o.transpose(1, 2)[valid])  # (n_valid, H, D)
+        o = sdpa(qb, kb, vb, dropout_p=dropout_p)
+        outs.append(o.transpose(1, 2).reshape(-1, *q.shape[1:]))  # (K_b * L, H, D)
     return torch.cat(outs)[inverse]
 
 
@@ -307,9 +287,9 @@ def grouped_attention(
 
     ``q``/``k``/``v``: ``(T, H, D)`` — ``T`` packed samples, ``H`` independent
     heads.  Sample ``i`` attends only to the samples of its own group.  Runs
-    flash's varlen kernel when eligible; with attention dropout, batched masked
-    SDPA over padded length buckets (:func:`_padded_attention`); otherwise an
-    exact loop over the groups (CPU tests, fp32 offline inference).
+    flash's varlen kernel when eligible; with attention dropout, one SDPA call per
+    distinct group length (:func:`_bucketed_attention`); otherwise an exact loop
+    over the groups (CPU tests, fp32 offline inference).
     """
     if q.shape[0] == 0:
         return q.clone()
@@ -334,7 +314,7 @@ def grouped_attention(
         return torch.cat(outs, dim=0)
 
     if dropout_p > 0.0:
-        return _padded_attention(q, k, v, groups, dropout_p)
+        return _bucketed_attention(q, k, v, groups, dropout_p)
 
     bounds = cu.tolist()
     outs = []

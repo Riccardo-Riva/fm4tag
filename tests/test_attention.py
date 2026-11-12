@@ -13,7 +13,7 @@ from fm4tag.models.attention import (
     LeanRMSNorm,
     RowAttention,
     RowGroups,
-    _padded_attention,
+    _bucketed_attention,
     grouped_attention,
 )
 from fm4tag.models.backbones.transformers import RowMixer
@@ -640,11 +640,11 @@ def test_lean_rms_norm_bf16_matches_fp32_statistics_and_saves_no_fp32_copy():
     assert all(n < x.numel() for dt, n in saved if dt == torch.float32)
 
 
-# ── attention dropout: batched masked SDPA over padded length buckets ───────
+# ── attention dropout: one SDPA call per distinct group length ──────────────
 
-# Group lengths 5, 0, 16, 17, 33, 0, 1, 40: three buckets (<=16, <=32, <=64),
-# empty groups, and a group exactly at an edge.
-_DROP_BOUNDS = [0, 5, 5, 21, 38, 71, 71, 72, 112]
+# Group lengths 5, 5, 0, 16, 16, 16, 17, 33, 0, 1, 40: eight distinct-length
+# buckets of one or several groups, and empty groups.
+_DROP_BOUNDS = [0, 5, 10, 10, 26, 42, 58, 75, 108, 108, 109, 149]
 
 
 def _drop_inputs(heads: int = 2, head_dim: int = 8):
@@ -654,10 +654,10 @@ def _drop_inputs(heads: int = 2, head_dim: int = 8):
     return q, k, v, RowGroups.from_boundaries(torch.tensor(_DROP_BOUNDS))
 
 
-def test_padded_attention_matches_group_loop():
+def test_bucketed_attention_matches_group_loop():
     q, k, v, groups = _drop_inputs()
     ref = grouped_attention(q, k, v, groups)  # p = 0 off-GPU: the exact loop
-    out = _padded_attention(q, k, v, groups)
+    out = _bucketed_attention(q, k, v, groups)
     assert torch.allclose(out, ref, atol=1e-5)
     g = torch.randn_like(ref)
     for a, b in zip(
@@ -666,22 +666,24 @@ def test_padded_attention_matches_group_loop():
         assert torch.allclose(a, b, atol=1e-5)
 
 
-def test_padded_attention_slices_beyond_kernel_batch_limit(monkeypatch):
+def test_bucketed_attention_slices_beyond_kernel_batch_limit(monkeypatch):
     import fm4tag.models.attention as attention_mod
 
     q, k, v, groups = _drop_inputs()
     with torch.no_grad():
         ref = grouped_attention(q, k, v, groups)
         monkeypatch.setattr(attention_mod, 'MAX_KERNEL_BATCH', 2)
-        out = _padded_attention(
+        out = _bucketed_attention(
             q, k, v, RowGroups(groups.cu_seqlens, groups.max_seqlen)
         )
     assert torch.allclose(out, ref, atol=1e-5)
 
 
-def test_padded_attention_of_all_empty_groups_is_empty():
+def test_bucketed_attention_of_all_empty_groups_is_empty():
     q = torch.randn(0, 2, 8)
-    out = _padded_attention(q, q, q, RowGroups.from_boundaries(torch.tensor([0, 0, 0])))
+    out = _bucketed_attention(
+        q, q, q, RowGroups.from_boundaries(torch.tensor([0, 0, 0]))
+    )
     assert out.shape == (0, 2, 8)
 
 
@@ -721,12 +723,12 @@ def test_attention_dropout_keeps_groups_isolated():
     attn = _dropout_attention(0.5).train()
     x = torch.randn(_DROP_BOUNDS[-1], DIM)
     x_pert = x.clone()
-    x_pert[72:] += 5.0  # the last group (40 tokens) only
+    x_pert[109:] += 5.0  # the last group (40 tokens) only
     groups = RowGroups.from_boundaries(torch.tensor(_DROP_BOUNDS))
     with torch.no_grad():
         torch.manual_seed(3)
         out = attn(x, groups=groups)
         torch.manual_seed(3)
         out_pert = attn(x_pert, groups=groups)
-    assert torch.allclose(out[:72], out_pert[:72], atol=1e-6)
-    assert not torch.allclose(out[72:], out_pert[72:], atol=1e-3)
+    assert torch.allclose(out[:109], out_pert[:109], atol=1e-6)
+    assert not torch.allclose(out[109:], out_pert[109:], atol=1e-3)
