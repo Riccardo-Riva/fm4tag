@@ -235,9 +235,15 @@ def main() -> None:
     cells = read_cells(args.cells, env)
     args.out.mkdir(parents=True, exist_ok=True)
     # two workers, the long cells spread over both GPUs
+    devices = [d for d in os.environ.get('CUDA_VISIBLE_DEVICES', '').split(',') if d]
+    if len(devices) < 2 and not args.dry_run:
+        raise SystemExit(
+            f'need the 2 GPUs of the job in CUDA_VISIBLE_DEVICES, got {devices}'
+        )
+    devices = (devices + ['0', '1'])[:2]
     plan = {
-        0: [args.cell_names[i] for i in (0, 1, 2) if i < len(args.cell_names)],
-        1: [args.cell_names[i] for i in (3, 4, 5) if i < len(args.cell_names)],
+        devices[0]: [args.cell_names[i] for i in (0, 1, 2) if i < len(args.cell_names)],
+        devices[1]: [args.cell_names[i] for i in (3, 4, 5) if i < len(args.cell_names)],
     }
     results, lock = [], threading.Lock()
     threads = [
