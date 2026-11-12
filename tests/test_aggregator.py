@@ -137,3 +137,36 @@ def test_packed_aggregator_bf16_gpu_matches_fp32_reference():
         with torch.autocast('cuda', dtype=torch.bfloat16):
             out = agg(z_global, [z[valid]], [valid])
     assert torch.allclose(out.float(), ref, atol=5e-2, rtol=5e-2)
+
+
+def test_attention_and_ff_dropout_act_only_in_train_mode():
+    torch.manual_seed(0)
+    agg = TransformerAggregator(
+        global_dim=_GLOBAL_DIM,
+        const_dims=[_CONST_DIM],
+        depth=2,
+        heads=2,
+        dim_head=4,
+        ff_mult=1,
+        ff_dropout=0.3,
+        attn_dropout=0.3,
+    )
+    B, C = 6, 12
+    valid = torch.rand(B, C) > 0.4
+    valid[0] = False  # a jet without constituents
+    valid[1, 0] = True
+    args = (torch.randn(B, _GLOBAL_DIM), [torch.randn(B, C, _CONST_DIM)], [valid])
+
+    agg.eval()
+    with torch.no_grad():
+        eval_out = agg(*args)
+        assert torch.equal(eval_out, agg(*args))
+
+    agg.train()
+    torch.manual_seed(1)
+    out = agg(*args)
+    assert torch.isfinite(out).all()
+    assert not torch.allclose(out, eval_out, atol=1e-3)
+    assert torch.count_nonzero(out[0, _GLOBAL_DIM:]) == 0  # empty jet pools to zero
+    out.sum().backward()
+    assert all(torch.isfinite(p.grad).all() for p in agg.parameters())
