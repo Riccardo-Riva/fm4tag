@@ -309,8 +309,21 @@ def main() -> None:
 
         # The joint rejection grid is a function of (checkpoint, wp) only.  Reuse
         # a shared copy when one exists so a floor sweep doesn't recompute it.
+        # The copy is named by the label, so a label reused for another checkpoint would silently get the old
+        # model's grid: a sidecar records the checkpoint (a copy without one is trusted, as before).
         shared_grid = grid_dir / f'{slug}_grid_wp{wp:g}.csv'
-        if shared_grid.is_file() and not args.recompute:
+        sidecar = shared_grid.with_suffix('.ckpt')
+        reuse = shared_grid.is_file() and not args.recompute
+        if (
+            reuse
+            and sidecar.is_file()
+            and sidecar.read_text().strip() != str(ckpt_path)
+        ):
+            print(
+                f'  cached grid {shared_grid} is from another checkpoint: recomputing'
+            )
+            reuse = False
+        if reuse:
             df = pd.read_csv(shared_grid)
             print(f'  using cached grid: {shared_grid}  ({len(df)} points)')
         else:
@@ -341,6 +354,7 @@ def main() -> None:
             tmp = shared_grid.with_name(f'.{shared_grid.name}.{os.getpid()}')
             df.to_csv(tmp, index=False)
             os.replace(tmp, shared_grid)  # atomic — concurrent floor jobs may race
+            sidecar.write_text(f'{ckpt_path}\n')
 
         df.to_csv(out_dir / f'{slug}_grid.csv', index=False)
 
