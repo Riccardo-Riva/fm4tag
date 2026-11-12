@@ -6,7 +6,8 @@ validation batches) is run per candidate batch size, from the cell's own size do
 ``--max-peak-gib`` (the highest peak of the no-dropout baselines was 41.0 GiB of 44.4).  The accepted size is
 then timed with ``--time-steps`` and ``--time-steps`` + 100 steps (s/step = difference of the wall times), and
 so is the cell at its own batch size WITHOUT dropout (the dropout keys removed), so the cost of dropout is a
-ratio measured the same way.  Two workers, one per GPU of the job (CUDA_VISIBLE_DEVICES 0 and 1).
+ratio measured the same way.  Two workers, one per GPU the job was allocated (the first two entries of the
+CUDA_VISIBLE_DEVICES slurm set; never a fixed 0 and 1, which can be another job's cards).
 
 Run inside a 2-GPU slurm job (slurm/dropout_batch_sweep.sh)::
 
@@ -109,7 +110,7 @@ def run_once(
     if dry:
         print(' '.join(cmd))
         return {'rc': 0, 'secs': 0.0, 'peak_gib': float('nan'), 'finite': True}
-    env = {**os.environ, 'CUDA_VISIBLE_DEVICES': str(gpu), 'WANDB_MODE': 'disabled'}
+    env = {**os.environ, 'CUDA_VISIBLE_DEVICES': gpu, 'WANDB_MODE': 'disabled'}
     t0 = time.time()
     with (
         open(run_dir / 'rank_0.out', 'w') as out,
