@@ -18,7 +18,14 @@ REPO=/storage3/DSIP/rriva/research/fm4tag-chunk
 cd "$REPO" || exit 1
 nvidia-smi
 export GPU_FREE_MIB_REQUIRED=44000 GPU_WAIT_SECONDS=1800
-bash slurm/gpu_preflight.sh || { echo "[gpu] cards stayed occupied" >&2; exit 1; }
+if ! bash slurm/gpu_preflight.sh; then
+    # another tenant on an allocated card: back to the queue (as the pack jobs do), up to 3 times
+    if (( ${SLURM_RESTART_COUNT:-0} < 3 )); then
+        scontrol requeue "${SLURM_JOB_ID}" && sleep 600
+    fi
+    echo "[gpu] cards stayed occupied" >&2
+    exit 1
+fi
 DATA=/storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_152051
 cat $DATA/train/output/pp_output_train.h5 $DATA/val/output/pp_output_val.h5 > /dev/null
 export ENCODERS=rowcol_concat_v0 CHUNK=512
