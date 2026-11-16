@@ -139,7 +139,13 @@ def main() -> None:
             label=texts['mean'],
         ),
     ]
-    ax.legend(handles=handles, loc='upper left', frameon=False, fontsize=9)
+    ax.legend(
+        handles=handles,
+        loc=ac.get('legend_loc', 'upper left'),
+        ncol=int(ac.get('legend_ncol', 1)),
+        frameon=False,
+        fontsize=9,
+    )
     if texts['footnote']:
         fig.text(
             0.01,

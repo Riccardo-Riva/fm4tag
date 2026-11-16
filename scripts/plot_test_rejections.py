@@ -169,7 +169,12 @@ def main() -> None:
         fig.legend(
             handles=legend_handles(ac, reference, bool(relative_to)),
             loc='lower center',
-            ncol=len(ac['groups']) + 2 + int(reference) + int(bool(relative_to)),
+            ncol=int(
+                ac.get(
+                    'legend_ncol',
+                    len(ac['groups']) + 2 + int(reference) + int(bool(relative_to)),
+                )
+            ),
             frameon=False,
             fontsize=9,
             bbox_to_anchor=(0.5, -0.02),
@@ -193,7 +198,7 @@ def main() -> None:
                 fontsize=8,
                 color=ac['ink'],
             )
-        fig.tight_layout(rect=(0, 0.06, 1, 1))
+        fig.tight_layout(rect=(0, float(ac.get('legend_bottom', 0.06)), 1, 1))
         path = out_dir / fig_cfg['filename']
         fig.savefig(path, dpi=200, bbox_inches='tight')
         plt.close(fig)

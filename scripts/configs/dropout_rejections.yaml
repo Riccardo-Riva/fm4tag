@@ -1,0 +1,83 @@
+# Test-set rejections of the cases without and with dropout 0.2 on every layer (scripts/plot_test_rejections.py), absolute
+# and relative to from scratch (CE only, no dropout), from the per_run.csv of dropout_test_metrics.yaml:
+#
+#   MPLBACKEND=Agg .venv/bin/python scripts/plot_test_rejections.py --config scripts/configs/dropout_rejections.yaml
+#
+# Same arms as dropout_summary.yaml: P0 (CE only), P1 (CE only, no dropout only), P1 + JC, each without / with
+# dropout; 'relative_to: sc' divides every rejection of a panel by the mean of the 4 from-scratch runs without dropout.
+
+test_rejections:
+  per_run_csv: plots/dropout/test_metrics/per_run.csv
+  out_dir: plots/dropout/test_rejections
+  reference_label: GN2v01                  # its row in per_run.csv
+  flavours: [c, u, tau]                    # panel order: c, light, tau
+
+  # fractions: 'optimal' = each run's own (f_c, f_tau) from the validation search; 'nominal' = f_c 0.2, f_tau 0.01
+  figures:
+    - {filename: relative_optimal_wp77.png, fractions: optimal, working_point: 0.77, reference: false, relative_to: sc}
+    - {filename: relative_nominal_wp77.png, fractions: nominal, working_point: 0.77, reference: false, relative_to: sc}
+    - {filename: relative_optimal_wp70.png, fractions: optimal, working_point: 0.70, reference: false, relative_to: sc}
+    - {filename: relative_optimal_wp85.png, fractions: optimal, working_point: 0.85, reference: false, relative_to: sc}
+    - {filename: absolute_optimal_wp77.png, fractions: optimal, working_point: 0.77, reference: false}
+
+  arms:
+    sc: {method: scratch, group: p0}
+    ft_p0: {method: finetune, group: p0}
+    fr_p0: {method: frozen, group: p0}
+    sc_d: {method: scratch, group: p0_d}
+    ft_p0_d: {method: finetune, group: p0_d}
+    fr_p0_d: {method: frozen, group: p0_d}
+    ft_p1: {method: finetune, group: p1}
+    fr_p1: {method: frozen, group: p1}
+    scjc: {method: scratch, group: p1jc}
+    ftjc_p1: {method: finetune, group: p1jc}
+    frjc_p1: {method: frozen, group: p1jc}
+    scjc_d: {method: scratch, group: p1jc_d}
+    ftjc_p1_d: {method: finetune, group: p1jc_d}
+    frjc_p1_d: {method: frozen, group: p1jc_d}
+  methods: [scratch, finetune, frozen]     # x order
+  groups:                                  # marker shape = pretraining / loss, open = dropout 0.2
+    p0: {offset: -0.32, marker: o, filled: true}
+    p0_d: {offset: -0.16, marker: o, filled: false}
+    p1: {offset: 0.0, marker: D, filled: true}
+    p1jc: {offset: 0.16, marker: s, filled: true}
+    p1jc_d: {offset: 0.32, marker: s, filled: false}
+  jitter: 0.03                             # x spacing of the single runs of one arm
+  colours: {scratch: '#2a78d6', finetune: '#eb6834', frozen: '#1baf7a'}
+  ink: '#333333'
+  figsize: [14.0, 5.0]
+  legend_ncol: 3
+  legend_bottom: 0.2
+
+  # ---- ALL the wording of the figures lives here --------------------------------------------------------------
+  texts:
+    title: 'Test-set rejection at {wp:.0f}% b-jet efficiency, {fractions}'   # {wp}, {fractions}; '' = no title
+    fractions:
+      optimal: '$f_c$ and $f_\tau$ optimised per run on validation'
+      nominal: '$f_c = 0.2$, $f_\tau = 0.01$'
+    ylabel: 'Background rejection at {wp:.0f}% b-efficiency'
+    relative:                              # figures with relative_to
+      title: 'Test-set rejection relative to from scratch at {wp:.0f}% b-jet efficiency, {fractions}'
+      ylabel: 'Rejection / mean rejection of from scratch ({wp:.0f}% b-efficiency)'
+      baseline: 'Mean of from scratch (CE only, no dropout) = 1'
+      footnote: 'Each rejection is divided by the mean of the 4 from-scratch (CE only, no dropout) runs, per flavour.'
+    flavour: {c: 'c-jet rejection', u: 'Light-jet rejection', tau: 'τ-jet rejection'}
+    method: {scratch: 'From scratch', finetune: 'Fine-tuned', frozen: 'Frozen encoders'}
+    group:
+      p0: 'P0 pretraining, CE only'
+      p0_d: 'P0 pretraining, CE only, dropout 0.2'
+      p1: 'P1 pretraining, CE only'
+      p1jc: 'P1 pretraining, CE + JC'
+      p1jc_d: 'P1 pretraining, CE + JC, dropout 0.2'
+    run: 'One run'
+    mean: 'Mean ± std of the 4 runs'
+    reference: 'GN2v01 (production tagger, trained on other data)'
+    footnote: |-
+      $t\bar{t}$, $\sqrt{s} = 13.6$ TeV, $20 < p_T < 250$ GeV, $|\eta| < 2.5$; test split (1.86M jets before cuts).
+      P0 / P1: pretraining of the fine-tuned and frozen methods (2 pretraining seeds x 2 training seeds); from scratch has none (its P1 + JC case is from scratch + JC, gradient norm clipped at 1.0).
+      Dropout 0.2: attention and feed-forward dropout in every encoder and aggregator layer and in the head (frozen encoders: aggregator and head only), 80 epochs (otherwise 40).
+      P1 with CE only exists without dropout only.
+    footnote_fractions:                    # added under the footnote, per fractions mode; '' = nothing
+      optimal: |-
+        Optimised fractions: c-rejection maximised on validation with light and τ rejection at least GN2v01's at 80% b-efficiency; a run that cannot reach both is shown at its closest point.
+      nominal: ''

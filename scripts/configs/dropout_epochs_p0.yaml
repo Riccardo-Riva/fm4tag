@@ -1,0 +1,78 @@
+# Cross-entropy and embedding quality epoch by epoch, for the CE-only cases (from scratch, fine-tuned and frozen encoders from P0), without and with dropout 0.2 on every layer
+# (scripts/plot_arm_epochs.py):
+#
+#   MPLBACKEND=Agg .venv/bin/python scripts/plot_arm_epochs.py --config scripts/configs/dropout_epochs_p0.yaml
+#
+# Without dropout: F_final / F_scjc_stab (40 epochs); with dropout: D_drop (80 epochs).  The arms are told apart by
+# their campaign cell (`cells`); everything else as arm_epochs.yaml.
+
+arm_epochs:
+  out_dir: plots/dropout/epochs_p0
+  stages:
+    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235640
+    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235642
+    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_scjc_stab_20261109_175800
+    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/D_drop_20261113_215456
+    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/D_drop_20261113_215501
+  runs_per_arm: 4
+  epoch_offset: 1                    # Lightning counts epochs from 0; 1 = the first epoch is epoch 1
+
+  arms:                              # drawing order = this order (the last one is drawn on top)
+    sc: {encoder: scratch, pretraining: null, jet_contrastive: 0.0, cells: [sc], colour: '#2a78d6'}
+    sc_d: {encoder: scratch, pretraining: null, jet_contrastive: 0.0, cells: [sc_d02], colour: '#0b2f66'}
+    ft_p0: {encoder: finetune, pretraining: p0, jet_contrastive: 0.0, cells: [ft_p0s42, ft_p0s424], colour: '#eb6834'}
+    ft_p0_d: {encoder: finetune, pretraining: p0, jet_contrastive: 0.0, cells: [ft_p0s42_d02, ft_p0s424_d02], colour: '#7a2203'}
+    fr_p0: {encoder: frozen, pretraining: p0, jet_contrastive: 0.0, cells: [fr_p0s42, fr_p0s424], colour: '#1baf7a'}
+    fr_p0_d: {encoder: frozen, pretraining: p0, jet_contrastive: 0.0, cells: [fr_p0s42_d02, fr_p0s424_d02], colour: '#064d33'}
+
+  ce:
+    filename: ce_train_val.png
+    train_metric: train/head/loss_ce_epoch   # epoch mean of the training CE
+    val_metric: val/head/loss_ce              # also picks each run's best epoch (run_selection.csv)
+    figsize: [8.0, 5.0]
+    # ylim: [0.5, 0.75]                   # y range of `filename`; unset = automatic
+    zoom_filename: ce_train_val_zoom.png    # a copy at y range `zoom_ylim`; null = none
+    zoom_ylim: [0.55, 0.72]
+
+  embedding_figures:                 # metric -> file; panels = `embeddings`, column val/<embedding>/<metric>
+    effective_rank: effective_rank.png
+    uniformity: uniformity.png
+  embeddings: [tracks_embedding, jets_embedding, aggregator]
+  embedding_figsize: [14.0, 4.2]
+
+  linewidth: 1.3
+  alpha: 0.85
+  linestyles: {train: '--', val: '-'}
+  ink: '#333333'                     # the black lines of the train/validation legend entries
+  # A star on each run's lowest validation CE (its evaluated checkpoint) and, at that epoch, on each of its
+  # embedding curves (not necessarily at their own extreme there).  null = no stars.
+  best_marker: {marker: '*', size: 10, edge: white, edge_width: 0.5}
+
+  # ---- ALL the wording of the figures lives here --------------------------------------------------------------
+  texts:
+    arm:                             # legend entry per arm
+      sc: 'From scratch'
+      sc_d: 'From scratch, dropout 0.2'
+      ft_p0: 'Fine-tuned (P0)'
+      ft_p0_d: 'Fine-tuned (P0), dropout 0.2'
+      fr_p0: 'Frozen encoders (P0)'
+      fr_p0_d: 'Frozen encoders (P0), dropout 0.2'
+    xlabel: 'Epoch'
+    best_epoch: 'At the epoch of the run''s lowest validation CE'   # legend of the stars, embedding figures
+    ce:
+      title: 'Training and validation cross-entropy, CE only (P0)'   # '' = no title
+      ylabel: 'Cross-entropy'
+      train: 'Training (epoch mean)'
+      val: 'Validation'
+      best: 'Lowest validation CE of each run'   # legend of the stars
+      zoom_title: 'Training and validation cross-entropy, CE only (P0) (zoom)'   # title of the zoomed copy
+    effective_rank:
+      title: 'Effective rank of the embeddings (validation), 4 runs per case'
+      ylabel: 'Effective rank'
+    uniformity:
+      title: 'Uniformity of the embeddings (validation, lower = more uniform), 4 runs per case'
+      ylabel: 'Uniformity'
+    panel:                           # one panel title per embedding
+      tracks_embedding: 'Track embeddings'
+      jets_embedding: 'Jet-feature embedding'
+      aggregator: 'Global jet embedding'
