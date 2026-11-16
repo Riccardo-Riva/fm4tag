@@ -2,7 +2,10 @@
 # Batch-size sweep of the dropout cells on one 2-GPU node (scripts/dropout_batch_sweep.py): the largest batch per
 # cell that fits with dropout, and the cost of dropout per step.  Submit from the repo root:
 #
-#   sbatch slurm/dropout_batch_sweep.sh
+#   sbatch slurm/dropout_batch_sweep.sh                     # the six downstream arms of D_drop.cells
+#   sbatch --export=ALL,SWEEP_CELLS=<cells file>,SWEEP_NAMES='<cell> <cell> ...',SWEEP_TAG=<stage> \
+#       --output=<repo>/slurm/ssl_campaign/<stage>_sweep_%j.out slurm/dropout_batch_sweep.sh
+#                                                           # other cells; results in <stage>_sweep_<jobid>/
 #
 #SBATCH --job-name=ssl_drop_sweep
 #SBATCH --partition=gpu-L40S-open,gpu-A40
@@ -29,5 +32,12 @@ fi
 DATA=/storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_152051
 cat $DATA/train/output/pp_output_train.h5 $DATA/val/output/pp_output_val.h5 > /dev/null
 export ENCODERS=rowcol_concat_v0 CHUNK=512
-.venv/bin/python scripts/dropout_batch_sweep.py --cells scripts/configs/campaign/D_drop.cells \
-    --out "$REPO/slurm/ssl_campaign/D_drop_sweep_${SLURM_JOB_ID}"
+SWEEP_CELLS=${SWEEP_CELLS:-scripts/configs/campaign/D_drop.cells}
+SWEEP_TAG=${SWEEP_TAG:-D_drop}
+NAMES_ARG=()
+if [[ -n "${SWEEP_NAMES:-}" ]]; then
+    read -r -a NAMES <<< "$SWEEP_NAMES"
+    NAMES_ARG=(--cell-names "${NAMES[@]}")
+fi
+.venv/bin/python scripts/dropout_batch_sweep.py --cells "$SWEEP_CELLS" "${NAMES_ARG[@]}" \
+    --out "$REPO/slurm/ssl_campaign/${SWEEP_TAG}_sweep_${SLURM_JOB_ID}"

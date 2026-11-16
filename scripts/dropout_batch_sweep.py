@@ -12,6 +12,10 @@ CUDA_VISIBLE_DEVICES slurm set; never a fixed 0 and 1, which can be another job'
 Run inside a 2-GPU slurm job (slurm/dropout_batch_sweep.sh)::
 
     python scripts/dropout_batch_sweep.py --cells scripts/configs/campaign/D_drop.cells --out <dir>
+
+``--cell-names`` lists the cells to sweep (default: the six downstream arms of D_drop.cells), dealt round robin
+to the two cards, so put the longest first; the cells need ``datamodule.batch_size=`` and ``chunk_size=`` as
+literals or with ``${ENCODERS}`` / ``${CHUNK}`` (the only variables filled by default).
 """
 
 from __future__ import annotations
@@ -241,10 +245,8 @@ def main() -> None:
             f'need the 2 GPUs of the job in CUDA_VISIBLE_DEVICES, got {devices}'
         )
     devices = (devices + ['0', '1'])[:2]
-    plan = {
-        devices[0]: [args.cell_names[i] for i in (0, 1, 2) if i < len(args.cell_names)],
-        devices[1]: [args.cell_names[i] for i in (3, 4, 5) if i < len(args.cell_names)],
-    }
+    # round robin over the two cards, so name the longest cells first
+    plan = {gpu: args.cell_names[i::2] for i, gpu in enumerate(devices)}
     results, lock = [], threading.Lock()
     threads = [
         threading.Thread(target=work, args=(gpu, cells, names, args, results, lock))

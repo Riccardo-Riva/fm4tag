@@ -25,8 +25,9 @@ MARGIN = 1.10
 
 
 def arm_of(cell: str) -> str:
-    """``ftjc_p1s424_d02`` -> ``ftjc_p1``; ``sc_d02`` -> ``sc``; ``scjc_clip1_d02`` -> ``scjc_clip1``."""
-    return re.sub(r's\d+$', '', cell.removesuffix('_d02'))
+    """``ftjc_p1s424_d02`` -> ``ftjc_p1``; ``sc_d02`` -> ``sc``; ``scjc_clip1_d02`` -> ``scjc_clip1``;
+    ``p1_d01`` -> ``p1`` (the pretrainings of P_drop.cells)."""
+    return re.sub(r's\d+$', '', re.sub(r'_d\d+$', '', cell))
 
 
 def main() -> None:

@@ -9,6 +9,11 @@ Usage::
 
     ENCODERS=rowcol_concat_v0 CHUNK=512 python scripts/check_cell_dropout.py \
         --cells scripts/configs/campaign/D_drop.cells --expected 0.2
+
+and for the pretrainings (no head)::
+
+    ENCODERS=rowcol_concat_v0 CHUNK=512 python scripts/check_cell_dropout.py \
+        --cells scripts/configs/campaign/P_drop.cells --expected 0.1 --skip head
 """
 
 from __future__ import annotations
@@ -43,6 +48,13 @@ def main() -> None:
     )
     parser.add_argument('--cells', type=Path, required=True)
     parser.add_argument('--expected', type=float, required=True)
+    parser.add_argument(
+        '--skip',
+        nargs='*',
+        default=[],
+        choices=['encoders', 'aggregator', 'head'],
+        help='parts not checked (a pretraining has no head: --skip head)',
+    )
     args = parser.parse_args()
 
     bad = 0
@@ -68,6 +80,7 @@ def main() -> None:
             'aggregator': dropouts(aggregator),
             'head': dropouts(head),
         }
+        parts = {k: v for k, v in parts.items() if k not in args.skip}
         summary = ', '.join(
             f'{k}: {len(v)} x {sorted(set(v))}' for k, v in parts.items()
         )
