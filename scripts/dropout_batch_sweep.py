@@ -16,6 +16,10 @@ Run inside a 2-GPU slurm job (slurm/dropout_batch_sweep.sh)::
 ``--cell-names`` lists the cells to sweep (default: the six downstream arms of D_drop.cells), dealt round robin
 to the two cards, so put the longest first; the cells need ``datamodule.batch_size=`` and ``chunk_size=`` as
 literals or with ``${ENCODERS}`` / ``${CHUNK}`` (the only variables filled by default).
+
+To only MEASURE cells at their own batch size (peak memory and s/step, e.g. the WSD cells at batch 12800)::
+
+    ... --fractions 1.0 --max-peak-gib 45 --skip-baseline --extra finetune.warmup_epochs=0.2
 """
 
 from __future__ import annotations
@@ -43,6 +47,9 @@ DROPOUT_KEYS = (
     'head.mlp_dropout',
 )
 GIB = 1024.0
+EXTRA: list[
+    str
+] = []  # --extra: overrides appended to every run (after the cell's, so they win)
 
 
 def read_cells(path: Path, env: dict[str, str]) -> dict[str, list[str]]:
@@ -107,6 +114,7 @@ def run_once(
         '+trainer.limit_val_batches=3',
         'datamodule.num_workers=6',
         *overrides,
+        *EXTRA,
         'seed=4242',
         'experiment_name=dropout_sweep',
         f'output_dir={run_dir}',
@@ -161,8 +169,16 @@ def work(gpu, cells, names, args, results, lock) -> None:
         base_dir = args.out / name
         row = {'cell': name, 'batch_baseline': b0}
         # baseline timing, no dropout, at the cell's own batch size
-        row['s_per_step_nodrop'] = sec_per_step(
-            gpu, base_dir / 'nodrop', without_dropout(ov), args.time_steps, args.dry_run
+        row['s_per_step_nodrop'] = (
+            float('nan')
+            if args.skip_baseline
+            else sec_per_step(
+                gpu,
+                base_dir / 'nodrop',
+                without_dropout(ov),
+                args.time_steps,
+                args.dry_run,
+            )
         )
         accepted = None
         for frac in args.fractions:
@@ -230,8 +246,21 @@ def main() -> None:
             'fr_p0s42_d02',
         ],
     )
+    parser.add_argument(
+        '--skip-baseline',
+        action='store_true',
+        help='no timing of the cell without dropout (measuring cells as they are)',
+    )
+    parser.add_argument(
+        '--extra',
+        nargs='*',
+        default=[],
+        help='overrides appended to every run, e.g. finetune.warmup_epochs=0.2 for '
+        'WSD cells (their 1.6-epoch warmup does not fit a 1-epoch test)',
+    )
     parser.add_argument('--dry-run', action='store_true')
     args = parser.parse_args()
+    EXTRA.extend(args.extra)
 
     env = {**os.environ}
     env.setdefault('ENCODERS', 'rowcol_concat_v0')

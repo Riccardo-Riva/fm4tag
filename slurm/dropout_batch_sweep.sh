@@ -6,6 +6,7 @@
 #   sbatch --export=ALL,SWEEP_CELLS=<cells file>,SWEEP_NAMES='<cell> <cell> ...',SWEEP_TAG=<stage> \
 #       --output=<repo>/slurm/ssl_campaign/<stage>_sweep_%j.out slurm/dropout_batch_sweep.sh
 #                                                           # other cells; results in <stage>_sweep_<jobid>/
+#   SWEEP_ARGS='<more arguments of dropout_batch_sweep.py>' is appended to its command line.
 #
 #SBATCH --job-name=ssl_drop_sweep
 #SBATCH --partition=gpu-L40S-open,gpu-A40
@@ -39,5 +40,6 @@ if [[ -n "${SWEEP_NAMES:-}" ]]; then
     read -r -a NAMES <<< "$SWEEP_NAMES"
     NAMES_ARG=(--cell-names "${NAMES[@]}")
 fi
-.venv/bin/python scripts/dropout_batch_sweep.py --cells "$SWEEP_CELLS" "${NAMES_ARG[@]}" \
+read -r -a MORE_ARGS <<< "${SWEEP_ARGS:-}"
+.venv/bin/python scripts/dropout_batch_sweep.py --cells "$SWEEP_CELLS" "${NAMES_ARG[@]}" "${MORE_ARGS[@]}" \
     --out "$REPO/slurm/ssl_campaign/${SWEEP_TAG}_sweep_${SLURM_JOB_ID}"
