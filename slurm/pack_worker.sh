@@ -9,6 +9,13 @@
 #   <task>.done     the training completed
 #   <task>.failed   it failed, was truncated, or its prerequisite failed
 # A claim whose owner job is no longer in the queue is released and retried.
+#
+# Several trainings on one card (slurm/pack_gpu.sh starts SLOTS_PER_GPU workers per
+# GPU, all with PACK_LEDGER set): the workers of a card share a ledger directory on
+# the node, one <task>.mem file per running training holding its estimated GPU
+# memory in GiB (@mem of its cell, from <stage dir>/task_mem.tsv).  A worker starts a
+# task only if the ledger's sum plus the task's @mem stays within GPU_BUDGET_GIB; a
+# task alone on the card always starts.  Without PACK_LEDGER nothing changes.
 set -uo pipefail
 
 STAGE_DIR=$1
@@ -18,6 +25,9 @@ source "${STAGE_DIR}/pack.env"   # REPO VENV CONFIG_DIR CONFIG STAGE WANDB_GROUP
 TASKS=${STAGE_DIR}/tasks.tsv
 Q=${STAGE_DIR}/.queue
 mkdir -p "${Q}"
+LEDGER=${PACK_LEDGER:-}
+BUDGET=${GPU_BUDGET_GIB:-0}
+POLL=${PACK_POLL_SECONDS:-120}
 # shellcheck source=/dev/null
 source "${VENV}/bin/activate"
 
@@ -47,9 +57,40 @@ external_state() {
     return 2
 }
 
+# GiB of GPU memory the task was estimated to need (0 = not listed)
+task_mem() {
+    local m
+    m=$(awk -F'\t' -v t="$1" '$1 == t {print $2}' "${STAGE_DIR}/task_mem.tsv" 2>/dev/null)
+    echo "${m:-0}"
+}
+ledger_used() {
+    local used=0 f
+    for f in "${LEDGER}"/*.mem; do
+        [[ -e "${f}" ]] && used=$(( used + $(cat "${f}") ))
+    done
+    echo "${used}"
+}
+# Reserve the task's memory on this card: 0 = reserved, 1 = the card is too full now.
+reserve_mem() {
+    local task=$1 mem=$2 used rc=1
+    [[ -z "${LEDGER}" ]] && return 0
+    exec 9> "${LEDGER}/lock"
+    flock 9
+    used=$(ledger_used)
+    if (( used == 0 || used + mem <= BUDGET )); then
+        echo "${mem}" > "${LEDGER}/${task}.mem"
+        rc=0
+    fi
+    flock -u 9
+    exec 9>&-
+    return ${rc}
+}
+release_mem() { [[ -n "${LEDGER}" ]] && rm -f "${LEDGER}/$1.mem"; return 0; }
+trap '[[ -n "${NEXT:-}" ]] && release_mem "${NEXT}"' EXIT
+
 QUICK_FAILS=0
 while true; do
-    NEXT="" WAIT=0
+    NEXT="" WAIT=0 FULL=0
     while IFS=$'\t' read -r TASK CELL SEED EPOCHS EST AFTER OVS; do
         [[ -z "${TASK}" || "${TASK}" == \#* ]] && continue
         [[ -e "${Q}/${TASK}.done" || -e "${Q}/${TASK}.failed" ]] && continue
@@ -85,16 +126,22 @@ while true; do
         NEED=$(( EPOCHS * EST + 1200 ))
         USABLE=$(( DEADLINE - $(date +%s) - 1800 ))
         (( USABLE < NEED )) && continue   # does not fit what is left of this job
+        MEM=$(task_mem "${TASK}")
+        if ! reserve_mem "${TASK}" "${MEM}"; then
+            FULL=1          # fits when a training on this card ends
+            continue
+        fi
         if mkdir "${Q}/${TASK}.claim" 2>/dev/null; then
             echo "${SLURM_JOB_ID} $(hostname) ${WORKER}" > "${Q}/${TASK}.claim/owner"
             NEXT=${TASK}
             break
         fi
+        release_mem "${TASK}"
     done < "${TASKS}"
 
     if [[ -z "${NEXT}" ]]; then
-        if (( WAIT )); then
-            sleep 120
+        if (( WAIT || FULL )); then
+            sleep "${POLL}"
             continue
         fi
         log "no task left that this worker can run — exiting"
@@ -121,12 +168,13 @@ while true; do
     if (( ! CKPT_OK )); then
         log "${TASK}: no last.ckpt for ${ov} — failed"
         touch "${Q}/${TASK}.failed"
+        release_mem "${TASK}"
         continue
     fi
 
     USABLE=$(( DEADLINE - $(date +%s) - 1800 ))
     MAX_TIME=$(fmt_dhms "${USABLE}")
-    log "${TASK}: start (max_time ${MAX_TIME}, GPU ${CUDA_VISIBLE_DEVICES:-?})"
+    log "${TASK}: start (max_time ${MAX_TIME}, GPU ${CUDA_VISIBLE_DEVICES:-?}${LEDGER:+, ${MEM} GiB of $(ledger_used) reserved on the card, budget ${BUDGET}})"
     RUN_START=$(date +%s)
     cd "${RUN_DIR}" || exit 1
     fm4tag --config-path="${CONFIG_DIR}" --config-name="${CONFIG}" \
@@ -144,6 +192,7 @@ while true; do
         > "${RUN_DIR}/rank_0.out" 2> "${RUN_DIR}/rank_0.err"
     RC=$?
     RUN_SECONDS=$(( $(date +%s) - RUN_START ))
+    release_mem "${TASK}"
 
     if (( RC != 0 )); then
         STATUS=failed

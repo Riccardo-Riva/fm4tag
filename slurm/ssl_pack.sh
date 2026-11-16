@@ -14,6 +14,8 @@
 #   @est=S        estimated seconds per epoch on the slowest card (default:
 #                 EST_SECONDS_PER_EPOCH); a task starts only if it fits the
 #                 time left in its job
+#   @mem=G        estimated peak GPU memory in GiB (only with SLOTS_PER_GPU > 1;
+#                 default: GPU_BUDGET_GIB, i.e. the training runs alone on its card)
 #   encoder_ckpt=@<cell>       last.ckpt of that cell of THIS stage, same seed;
 #                              the task waits until that pretraining is done
 #   encoder_ckpt=@/abs/<cell dir>/seed_<s>   a pretraining of ANOTHER stage
@@ -27,6 +29,10 @@
 #                                 probes whose pretrainings have ended)
 #   DEPENDENCY=afterany:<ids> ...  hold the packs until those jobs have ended
 #                                 (e.g. probes of single-GPU pretrainings)
+#   SLOTS_PER_GPU=3 GPU_BUDGET_GIB=40 ...
+#                                 several trainings at a time on each card, as many
+#                                 as their @mem fit in the budget (docs/gpu_packing.md);
+#                                 @est must then be the time per epoch WHILE sharing
 #   STAGE_DIR=<stage> PACKS=1 bash slurm/ssl_pack.sh
 #                                 add packs to an existing stage (e.g. after a
 #                                 node failure: stale claims are released)
@@ -52,7 +58,10 @@ EXCLUDE_NODES=${EXCLUDE_NODES:-}    # node82 GPU 5 works again (checked 2026-10-
 NUM_WORKERS=${NUM_WORKERS:-6}
 # Even, i.e. whole cores (2 threads per core): with 9 CPUs per GPU the second
 # worker's srun step never got its CPUs and that GPU idled for the whole job.
-CPUS_PER_GPU=$(( (NUM_WORKERS + 3) / 2 * 2 ))
+# With SLOTS_PER_GPU trainings on a card, each still gets its own loader workers.
+SLOTS_PER_GPU=${SLOTS_PER_GPU:-1}
+GPU_BUDGET_GIB=${GPU_BUDGET_GIB:-40}    # of the 44.4 GiB of an A40 / L40S
+CPUS_PER_GPU=$(( (NUM_WORKERS + 3) / 2 * 2 * SLOTS_PER_GPU ))
 # Host RAM per GPU: a pretraining uses ~11 GiB anon (10 workers, measured S2);
 # the rest holds the page cache of the train + val files (17 GB).
 MEM_PER_GPU_GB=${MEM_PER_GPU_GB:-32}
@@ -137,15 +146,18 @@ cp "${CELLS}" "${STAGE_DIR}/cells"
 declare -A DATA_SEEN=()
 DATA_FILES=()
 TASK_LINES=()
+MEM_LINES=()
 CELL_NAMES=" "
 for LINE in "${CELL_LINES[@]}"; do
     read -r CELL TOKENS <<< "${LINE}"
     [[ -n "${CELL_FILTER}" && ! "${CELL}" =~ ${CELL_FILTER} ]] && continue
-    EPOCHS=${MAX_EPOCHS} EST=${EST_SECONDS_PER_EPOCH} AFTER_CELL="" OVS=()
+    EPOCHS=${MAX_EPOCHS} EST=${EST_SECONDS_PER_EPOCH} MEM=${GPU_BUDGET_GIB} AFTER_CELL="" OVS=()
     for tok in ${TOKENS}; do
         case "${tok}" in
             @epochs=*) EPOCHS=${tok#@epochs=} ;;
             @est=*)    EST=${tok#@est=} ;;
+            @mem=*)    MEM=${tok#@mem=}
+                       [[ "${MEM}" =~ ^[0-9]+$ ]] || { echo "ERROR: ${CELL}: ${tok} must be whole GiB" >&2; exit 1; } ;;
             @*) echo "ERROR: ${CELL}: unknown token ${tok}" >&2; exit 1 ;;
             encoder_ckpt=@/*) OVS+=("${tok}") ;;
             encoder_ckpt=@*)
@@ -169,11 +181,14 @@ for LINE in "${CELL_LINES[@]}"; do
         AFTER=-
         [[ -n "${AFTER_CELL}" ]] && AFTER=${AFTER_CELL}__s${SEED}
         TASK_LINES+=("${CELL}__s${SEED}"$'\t'"${CELL}"$'\t'"${SEED}"$'\t'"${EPOCHS}"$'\t'"${EST}"$'\t'"${AFTER}"$'\t'"${OVS[*]}")
-        echo "  task ${CELL}__s${SEED}: ${EPOCHS} epochs x ${EST} s ($(( (EPOCHS * EST + 1200) / 3600 )) h)${AFTER_CELL:+, after ${AFTER}}"
+        MEM_LINES+=("${CELL}__s${SEED}"$'\t'"${MEM}")
+        echo "  task ${CELL}__s${SEED}: ${EPOCHS} epochs x ${EST} s ($(( (EPOCHS * EST + 1200) / 3600 )) h)${AFTER_CELL:+, after ${AFTER}}$( (( SLOTS_PER_GPU > 1 )) && echo ", ${MEM} GiB" )"
     done
 done
 (( ${#TASK_LINES[@]} )) || { echo "ERROR: no cell matches CELL_FILTER=${CELL_FILTER}" >&2; exit 1; }
 printf '%s\n' "${TASK_LINES[@]}" > "${STAGE_DIR}/tasks.tsv"
+# the GPU-memory ledger of the workers exists only when cards are shared
+(( SLOTS_PER_GPU > 1 )) && printf '%s\n' "${MEM_LINES[@]}" > "${STAGE_DIR}/task_mem.tsv"
 
 cat > "${STAGE_DIR}/pack.env" << EOF
 REPO=${REPO}
@@ -186,6 +201,12 @@ NUM_WORKERS=${NUM_WORKERS}
 MIN_SANE_SECONDS=${MIN_SANE_SECONDS}
 EOF
 [[ -n "${WANDB_MODE}" ]] && echo "export WANDB_MODE=${WANDB_MODE}" >> "${STAGE_DIR}/pack.env"
+(( SLOTS_PER_GPU > 1 )) && echo "GPU_BUDGET_GIB=${GPU_BUDGET_GIB}" >> "${STAGE_DIR}/pack.env"
+if (( SLOTS_PER_GPU > 1 )); then
+    WORKER_CMD="bash ${REPO}/slurm/pack_gpu.sh ${STAGE_DIR} w\${i} ${SLOTS_PER_GPU}"
+else
+    WORKER_CMD="bash ${REPO}/slurm/pack_worker.sh ${STAGE_DIR} w\${i}"
+fi
 
 {
     echo "stage:        ${STAGE}"
@@ -193,6 +214,7 @@ EOF
     echo "repo:         ${REPO}  (git $(git -C "${REPO}" rev-parse --short HEAD))"
     echo "config:       ${CONFIG}"
     echo "packs:        ${PACKS} x ${GPUS_PER_PACK} GPUs (${GPU_NODE}, exclude ${EXCLUDE_NODES:-none}), ${WALLTIME}"
+    (( SLOTS_PER_GPU > 1 )) && echo "per GPU:      up to ${SLOTS_PER_GPU} trainings at a time within ${GPU_BUDGET_GIB} GiB (@mem), ${CPUS_PER_GPU} CPUs"
     echo "seeds:        ${SEEDS[*]}"
     echo "wandb group:  ${WANDB_GROUP}"
     echo "tasks:        ${#TASK_LINES[@]}"
@@ -236,7 +258,7 @@ for (( i = 0; i < ${GPUS_PER_PACK}; i++ )); do
     srun --exact --ntasks=1 --cpus-per-task=${CPUS_PER_GPU} --gres=gpu:1 \\
          --mem=${MEM_PER_GPU_GB}G \\
          --output=${STAGE_DIR}/pack_%j_w\${i}.log \\
-         bash ${REPO}/slurm/pack_worker.sh ${STAGE_DIR} w\${i} &
+         ${WORKER_CMD} &
 done
 wait
 echo "=== pack done"
