@@ -79,5 +79,6 @@ test_rejections:
       P1 with CE only exists without dropout only.
     footnote_fractions:                    # added under the footnote, per fractions mode; '' = nothing
       optimal: |-
-        Optimised fractions: c-rejection maximised on validation with light and τ rejection at least GN2v01's at 80% b-efficiency; a run that cannot reach both is shown at its closest point.
+        Optimised fractions: c-rejection maximised on validation with light and τ rejection at least GN2v01's at 80% b-efficiency.
+        Frozen encoders (P0), with and without dropout, and the three CE + JC cases with dropout reach both in none of their 4 runs and are shown at their closest point (the CE + JC ones at the edge of the fraction grid); every other case reaches both.
       nominal: ''
