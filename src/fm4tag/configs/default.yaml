@@ -267,6 +267,12 @@ finetune:
   backbone_lr:  ${optimizer.backbone_lr}
   weight_decay: ${optimizer.weight_decay}
   warmup_frac:  0.00
+  warmup_epochs: null      # warmup length in epochs; when set it replaces warmup_frac
+  # cosine = warmup, then cosine annealing to 0 over the rest of the run;
+  # wsd = warmup, stable at the base lr, linear decay to 0 over the last
+  # decay_frac of the steps (the pretrained parts warm up after their unfreeze).
+  schedule:     cosine
+  decay_frac:   0.2
   # DDP-safe staged unfreeze (all params in the optimiser from step 0; the
   # pretrained parts held at lr=0 until this epoch, then ramped onto the cosine
   # schedule). 0 = train everything from step 0 (from-scratch); >= max_epochs =

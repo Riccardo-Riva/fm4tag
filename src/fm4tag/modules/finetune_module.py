@@ -93,6 +93,15 @@ class FinetuneModule(L.LightningModule):
         weight_decay: AdamW weight decay.
         warmup_frac:  Fraction of total steps for linear LR warmup before
                       cosine annealing.
+        warmup_epochs: Warmup length in epochs (may be fractional); when set
+                      it replaces ``warmup_frac``, so runs of different
+                      ``max_epochs`` can share the same warmup.
+        schedule:     ``'cosine'`` (warmup, then cosine annealing to 0 over the
+                      rest of the run) or ``'wsd'`` (warmup-stable-decay:
+                      warmup, constant at the base lr, then a linear decay to
+                      0 over the last ``decay_frac`` of the steps).
+        decay_frac:   Fraction of total steps of the final linear decay
+                      (``schedule='wsd'`` only).
         unfreeze_at_epoch: Epochs to hold the pretrained parts at ``lr=0``
                       before ramping them onto the head's schedule.  ``0``
                       trains everything from step 0; ``>= max_epochs`` keeps
@@ -128,6 +137,9 @@ class FinetuneModule(L.LightningModule):
         backbone_lr: float | None = None,
         weight_decay: float = 1e-5,
         warmup_frac: float = 0.1,
+        warmup_epochs: float | None = None,
+        schedule: str = 'cosine',
+        decay_frac: float = 0.2,
         unfreeze_at_epoch: int = 0,
         chunk_size: int | None = None,
         freeze_encoders: bool = False,
@@ -179,6 +191,13 @@ class FinetuneModule(L.LightningModule):
         self.backbone_lr = backbone_lr if backbone_lr is not None else lr
         self.weight_decay = weight_decay
         self.warmup_frac = warmup_frac
+        self.warmup_epochs = warmup_epochs
+        if schedule not in ('cosine', 'wsd'):
+            raise ValueError(f"schedule must be 'cosine' or 'wsd', got {schedule!r}")
+        if not 0.0 < decay_frac < 1.0:
+            raise ValueError(f'decay_frac must be in (0, 1), got {decay_frac}')
+        self.schedule = schedule
+        self.decay_frac = decay_frac
         self.unfreeze_at_epoch = unfreeze_at_epoch
         self.chunk_size = chunk_size
 
@@ -462,19 +481,44 @@ class FinetuneModule(L.LightningModule):
         optimizer = torch.optim.AdamW(groups, weight_decay=self.weight_decay)
 
         total_steps = self.trainer.estimated_stepping_batches
-        warmup_steps = max(1, int(self.warmup_frac * total_steps))
         max_epochs = max(1, self.trainer.max_epochs or 1)
+        if self.warmup_epochs is not None:
+            warmup_steps = max(1, round(self.warmup_epochs * total_steps / max_epochs))
+        else:
+            warmup_steps = max(1, int(self.warmup_frac * total_steps))
         unfreeze_step = round(self.unfreeze_at_epoch * total_steps / max_epochs)
+        decay_steps = max(1, round(self.decay_frac * total_steps))
+        decay_start = total_steps - decay_steps
+        if self.schedule == 'wsd' and warmup_steps > decay_start:
+            raise ValueError(
+                f'wsd: the warmup ({warmup_steps} steps) ends after the decay '
+                f'starts (step {decay_start} of {total_steps})'
+            )
+
+        def ramp(step: int) -> float:
+            return 0.01 + 0.99 * step / warmup_steps
 
         def head_factor(step: int) -> float:
             if step < warmup_steps:
-                return 0.01 + 0.99 * step / warmup_steps
+                return ramp(step)
+            if self.schedule == 'wsd':
+                # stable at the base lr, then linear to 0 at the last step
+                if step < decay_start:
+                    return 1.0
+                return max(0.0, (total_steps - step) / decay_steps)
             progress = (step - warmup_steps) / max(1, total_steps - warmup_steps)
             return 0.5 * (1.0 + math.cos(math.pi * progress))
 
         def backbone_factor(step: int) -> float:
-            # Frozen (0 LR) until the unfreeze epoch, then joins the head curve.
-            return 0.0 if step < unfreeze_step else head_factor(step)
+            # Frozen (0 LR) until the unfreeze epoch.
+            if step < unfreeze_step:
+                return 0.0
+            if self.schedule == 'wsd':
+                # its own warmup after the unfreeze, then the head's curve
+                since = step - unfreeze_step
+                own = ramp(since) if since < warmup_steps else 1.0
+                return min(own, head_factor(step))
+            return head_factor(step)  # cosine: joins the head curve at once
 
         factors = [backbone_factor, head_factor] if pretrained_params else [head_factor]
         scheduler = LambdaLR(optimizer, lr_lambda=factors)

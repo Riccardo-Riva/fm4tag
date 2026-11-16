@@ -262,6 +262,125 @@ def test_staged_unfreeze_holds_backbone_at_zero_lr(
     assert opt.param_groups[0]['lr'] > 0.0  # backbone now training
 
 
+def _lr_curves(module, steps):
+    """Per-step lr factor (lr / base lr) of every param group, steps 0..steps-1."""
+    cfg = module.configure_optimizers()
+    opt, scheduler = cfg['optimizer'], cfg['lr_scheduler']['scheduler']
+    curves = {g['name']: [] for g in opt.param_groups}
+    for _ in range(steps):
+        for g in opt.param_groups:
+            curves[g['name']].append(g['lr'] / g['initial_lr'])
+        opt.step()
+        scheduler.step()
+    return curves
+
+
+def test_wsd_schedule_has_warmup_stable_and_linear_decay(
+    encoders, aggregator, head, two_views
+):
+    # 1000 steps over 10 epochs: warmup 0.5 epoch = 50 steps, decay = last 200.
+    module = _make_module(
+        encoders,
+        aggregator,
+        head,
+        two_views,
+        pretrained_parts=(),
+        schedule='wsd',
+        warmup_epochs=0.5,
+        decay_frac=0.2,
+    )
+    _attach_trainer(module, steps=1000, max_epochs=10)
+    f = _lr_curves(module, 1000)['head']
+    assert f[0] == pytest.approx(0.01)
+    assert f[25] == pytest.approx(0.01 + 0.99 * 25 / 50)
+    assert all(x == pytest.approx(1.0) for x in f[50:800])  # stable
+    assert f[800] == pytest.approx(1.0)  # the decay starts here
+    assert f[900] == pytest.approx(0.5)
+    assert f[999] == pytest.approx(1 / 200)
+    assert all(a >= b for a, b in zip(f[800:], f[801:]))  # monotone decay
+
+
+def test_wsd_warmup_epochs_gives_the_same_warmup_for_any_run_length(
+    encoders, aggregator, head, two_views
+):
+    """A 40-epoch run is the first epochs of an 80-epoch run until its decay."""
+    curves = {}
+    for epochs in (40, 80):
+        module = _make_module(
+            encoders,
+            aggregator,
+            head,
+            two_views,
+            pretrained_parts=(),
+            schedule='wsd',
+            warmup_epochs=1.6,
+            decay_frac=0.2,
+        )
+        _attach_trainer(module, steps=epochs * 100, max_epochs=epochs)
+        curves[epochs] = _lr_curves(module, epochs * 100)['head']
+    # warmup 160 steps in both; the short run decays from epoch 32 = step 3200
+    assert curves[40][:3200] == pytest.approx(curves[80][:3200])
+    assert curves[40][160] == pytest.approx(1.0)
+    assert curves[40][3600] == pytest.approx(0.5)
+    assert curves[80][6400] == pytest.approx(1.0)
+    assert curves[80][7200] == pytest.approx(0.5)
+
+
+def test_wsd_backbone_warms_up_after_its_unfreeze(
+    encoders, aggregator, head, two_views
+):
+    # 1000 steps over 10 epochs: unfreeze at epoch 2 = step 200, warmup 50 steps.
+    module = _make_module(
+        encoders,
+        aggregator,
+        head,
+        two_views,
+        backbone_lr=1e-4,
+        unfreeze_at_epoch=2,
+        schedule='wsd',
+        warmup_epochs=0.5,
+        decay_frac=0.2,
+    )
+    _attach_trainer(module, steps=1000, max_epochs=10)
+    curves = _lr_curves(module, 1000)
+    b, h = curves['backbone'], curves['head']
+    assert all(x == 0.0 for x in b[:200])  # held at 0
+    assert b[200] == pytest.approx(0.01)  # no jump to the full lr
+    assert b[225] == pytest.approx(0.01 + 0.99 * 25 / 50)
+    assert all(x == pytest.approx(1.0) for x in b[250:800])
+    assert b[800:] == pytest.approx(h[800:])  # same decay as the head
+
+
+def test_cosine_schedule_is_unchanged_by_default(encoders, aggregator, head, two_views):
+    module = _make_module(
+        encoders, aggregator, head, two_views, pretrained_parts=(), warmup_frac=0.1
+    )
+    _attach_trainer(module, steps=100, max_epochs=10)
+    f = _lr_curves(module, 100)['head']
+    assert f[5] == pytest.approx(0.01 + 0.99 * 5 / 10)
+    assert f[10] == pytest.approx(1.0)
+    assert f[55] == pytest.approx(0.5)  # halfway down the cosine
+
+
+def test_wsd_rejects_bad_settings(encoders, aggregator, head, two_views):
+    with pytest.raises(ValueError, match='schedule'):
+        _make_module(encoders, aggregator, head, two_views, schedule='linear')
+    with pytest.raises(ValueError, match='decay_frac'):
+        _make_module(encoders, aggregator, head, two_views, decay_frac=1.0)
+    module = _make_module(
+        encoders,
+        aggregator,
+        head,
+        two_views,
+        schedule='wsd',
+        warmup_epochs=9.5,
+        decay_frac=0.2,
+    )
+    _attach_trainer(module, steps=1000, max_epochs=10)
+    with pytest.raises(ValueError, match='warmup'):
+        module.configure_optimizers()
+
+
 def test_unfreeze_at_epoch_zero_trains_backbone_from_start(
     encoders, aggregator, head, two_views
 ):
