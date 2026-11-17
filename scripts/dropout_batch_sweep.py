@@ -100,11 +100,9 @@ def batch_of(overrides: list[str]) -> int:
     )
 
 
-def run_once(
-    gpu: int, run_dir: Path, overrides: list[str], steps: int, dry: bool
-) -> dict:
-    run_dir.mkdir(parents=True, exist_ok=True)
-    cmd = [
+def build_cmd(run_dir: Path, overrides: list[str], steps: int) -> list[str]:
+    """The fm4tag command of a ``steps``-step, 1-epoch training of a cell."""
+    return [
         str(REPO / '.venv' / 'bin' / 'fm4tag'),
         f'--config-path={CONFIG_DIR}',
         '--config-name=campaign_ssl',
@@ -119,6 +117,13 @@ def run_once(
         'experiment_name=dropout_sweep',
         f'output_dir={run_dir}',
     ]
+
+
+def run_once(
+    gpu: int, run_dir: Path, overrides: list[str], steps: int, dry: bool
+) -> dict:
+    run_dir.mkdir(parents=True, exist_ok=True)
+    cmd = build_cmd(run_dir, overrides, steps)
     if dry:
         print(' '.join(cmd))
         return {'rc': 0, 'secs': 0.0, 'peak_gib': float('nan'), 'finite': True}
