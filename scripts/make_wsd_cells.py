@@ -98,7 +98,7 @@ def main() -> None:
     if args.measured:
         for row in csv.DictReader(args.measured.open()):
             measured[row['arm'], row['dropout'] == '1'] = (
-                f' @est={row["est"]} @mem={row["mem"]}'
+                f' @est={int(float(row["est"]))} @mem={int(float(row["mem"]))}'
             )
 
     lines = []
