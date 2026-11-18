@@ -19,6 +19,15 @@ test_rejections:
     - {filename: relative_optimal_wp70.png, fractions: optimal, working_point: 0.70, reference: false, relative_to: sc}
     - {filename: relative_optimal_wp85.png, fractions: optimal, working_point: 0.85, reference: false, relative_to: sc}
     - {filename: absolute_optimal_wp77.png, fractions: optimal, working_point: 0.77, reference: false}
+    # the same figures zoomed on the region above `zoom.min_ratio` times the mean of `zoom.base`
+    - {filename: relative_optimal_wp77_zoom.png, fractions: optimal, working_point: 0.77, reference: false, relative_to: sc, zoom: true}
+    - {filename: relative_nominal_wp77_zoom.png, fractions: nominal, working_point: 0.77, reference: false, relative_to: sc, zoom: true}
+    - {filename: relative_optimal_wp70_zoom.png, fractions: optimal, working_point: 0.70, reference: false, relative_to: sc, zoom: true}
+    - {filename: relative_optimal_wp85_zoom.png, fractions: optimal, working_point: 0.85, reference: false, relative_to: sc, zoom: true}
+    - {filename: absolute_optimal_wp77_zoom.png, fractions: optimal, working_point: 0.77, reference: false, zoom: true}
+  zoom:
+    min_ratio: 0.9                         # lower end of the y axis, as a ratio to the mean of `base`
+    base: sc                               # from scratch, CE only, no dropout (also converts it for the absolute figure)
 
   arms:
     sc: {method: scratch, group: p0}
@@ -61,6 +70,7 @@ test_rejections:
       ylabel: 'Rejection / mean rejection of from scratch ({wp:.0f}% b-efficiency)'
       baseline: 'Mean of from scratch (CE only, no dropout) = 1'
       footnote: 'Each rejection is divided by the mean of the 4 from-scratch (CE only, no dropout) runs, per flavour.'
+    zoom: 'Zoomed: the y axis starts at {min_ratio} times the mean of from scratch (CE only, no dropout); cases below it are out of the range.'
     flavour: {c: 'c-jet rejection', u: 'Light-jet rejection', tau: 'τ-jet rejection'}
     method: {scratch: 'From scratch', finetune: 'Fine-tuned', frozen: 'Frozen encoders'}
     group:

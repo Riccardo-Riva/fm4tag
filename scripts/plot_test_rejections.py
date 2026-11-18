@@ -40,6 +40,7 @@ def draw_panel(
     col: str,
     reference: bool,
     relative_to: str | None = None,
+    zoom: dict | None = None,
 ) -> None:
     groups, texts = ac['groups'], ac['texts']
     scale = 1.0
@@ -87,6 +88,15 @@ def draw_panel(
     ax.set_xticklabels([texts['method'][m] for m in ac['methods']], fontsize=9)
     ax.set_xlim(-0.6, len(ac['methods']) - 0.4)
     ax.grid(True, axis='y', alpha=0.3)
+    if zoom:
+        # lower limit = min_ratio x the mean of the base arm (a ratio axis: min_ratio itself); the upper limit
+        # stays what matplotlib picked for all the data, i.e. adapted to each panel
+        base_mean = float(
+            per_run.loc[per_run['arm'] == zoom['base'], col].dropna().mean()
+        )
+        ax.set_ylim(
+            bottom=float(zoom['min_ratio']) * (1.0 if relative_to else base_mean)
+        )
 
 
 def legend_handles(ac: dict, reference: bool, relative: bool) -> list[Line2D]:
@@ -151,13 +161,20 @@ def main() -> None:
         wp, fractions = float(fig_cfg['working_point']), fig_cfg['fractions']
         reference = bool(fig_cfg['reference'])
         relative_to = fig_cfg.get('relative_to')
+        zoom = ac['zoom'] if fig_cfg.get('zoom') else None
         rel = texts['relative'] if relative_to else None
         fig, axes = plt.subplots(
             1, len(ac['flavours']), figsize=tuple(ac['figsize']), squeeze=False
         )
         for ax, flavour in zip(axes[0], ac['flavours']):
             draw_panel(
-                ax, per_run, ac, column(fractions, flavour, wp), reference, relative_to
+                ax,
+                per_run,
+                ac,
+                column(fractions, flavour, wp),
+                reference,
+                relative_to,
+                zoom,
             )
             ax.set_title(texts['flavour'][flavour], fontsize=10)
         axes[0][0].set_ylabel((rel or texts)['ylabel'].format(wp=100 * wp))
@@ -185,6 +202,7 @@ def main() -> None:
                 texts['footnote'],
                 texts['footnote_fractions'][fractions],
                 rel['footnote'] if rel else '',
+                texts['zoom'].format(min_ratio=zoom['min_ratio']) if zoom else '',
             )
             if t
         )
