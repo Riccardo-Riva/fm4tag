@@ -109,97 +109,97 @@ models:
   p0:
     label: 'P0'
     colour: '#1b1d21'
-    runs: [/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/P_full_20261023_085735/p0/seed_*]
+    runs: [/storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/P_full_20261023_085735/p0/seed_*]
   p1:
     label: 'P1'
     colour: '#1b1d21'
-    runs: [/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/P_full_20261026_094445/p1/seed_*]
+    runs: [/storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/P_full_20261026_094445/p1/seed_*]
   sc:
     label: 'From scratch'
     colour: '#2a78d6'
-    runs: [/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235642/sc/seed_*]
+    runs: [/storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_final_20261028_235642/sc/seed_*]
   ft_p0:
     label: 'Fine-tuned (P0)'
     colour: '#eb6834'
-    runs: [/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235640/ft_p0s4*/seed_*]
+    runs: [/storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_final_20261028_235640/ft_p0s4*/seed_*]
   fr_p0:
     label: 'Frozen encoders (P0)'
     colour: '#1baf7a'
-    runs: [/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235640/fr_p0s4*/seed_*]
+    runs: [/storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_final_20261028_235640/fr_p0s4*/seed_*]
   scjc:
     label: 'From scratch + JC'
     colour: '#2a78d6'
-    runs: [/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_scjc_stab_20261109_175800/scjc_clip1/seed_*]
+    runs: [/storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_scjc_stab_20261109_175800/scjc_clip1/seed_*]
   ftjc_p1:
     label: 'Fine-tuned (P1) + JC'
     colour: '#eb6834'
-    runs: [/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235640/ftjc_p1s4*/seed_*]
+    runs: [/storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_final_20261028_235640/ftjc_p1s4*/seed_*]
   frjc_p1:
     label: 'Frozen encoders (P1) + JC'
     colour: '#1baf7a'
-    runs: [/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235640/frjc_p1s4*/seed_*]
+    runs: [/storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_final_20261028_235640/frjc_p1s4*/seed_*]
   ft_p1:
     label: 'Fine-tuned (P1)'
     colour: '#9c2f0a'
-    runs: [/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_p1_nojc_20261109_175801/ft_p1s4*/seed_*]
+    runs: [/storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_p1_nojc_20261109_175801/ft_p1s4*/seed_*]
   fr_p1:
     label: 'Frozen encoders (P1)'
     colour: '#0b6b49'
-    runs: [/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_p1_nojc_20261109_175801/fr_p1s4*/seed_*]
+    runs: [/storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_p1_nojc_20261109_175801/fr_p1s4*/seed_*]
   # The five from-scratch + JC recipes (arm_epochs_scjc.yaml); `scjc` above is the clip 1.0 one
   rc_noclip:
     label: 'No clipping'
     colour: '#d0443a'
-    runs: [/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235642/scjc/seed_*]
+    runs: [/storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_final_20261028_235642/scjc/seed_*]
   rc_clip5:
     label: 'Clip 5.0'
     colour: '#eda100'
-    runs: [/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_scjc_clip_20261103_165640/scjc_clip5/seed_*]
+    runs: [/storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_scjc_clip_20261103_165640/scjc_clip5/seed_*]
   rc_clip1:
     label: 'Clip 1.0'
     colour: '#2a78d6'
-    runs: [/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_scjc_stab_20261109_175800/scjc_clip1/seed_*]
+    runs: [/storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_scjc_stab_20261109_175800/scjc_clip1/seed_*]
   rc_wu10:
     label: 'Clip 1.0 + warmup 10%'
     colour: '#7b4bc4'
-    runs: [/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_scjc_stab_20261109_175800/scjc_clip1_wu10/seed_*]
+    runs: [/storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_scjc_stab_20261109_175800/scjc_clip1_wu10/seed_*]
   rc_lr4:
     label: 'Clip 1.0 + lr 4e-4'
     colour: '#00a0b0'
-    runs: [/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_scjc_stab_20261109_175800/scjc_clip1_lr4/seed_*]
+    runs: [/storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_scjc_stab_20261109_175800/scjc_clip1_lr4/seed_*]
   # The single runs of the test ROCs (roc_comparison_arms_final{,_p1}.yaml)
   roc_sc:
     label: 'From scratch'
     colour: '#2a78d6'
-    runs: [/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235642/sc/seed_4242]
+    runs: [/storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_final_20261028_235642/sc/seed_4242]
   roc_ft_p0:
     label: 'Fine-tuned (P0)'
     colour: '#eb6834'
-    runs: [/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235640/ft_p0s424/seed_4242]
+    runs: [/storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_final_20261028_235640/ft_p0s424/seed_4242]
   roc_fr_p0:
     label: 'Frozen encoders (P0)'
     colour: '#1baf7a'
-    runs: [/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235640/fr_p0s424/seed_4242]
+    runs: [/storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_final_20261028_235640/fr_p0s424/seed_4242]
   roc_scjc:
     label: 'From scratch + JC'
     colour: '#2a78d6'
-    runs: [/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_scjc_stab_20261109_175800/scjc_clip1/seed_424242]
+    runs: [/storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_scjc_stab_20261109_175800/scjc_clip1/seed_424242]
   roc_ftjc_p1:
     label: 'Fine-tuned (P1) + JC'
     colour: '#eb6834'
-    runs: [/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235640/ftjc_p1s42/seed_4242]
+    runs: [/storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_final_20261028_235640/ftjc_p1s42/seed_4242]
   roc_frjc_p1:
     label: 'Frozen encoders (P1) + JC'
     colour: '#1baf7a'
-    runs: [/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235640/frjc_p1s42/seed_42424]
+    runs: [/storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_final_20261028_235640/frjc_p1s42/seed_42424]
   roc_ft_p1:
     label: 'Fine-tuned (P1)'
     colour: '#9c2f0a'
-    runs: [/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_p1_nojc_20261109_175801/ft_p1s424/seed_4242]
+    runs: [/storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_p1_nojc_20261109_175801/ft_p1s424/seed_4242]
   roc_fr_p1:
     label: 'Frozen encoders (P1)'
     colour: '#0b6b49'
-    runs: [/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_p1_nojc_20261109_175801/fr_p1s42/seed_4242]
+    runs: [/storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_p1_nojc_20261109_175801/fr_p1s42/seed_4242]
   # 3% of the labels: learning-rate check, regularisation check (+ the best run of the lr check), label-fraction scan
   lr_sc:
     label: 'From scratch'
@@ -207,21 +207,21 @@ models:
     order_by: [lr]
     short: 'scratch'
     config_labels: ['lr 3e-4', 'lr 6e-4', 'lr 1.2e-3']
-    runs: [/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/L_lr_20261104_163831/sc_lab3_lr*/seed_42]
+    runs: [/storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/L_lr_20261104_163831/sc_lab3_lr*/seed_42]
   lr_ft:
     label: 'Fine-tuned (P0)'
     colour: '#eb6834'
     order_by: [lr]
     short: 'fine-tuned'
     config_labels: ['lr 3e-4', 'lr 6e-4', 'lr 1.2e-3']
-    runs: [/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/L_lr_20261104_163831/ft_p0_lab3_lr*/seed_42]
+    runs: [/storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/L_lr_20261104_163831/ft_p0_lab3_lr*/seed_42]
   lr_fr:
     label: 'Frozen encoders (P0)'
     colour: '#1baf7a'
     order_by: [lr]
     short: 'frozen'
     config_labels: ['lr 3e-4', 'lr 6e-4', 'lr 1.2e-3']
-    runs: [/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/L_lr_20261104_163831/fr_p0_lab3_lr*/seed_42]
+    runs: [/storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/L_lr_20261104_163831/fr_p0_lab3_lr*/seed_42]
   reg_sc:
     label: 'From scratch'
     colour: '#2a78d6'
@@ -229,8 +229,8 @@ models:
     short: 'scratch'
     config_labels: ['None', 'Weight decay 0.05', 'Dropout 0.1', 'Both']
     runs:
-      - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/L_reg_20261105_105304/sc_lab3_*/seed_42
-      - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/L_lr_20261104_163831/sc_lab3_lr1.2e-3/seed_42
+      - /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/L_reg_20261105_105304/sc_lab3_*/seed_42
+      - /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/L_lr_20261104_163831/sc_lab3_lr1.2e-3/seed_42
   reg_ft:
     label: 'Fine-tuned (P0)'
     colour: '#eb6834'
@@ -238,8 +238,8 @@ models:
     short: 'fine-tuned'
     config_labels: ['None', 'Weight decay 0.05', 'Dropout 0.1', 'Both']
     runs:
-      - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/L_reg_20261105_105304/ft_p0_lab3_*/seed_42
-      - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/L_lr_20261104_163831/ft_p0_lab3_lr3e-4/seed_42
+      - /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/L_reg_20261105_105304/ft_p0_lab3_*/seed_42
+      - /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/L_lr_20261104_163831/ft_p0_lab3_lr3e-4/seed_42
   reg_fr:
     label: 'Frozen encoders (P0)'
     colour: '#1baf7a'
@@ -247,8 +247,8 @@ models:
     short: 'frozen'
     config_labels: ['None', 'Weight decay 0.05', 'Dropout 0.1', 'Both']
     runs:
-      - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/L_reg_20261105_105304/fr_p0_lab3_*/seed_42
-      - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/L_lr_20261104_163831/fr_p0_lab3_lr1.2e-3/seed_42
+      - /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/L_reg_20261105_105304/fr_p0_lab3_*/seed_42
+      - /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/L_lr_20261104_163831/fr_p0_lab3_lr1.2e-3/seed_42
   scan_sc:
     label: 'From scratch'
     colour: '#2a78d6'
@@ -256,8 +256,8 @@ models:
     short: 'scratch'
     config_labels: ['1% of the labels', '3%', '10%', '30%', '100%']
     runs:
-      - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/L_scan_20261105_151751/sc_lab*/seed_*
-      - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235642/sc/seed_*
+      - /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/L_scan_20261105_151751/sc_lab*/seed_*
+      - /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_final_20261028_235642/sc/seed_*
   scan_ft:
     label: 'Fine-tuned (P0)'
     colour: '#eb6834'
@@ -265,8 +265,8 @@ models:
     short: 'fine-tuned'
     config_labels: ['1% of the labels', '3%', '10%', '30%', '100%']
     runs:
-      - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/L_scan_20261105_151751/ft_p0_lab*/seed_*
-      - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235640/ft_p0s4*/seed_*
+      - /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/L_scan_20261105_151751/ft_p0_lab*/seed_*
+      - /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_final_20261028_235640/ft_p0s4*/seed_*
   scan_fr:
     label: 'Frozen encoders (P0)'
     colour: '#1baf7a'
@@ -274,8 +274,8 @@ models:
     short: 'frozen'
     config_labels: ['1% of the labels', '3%', '10%', '30%', '100%']
     runs:
-      - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/L_scan_20261105_151751/fr_p0_lab*/seed_*
-      - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235640/fr_p0s4*/seed_*
+      - /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/L_scan_20261105_151751/fr_p0_lab*/seed_*
+      - /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_final_20261028_235640/fr_p0s4*/seed_*
 
 info_sets:                            # lists of info items reused by several slides (YAML anchors)
   backup: &backup_items [start, trained, params, loss, batch, lr]

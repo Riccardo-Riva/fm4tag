@@ -5,17 +5,17 @@
 # with arm_test_metrics.yaml (plots/dropout/test_metrics/cache -> the absolute path of
 # plots/arm_comparison/test_metrics/cache), so only the 24 new runs need the GPU.
 #
-#   sbatch slurm/arm_roc/arm_test_metrics_job.sh /storage3/DSIP/rriva/research/fm4tag-chunk/scripts/configs/dropout_test_metrics.yaml
+#   sbatch slurm/arm_roc/arm_test_metrics_job.sh /storage3/DSIP/rriva/research/fm4tag/scripts/configs/dropout_test_metrics.yaml
 
 arm_test_metrics:
-  out_dir: /storage3/DSIP/rriva/research/fm4tag-chunk/plots/dropout/test_metrics
+  out_dir: /storage3/DSIP/rriva/research/fm4tag/plots/dropout/test_metrics
   stages:
-    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235640
-    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235642
-    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_p1_nojc_20261109_175801
-    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_scjc_stab_20261109_175800
-    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/D_drop_20261113_215456
-    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/D_drop_20261113_215501
+    - /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_final_20261028_235640
+    - /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_final_20261028_235642
+    - /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_p1_nojc_20261109_175801
+    - /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_scjc_stab_20261109_175800
+    - /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/D_drop_20261113_215456
+    - /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/D_drop_20261113_215501
   runs_per_arm: 4
   epoch_offset: 1
   ce: {val_metric: val/head/loss_ce}       # picks each run's best epoch (and its checkpoint)

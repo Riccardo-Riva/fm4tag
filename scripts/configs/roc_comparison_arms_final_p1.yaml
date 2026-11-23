@@ -11,17 +11,17 @@
 #   python scripts/roc_comparison.py --config scripts/configs/roc_comparison_arms_final_p1.yaml --device cuda
 
 models:
-- dir: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_scjc_stab_20261109_175800/scjc_clip1/seed_424242
+- dir: /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_scjc_stab_20261109_175800/scjc_clip1/seed_424242
   label: 'From scratch + JC'
-  checkpoint: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_scjc_stab_20261109_175800/scjc_clip1/seed_424242/scjc_clip1/version_0/checkpoints/epoch010-step14267-val_loss_ce0.6208.ckpt
+  checkpoint: /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_scjc_stab_20261109_175800/scjc_clip1/seed_424242/scjc_clip1/version_0/checkpoints/epoch010-step14267-val_loss_ce0.6208.ckpt
   colour: '#2a78d6'
-- dir: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235640/ftjc_p1s42/seed_4242
+- dir: /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_final_20261028_235640/ftjc_p1s42/seed_4242
   label: 'Fine-tuned (P1) + JC'
-  checkpoint: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235640/ftjc_p1s42/seed_4242/ftjc_p1s42/version_0/checkpoints/epoch038-step50583-val_loss_ce0.6286.ckpt
+  checkpoint: /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_final_20261028_235640/ftjc_p1s42/seed_4242/ftjc_p1s42/version_0/checkpoints/epoch038-step50583-val_loss_ce0.6286.ckpt
   colour: '#eb6834'
-- dir: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235640/frjc_p1s42/seed_42424
+- dir: /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_final_20261028_235640/frjc_p1s42/seed_42424
   label: 'Frozen encoders (P1) + JC'
-  checkpoint: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235640/frjc_p1s42/seed_42424/frjc_p1s42/version_0/checkpoints/epoch024-step8625-val_loss_ce0.6408.ckpt
+  checkpoint: /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_final_20261028_235640/frjc_p1s42/seed_42424/frjc_p1s42/version_0/checkpoints/epoch024-step8625-val_loss_ce0.6408.ckpt
   colour: '#1baf7a'
 
 # GN2v01 scores stored in the test file itself (no `file:` = read from test_file).
@@ -38,7 +38,7 @@ reference: 'GN2v01'
 # {f_c} / {f_tau} = its optimum from fraction_constrained_arms_final_p1.yaml.
 optimal_label: '{label} ($f_c$ = {f_c:.3f}, $f_\tau$ = {f_tau:.3f})'
 optimal_reference_label: 'GN2v01 ($f_c$ = 0.2, $f_\tau$ = 0.01)'
-optimal_out_dir: /storage3/DSIP/rriva/research/fm4tag-chunk/plots/arm_comparison_p1/roc_test_optimal
+optimal_out_dir: /storage3/DSIP/rriva/research/fm4tag/plots/arm_comparison_p1/roc_test_optimal
 
 # ── Jets / discriminant ───────────────────────────────────────────────────────
 test_file: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_152051/test/output/pp_output_test.h5
@@ -70,7 +70,7 @@ inference:
   precision: bf16
 
 plot:
-  out_dir: /storage3/DSIP/rriva/research/fm4tag-chunk/plots/arm_comparison_p1/roc_test_nominal
+  out_dir: /storage3/DSIP/rriva/research/fm4tag/plots/arm_comparison_p1/roc_test_nominal
   title: ''
   atlas_brand: ''
   atlas_first_tag: 'Simulation Internal'

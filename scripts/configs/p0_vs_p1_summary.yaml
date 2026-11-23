@@ -8,9 +8,9 @@ arm_summary:
   out_dir: plots/p0_vs_p1/summary
   filename: best_val_ce_p0_vs_p1.png
   stages:
-    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235640
-    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235642
-    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_scjc_stab_20261109_175800
+    - /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_final_20261028_235640
+    - /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_final_20261028_235642
+    - /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_scjc_stab_20261109_175800
   runs_per_arm: 4
   epoch_offset: 1
   ce: {val_metric: val/head/loss_ce}

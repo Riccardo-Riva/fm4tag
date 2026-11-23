@@ -18,9 +18,9 @@
 arm_epochs:
   out_dir: plots/arm_comparison/epochs_scjc
   stages:
-    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235642
-    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_scjc_clip_20261103_165640
-    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_scjc_stab_20261109_175800
+    - /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_final_20261028_235642
+    - /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_scjc_clip_20261103_165640
+    - /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_scjc_stab_20261109_175800
   runs_per_arm: 4
   epoch_offset: 1                    # Lightning counts epochs from 0; 1 = the first epoch is epoch 1
 

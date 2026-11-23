@@ -11,25 +11,25 @@
 #   python scripts/roc_comparison.py --config scripts/configs/roc_comparison_arms_final.yaml --device cuda
 
 models:
-- dir: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235642/sc/seed_4242
+- dir: /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_final_20261028_235642/sc/seed_4242
   label: 'From scratch'
-  checkpoint: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235642/sc/seed_4242/sc/version_0/checkpoints/epoch009-step6480-val_loss_ce0.6217.ckpt
+  checkpoint: /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_final_20261028_235642/sc/seed_4242/sc/version_0/checkpoints/epoch009-step6480-val_loss_ce0.6217.ckpt
   colour: '#2a78d6'
-- dir: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235640/ft_p0s424/seed_4242
+- dir: /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_final_20261028_235640/ft_p0s424/seed_4242
   label: 'Fine-tuned (P0)'
-  checkpoint: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235640/ft_p0s424/seed_4242/ft_p0s424/version_0/checkpoints/epoch005-step3888-val_loss_ce0.6303.ckpt
+  checkpoint: /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_final_20261028_235640/ft_p0s424/seed_4242/ft_p0s424/version_0/checkpoints/epoch005-step3888-val_loss_ce0.6303.ckpt
   colour: '#eb6834'
-- dir: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235640/fr_p0s424/seed_4242
+- dir: /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_final_20261028_235640/fr_p0s424/seed_4242
   label: 'Frozen encoders (P0)'
-  checkpoint: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235640/fr_p0s424/seed_4242/fr_p0s424/version_0/checkpoints/epoch006-step1379-val_loss_ce0.6488.ckpt
+  checkpoint: /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_final_20261028_235640/fr_p0s424/seed_4242/fr_p0s424/version_0/checkpoints/epoch006-step1379-val_loss_ce0.6488.ckpt
   colour: '#1baf7a'
-- dir: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_p1_nojc_20261109_175801/ft_p1s424/seed_4242
+- dir: /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_p1_nojc_20261109_175801/ft_p1s424/seed_4242
   label: 'Fine-tuned (P1)'
-  checkpoint: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_p1_nojc_20261109_175801/ft_p1s424/seed_4242/ft_p1s424/version_0/checkpoints/epoch039-step25920-val_loss_ce0.6156.ckpt
+  checkpoint: /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_p1_nojc_20261109_175801/ft_p1s424/seed_4242/ft_p1s424/version_0/checkpoints/epoch039-step25920-val_loss_ce0.6156.ckpt
   colour: '#9c2f0a'
-- dir: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_p1_nojc_20261109_175801/fr_p1s42/seed_4242
+- dir: /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_p1_nojc_20261109_175801/fr_p1s42/seed_4242
   label: 'Frozen encoders (P1)'
-  checkpoint: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_p1_nojc_20261109_175801/fr_p1s42/seed_4242/fr_p1s42/version_0/checkpoints/epoch020-step4137-val_loss_ce0.6335.ckpt
+  checkpoint: /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_p1_nojc_20261109_175801/fr_p1s42/seed_4242/fr_p1s42/version_0/checkpoints/epoch020-step4137-val_loss_ce0.6335.ckpt
   colour: '#0b6b49'
 
 # GN2v01 scores stored in the test file itself (no `file:` = read from test_file).
@@ -46,7 +46,7 @@ reference: 'GN2v01'
 # {f_c} / {f_tau} = its optimum from fraction_constrained_arms_final.yaml.
 optimal_label: '{label} ($f_c$ = {f_c:.3f}, $f_\tau$ = {f_tau:.3f})'
 optimal_reference_label: 'GN2v01 ($f_c$ = 0.2, $f_\tau$ = 0.01)'
-optimal_out_dir: /storage3/DSIP/rriva/research/fm4tag-chunk/plots/arm_comparison/roc_test_optimal
+optimal_out_dir: /storage3/DSIP/rriva/research/fm4tag/plots/arm_comparison/roc_test_optimal
 
 # ── Jets / discriminant ───────────────────────────────────────────────────────
 test_file: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_152051/test/output/pp_output_test.h5
@@ -78,7 +78,7 @@ inference:
   precision: bf16
 
 plot:
-  out_dir: /storage3/DSIP/rriva/research/fm4tag-chunk/plots/arm_comparison/roc_test_nominal
+  out_dir: /storage3/DSIP/rriva/research/fm4tag/plots/arm_comparison/roc_test_nominal
   title: ''
   atlas_brand: ''
   atlas_first_tag: 'Simulation Internal'

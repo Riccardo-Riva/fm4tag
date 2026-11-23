@@ -30,15 +30,15 @@ inference:
   precision: bf16
 
 models:
-- dir: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_scjc_stab_20261109_175800/scjc_clip1/seed_424242
+- dir: /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_scjc_stab_20261109_175800/scjc_clip1/seed_424242
   label: SCJC
-  checkpoint: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_scjc_stab_20261109_175800/scjc_clip1/seed_424242/scjc_clip1/version_0/checkpoints/epoch010-step14267-val_loss_ce0.6208.ckpt
-- dir: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235640/ftjc_p1s42/seed_4242
+  checkpoint: /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_scjc_stab_20261109_175800/scjc_clip1/seed_424242/scjc_clip1/version_0/checkpoints/epoch010-step14267-val_loss_ce0.6208.ckpt
+- dir: /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_final_20261028_235640/ftjc_p1s42/seed_4242
   label: FTJC
-  checkpoint: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235640/ftjc_p1s42/seed_4242/ftjc_p1s42/version_0/checkpoints/epoch038-step50583-val_loss_ce0.6286.ckpt
-- dir: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235640/frjc_p1s42/seed_42424
+  checkpoint: /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_final_20261028_235640/ftjc_p1s42/seed_4242/ftjc_p1s42/version_0/checkpoints/epoch038-step50583-val_loss_ce0.6286.ckpt
+- dir: /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_final_20261028_235640/frjc_p1s42/seed_42424
   label: FRJC
-  checkpoint: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235640/frjc_p1s42/seed_42424/frjc_p1s42/version_0/checkpoints/epoch024-step8625-val_loss_ce0.6408.ckpt
+  checkpoint: /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_final_20261028_235640/frjc_p1s42/seed_42424/frjc_p1s42/version_0/checkpoints/epoch024-step8625-val_loss_ce0.6408.ckpt
 
 roc_comparison:
   reference_tagger:

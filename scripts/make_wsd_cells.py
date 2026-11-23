@@ -23,7 +23,7 @@ import argparse
 import csv
 from pathlib import Path
 
-CAMPAIGN = '/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign'
+CAMPAIGN = '/storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign'
 PRETRAINED = {  # no-dropout pretrainings of P_full.cells
     'p0': f'{CAMPAIGN}/P_full_20261023_085735/p0/seed_{{seed}}',
     'p1': f'{CAMPAIGN}/P_full_20261026_094445/p1/seed_{{seed}}',

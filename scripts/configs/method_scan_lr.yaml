@@ -9,7 +9,7 @@ method_scan:
   out_dir: plots/label_scan/lr_check
   filenames: {best_vs_x: best_val_ce_vs_lr.png, curves: ce_per_epoch.png}
   stages:
-    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/L_lr_20261104_163831
+    - /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/L_lr_20261104_163831
   extra_runs: []
   x_key: optimizer.lr
   x_null: null                       # x when the key is null (not possible for lr)

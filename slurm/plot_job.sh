@@ -14,11 +14,11 @@
 #SBATCH --cpus-per-task=2
 #SBATCH --mem=8G
 #SBATCH --time=01:00:00
-#SBATCH --output=/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/plot_logs/plot_job_%j.log
+#SBATCH --output=/storage3/DSIP/rriva/research/fm4tag/slurm/plot_logs/plot_job_%j.log
 
 set -uo pipefail
 
-REPO=/storage3/DSIP/rriva/research/fm4tag-chunk
+REPO=/storage3/DSIP/rriva/research/fm4tag
 cd "$REPO" || exit 1
 export MPLBACKEND=Agg  # PNG only: a dead X11 forward would hang matplotlib
 

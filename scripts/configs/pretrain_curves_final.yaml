@@ -18,10 +18,10 @@
 pretrain_curves:
   out_dir: plots/pretrain_curves/final
   runs:                              # key -> run directory (the key only names the file and picks the title)
-    p0_s42: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/P_full_20261023_085735/p0/seed_42
-    p0_s424: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/P_full_20261023_085735/p0/seed_424
-    p1_s42: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/P_full_20261026_094445/p1/seed_42
-    p1_s424: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/P_full_20261026_094445/p1/seed_424
+    p0_s42: /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/P_full_20261023_085735/p0/seed_42
+    p0_s424: /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/P_full_20261023_085735/p0/seed_424
+    p1_s42: /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/P_full_20261026_094445/p1/seed_42
+    p1_s424: /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/P_full_20261026_094445/p1/seed_424
 
   figures:                           # kind -> its file ({key} = a key of `runs`) and any style override
     loss_terms:

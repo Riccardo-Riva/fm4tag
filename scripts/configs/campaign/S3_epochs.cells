@@ -9,4 +9,4 @@
 #   MAX_EPOCHS=15 EST_SECONDS_PER_EPOCH=1250 WALLTIME=1-00:00:00 \
 #   CELLS=scripts/configs/campaign/S3_epochs.cells bash slurm/ssl_pack.sh
 sc_lr1.1e-3_ep15  arm=scratch encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=28672 optimizer.lr=1.1e-3
-ft_p0_lr2.2e-3_bb10_ep15  arm=finetune encoder_ckpt=@/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/P_full_20261023_085735/p0/seed_42 encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=28672 optimizer.lr=2.2e-3 optimizer.backbone_lr=2.2e-4
+ft_p0_lr2.2e-3_bb10_ep15  arm=finetune encoder_ckpt=@/storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/P_full_20261023_085735/p0/seed_42 encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=28672 optimizer.lr=2.2e-3 optimizer.backbone_lr=2.2e-4

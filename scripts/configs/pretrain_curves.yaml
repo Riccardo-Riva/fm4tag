@@ -15,13 +15,13 @@
 pretrain_curves:
   out_dir: plots/pretrain_curves
   runs:                              # key -> run directory (the key only names the file and picks the title)
-    p0_qk: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/S2_qk_20261022_113820/qk_p0/seed_42
-    p1_qk: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/S2_qk_20261022_113820/qk_p1/seed_42
-    p2_qk: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/S2_qk_20261022_113820/qk_p2/seed_42
-    p0_full_s42: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/P_full_20261023_085735/p0/seed_42
-    p0_full_s424: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/P_full_20261023_085735/p0/seed_424
-    p2_full_s42: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/P_full_20261023_085735/p2/seed_42
-    p2_full_s424: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/P_full_20261023_085735/p2/seed_424
+    p0_qk: /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/S2_qk_20261022_113820/qk_p0/seed_42
+    p1_qk: /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/S2_qk_20261022_113820/qk_p1/seed_42
+    p2_qk: /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/S2_qk_20261022_113820/qk_p2/seed_42
+    p0_full_s42: /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/P_full_20261023_085735/p0/seed_42
+    p0_full_s424: /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/P_full_20261023_085735/p0/seed_424
+    p2_full_s42: /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/P_full_20261023_085735/p2/seed_42
+    p2_full_s424: /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/P_full_20261023_085735/p2/seed_424
 
   figures:                           # kind -> its file ({key} = a key of `runs`) and any style override
     effective_rank: {filename: '{key}_loss_and_effective_rank.png'}

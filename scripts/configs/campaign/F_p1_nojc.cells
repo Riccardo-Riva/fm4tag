@@ -16,7 +16,7 @@
 #   ENCODERS=rowcol_concat_v0 CHUNK=512 SEEDS='4242 42424' PACKS=4 MEM_PER_GPU_GB=40 \
 #   MAX_EPOCHS=40 EST_SECONDS_PER_EPOCH=1250 WALLTIME=2-00:00:00 \
 #   CELLS=scripts/configs/campaign/F_p1_nojc.cells bash slurm/ssl_pack.sh
-ft_p1s42  arm=finetune encoder_ckpt=@/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/P_full_20261026_094445/p1/seed_42 encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=28672 optimizer.lr=1.1e-3 optimizer.backbone_lr=1.1e-4
-ft_p1s424  arm=finetune encoder_ckpt=@/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/P_full_20261026_094445/p1/seed_424 encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=28672 optimizer.lr=1.1e-3 optimizer.backbone_lr=1.1e-4
-fr_p1s42  arm=frozen encoder_ckpt=@/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/P_full_20261026_094445/p1/seed_42 encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=94208 optimizer.lr=2e-3 @est=650
-fr_p1s424  arm=frozen encoder_ckpt=@/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/P_full_20261026_094445/p1/seed_424 encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=94208 optimizer.lr=2e-3 @est=650
+ft_p1s42  arm=finetune encoder_ckpt=@/storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/P_full_20261026_094445/p1/seed_42 encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=28672 optimizer.lr=1.1e-3 optimizer.backbone_lr=1.1e-4
+ft_p1s424  arm=finetune encoder_ckpt=@/storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/P_full_20261026_094445/p1/seed_424 encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=28672 optimizer.lr=1.1e-3 optimizer.backbone_lr=1.1e-4
+fr_p1s42  arm=frozen encoder_ckpt=@/storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/P_full_20261026_094445/p1/seed_42 encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=94208 optimizer.lr=2e-3 @est=650
+fr_p1s424  arm=frozen encoder_ckpt=@/storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/P_full_20261026_094445/p1/seed_424 encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=94208 optimizer.lr=2e-3 @est=650

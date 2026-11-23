@@ -13,20 +13,20 @@ method_scan:
   out_dir: plots/label_scan/learning_curve
   filenames: {best_vs_x: best_val_ce_vs_labelled_jets.png, curves: ce_per_epoch.png}
   stages:
-    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/L_scan_20261105_151751
+    - /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/L_scan_20261105_151751
   extra_runs:
-    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235642/sc/seed_4242
-    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235642/sc/seed_42424
-    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235642/sc/seed_424242
-    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235642/sc/seed_4242424
-    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235640/ft_p0s42/seed_4242
-    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235640/ft_p0s42/seed_42424
-    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235640/ft_p0s424/seed_4242
-    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235640/ft_p0s424/seed_42424
-    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235640/fr_p0s42/seed_4242
-    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235640/fr_p0s42/seed_42424
-    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235640/fr_p0s424/seed_4242
-    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/F_final_20261028_235640/fr_p0s424/seed_42424
+    - /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_final_20261028_235642/sc/seed_4242
+    - /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_final_20261028_235642/sc/seed_42424
+    - /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_final_20261028_235642/sc/seed_424242
+    - /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_final_20261028_235642/sc/seed_4242424
+    - /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_final_20261028_235640/ft_p0s42/seed_4242
+    - /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_final_20261028_235640/ft_p0s42/seed_42424
+    - /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_final_20261028_235640/ft_p0s424/seed_4242
+    - /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_final_20261028_235640/ft_p0s424/seed_42424
+    - /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_final_20261028_235640/fr_p0s42/seed_4242
+    - /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_final_20261028_235640/fr_p0s42/seed_42424
+    - /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_final_20261028_235640/fr_p0s424/seed_4242
+    - /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/F_final_20261028_235640/fr_p0s424/seed_42424
   x_key: datamodule.train_max_rows
   x_null: 18600000                   # no train_max_rows = the whole train split
   x_ref: 18600000                    # {r} = x / x_ref in the texts: the fraction of the labels

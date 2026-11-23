@@ -10,11 +10,11 @@ method_scan:
   out_dir: plots/label_scan/reg_check
   filenames: {best_vs_x: best_val_ce_vs_regularisation.png, curves: ce_per_epoch.png}
   stages:
-    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/L_reg_20261105_105304
+    - /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/L_reg_20261105_105304
   extra_runs:
-    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/L_lr_20261104_163831/sc_lab3_lr1.2e-3/seed_42
-    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/L_lr_20261104_163831/ft_p0_lab3_lr3e-4/seed_42
-    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/L_lr_20261104_163831/fr_p0_lab3_lr1.2e-3/seed_42
+    - /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/L_lr_20261104_163831/sc_lab3_lr1.2e-3/seed_42
+    - /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/L_lr_20261104_163831/ft_p0_lab3_lr3e-4/seed_42
+    - /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/L_lr_20261104_163831/fr_p0_lab3_lr1.2e-3/seed_42
   x_categories:                      # 5.962613854843877e-05 = the campaign's default weight decay
     - {key: none, match: {optimizer.weight_decay: 5.962613854843877e-05, aggregator.ff_dropout: 0.0, head.mlp_dropout: 0.02}}
     - {key: wd, match: {optimizer.weight_decay: 0.05, aggregator.ff_dropout: 0.0, head.mlp_dropout: 0.02}}

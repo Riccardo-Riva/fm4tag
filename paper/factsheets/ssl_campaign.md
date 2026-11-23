@@ -3,7 +3,7 @@
 Scope: contrastive pretraining (P0, P1, P2) of the fm4tag encoders, then downstream training of the flavour tagger by
 three methods: from scratch (SC), fine-tuning (FT), frozen encoders (FR), each with or without the downstream
 jet-embedding contrastive term (JC). Worktree `/storage3/DSIP/rriva/research/fm4tag-chunk`, branch `feat/chunked-ia`
-(local, never pushed). Run dirs: `/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/<stage>_<ts>/<cell>/seed_<s>/`.
+(local, never pushed). Run dirs: `/storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/<stage>_<ts>/<cell>/seed_<s>/`.
 
 Provenance tags: **[F]** verified in files (resolved `.hydra/config.yaml`, `metrics.csv`, `run_info.yaml`, csv summaries,
 code, dataset preprocessing yaml); **[M]** memory note
@@ -180,7 +180,7 @@ adding downstream JC hurts given P1 (FT +0.0130, FR +0.0075; batch/lr also diffe
 Pretraining-seed effect: FT←P0 s42 0.6316 vs s424 0.6308; FR←P1 s42 0.6335 vs s424 0.6387; FR+JC←P1 0.6415 vs 0.6456 [F].
 Test CE equals best val CE within 5e-4 in every arm [F per_arm.csv].
 
-### 5.2 Test rejections at 77% b-eff [F] `/storage3/DSIP/rriva/research/fm4tag-chunk/plots/arm_comparison/test_metrics/per_run.csv`
+### 5.2 Test rejections at 77% b-eff [F] `/storage3/DSIP/rriva/research/fm4tag/plots/arm_comparison/test_metrics/per_run.csv`
 
 Mean ± std over 4 runs.
 
@@ -363,24 +363,24 @@ Planned "cost per arm" table (docs/ssl_campaign.md §5.7) never produced.
 ## 8. Plots
 
 Paper-ready candidates (wording in YAML `texts:`, no "ATLAS", consistent style; I viewed the first three):
-- `/storage3/DSIP/rriva/research/fm4tag-chunk/plots/arm_comparison/summary/best_val_ce_per_method.png` — best val CE, 8 methods, 3 groups (viewed: clean).
-- `/storage3/DSIP/rriva/research/fm4tag-chunk/plots/arm_comparison/test_metrics/test_rejections_optimal_wp77.png` (+ `_gn2`, `nominal_wp77`, `optimal_wp70`, `optimal_wp85`) — test c/light/τ rejections, 8 methods (viewed: clean, footnote correct).
-- `/storage3/DSIP/rriva/research/fm4tag-chunk/plots/label_scan/learning_curve/best_val_ce_vs_labelled_jets.png` — label scan (viewed: clean; P0 only).
-- `/storage3/DSIP/rriva/research/fm4tag-chunk/plots/pretrain_curves/final/p{0,1}_s{42,424}_{loss_terms,loss_and_effective_rank,loss_and_uniformity}.png` — pretraining curves (12 PNG).
-- `/storage3/DSIP/rriva/research/fm4tag-chunk/plots/p0_vs_p1/summary/best_val_ce_p0_vs_p1.png`, `/storage3/DSIP/rriva/research/fm4tag-chunk/plots/p0_vs_p1/test_rejections/relative_optimal_wp77.png`.
-- `/storage3/DSIP/rriva/research/fm4tag-chunk/plots/arm_comparison/epochs_scjc/ce_train_val.png` (+ `effective_rank.png`, `uniformity.png`) — SC+JC collapse illustration.
-- `/storage3/DSIP/rriva/research/fm4tag-chunk/plots/arm_comparison/epochs/ce_train_val_zoom.png`, `.../epochs_p1/ce_train_val_zoom.png` — per-epoch CE (overfitting / FT←P1 still improving).
+- `/storage3/DSIP/rriva/research/fm4tag/plots/arm_comparison/summary/best_val_ce_per_method.png` — best val CE, 8 methods, 3 groups (viewed: clean).
+- `/storage3/DSIP/rriva/research/fm4tag/plots/arm_comparison/test_metrics/test_rejections_optimal_wp77.png` (+ `_gn2`, `nominal_wp77`, `optimal_wp70`, `optimal_wp85`) — test c/light/τ rejections, 8 methods (viewed: clean, footnote correct).
+- `/storage3/DSIP/rriva/research/fm4tag/plots/label_scan/learning_curve/best_val_ce_vs_labelled_jets.png` — label scan (viewed: clean; P0 only).
+- `/storage3/DSIP/rriva/research/fm4tag/plots/pretrain_curves/final/p{0,1}_s{42,424}_{loss_terms,loss_and_effective_rank,loss_and_uniformity}.png` — pretraining curves (12 PNG).
+- `/storage3/DSIP/rriva/research/fm4tag/plots/p0_vs_p1/summary/best_val_ce_p0_vs_p1.png`, `/storage3/DSIP/rriva/research/fm4tag/plots/p0_vs_p1/test_rejections/relative_optimal_wp77.png`.
+- `/storage3/DSIP/rriva/research/fm4tag/plots/arm_comparison/epochs_scjc/ce_train_val.png` (+ `effective_rank.png`, `uniformity.png`) — SC+JC collapse illustration.
+- `/storage3/DSIP/rriva/research/fm4tag/plots/arm_comparison/epochs/ce_train_val_zoom.png`, `.../epochs_p1/ce_train_val_zoom.png` — per-epoch CE (overfitting / FT←P1 still improving).
 Provisional / not paper-ready:
-- Everything under `/storage3/DSIP/rriva/research/fm4tag-chunk/plots/dropout/` — confounded, to be superseded by the WSD redo.
+- Everything under `/storage3/DSIP/rriva/research/fm4tag/plots/dropout/` — confounded, to be superseded by the WSD redo.
 - All of the above method-comparison plots will be superseded if the WSD redo becomes the paper's result.
 - ROC curves `plots/arm_comparison{,_p1}/roc_test_{nominal,optimal}{,_noref}/roc.png` and rej_vs_pt — one seed per method (choice of seed
   noted in report.yaml); for a paper use multi-seed bands or the summary plots.
-- `/storage3/DSIP/rriva/research/fm4tag-chunk/plots/pretrain_curves/*.png` (top level, 11-06; QK pilots, P2) — superseded by `final/`.
+- `/storage3/DSIP/rriva/research/fm4tag/plots/pretrain_curves/*.png` (top level, 11-06; QK pilots, P2) — superseded by `final/`.
 - `plots/label_scan/{lr_check,reg_check}/*` — single-seed checks, appendix at most; label-scan `ce_per_epoch.png` y-range to 2.6.
 - Missing figures: S2 T×λ probe grid (only a table / the old deck `docs/slides/ssl_campaign/ssl_campaign.pdf`), QK-norm logit growth,
   embedding-quality comparison across downstream methods as a single summary.
-Slide decks with all plots: `/storage3/DSIP/rriva/research/fm4tag-chunk/docs/slides/report/ssl_campaign_plots.pptx` (78 slides, has the
-"eight training methods" settings table), `/storage3/DSIP/rriva/research/fm4tag-chunk/docs/slides/ssl_campaign/ssl_campaign.pptx` (older).
+Slide decks with all plots: `/storage3/DSIP/rriva/research/fm4tag/docs/slides/report/ssl_campaign_plots.pptx` (78 slides, has the
+"eight training methods" settings table), `/storage3/DSIP/rriva/research/fm4tag/docs/slides/ssl_campaign/ssl_campaign.pptx` (older).
 
 ## 9. Inconsistencies / referee targets
 

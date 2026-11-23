@@ -10,11 +10,11 @@
 #   MAX_EPOCHS=100 EST_SECONDS_PER_EPOCH=240 WALLTIME=1-00:00:00 \
 #   CELLS=scripts/configs/campaign/S3_lowlabel.cells bash slurm/ssl_pack.sh
 sc_lr1.1e-3_lab10  arm=scratch encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=28672 datamodule.train_max_rows=1860000 trainer.log_every_n_steps=20 optimizer.lr=1.1e-3
-ft_p0_lr2.2e-3_bb10_lab10  arm=finetune encoder_ckpt=@/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/P_full_20261023_085735/p0/seed_42 encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=28672 datamodule.train_max_rows=1860000 trainer.log_every_n_steps=20 optimizer.lr=2.2e-3 optimizer.backbone_lr=2.2e-4
+ft_p0_lr2.2e-3_bb10_lab10  arm=finetune encoder_ckpt=@/storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/P_full_20261023_085735/p0/seed_42 encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=28672 datamodule.train_max_rows=1860000 trainer.log_every_n_steps=20 optimizer.lr=2.2e-3 optimizer.backbone_lr=2.2e-4
 # Rerun (2026-10-28 evening): FT <- P0 overfit to train CE 0.33 / val 1.25 at 2x SC's lr;
 # retry it at 5.6e-4 (= 2.2e-3 at full data, 0.6298 vs 0.6297), and add FR <- P0 (only
 # aggregator + head train, so less room to overfit) at its approved lr 2e-3 and own batch
 # (19 steps per epoch). Same MAX_EPOCHS and EST; MEM_PER_GPU_GB=40 for FR's host RAM.
 #   CELL_FILTER='lr5.6e-4|^fr_' MEM_PER_GPU_GB=40 + the command above
-ft_p0_lr5.6e-4_bb10_lab10  arm=finetune encoder_ckpt=@/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/P_full_20261023_085735/p0/seed_42 encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=28672 datamodule.train_max_rows=1860000 trainer.log_every_n_steps=20 optimizer.lr=5.6e-4 optimizer.backbone_lr=5.6e-5
-fr_p0_lr2e-3_lab10  arm=frozen encoder_ckpt=@/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/P_full_20261023_085735/p0/seed_42 encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=94208 datamodule.train_max_rows=1860000 trainer.log_every_n_steps=10 optimizer.lr=2e-3
+ft_p0_lr5.6e-4_bb10_lab10  arm=finetune encoder_ckpt=@/storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/P_full_20261023_085735/p0/seed_42 encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=28672 datamodule.train_max_rows=1860000 trainer.log_every_n_steps=20 optimizer.lr=5.6e-4 optimizer.backbone_lr=5.6e-5
+fr_p0_lr2e-3_lab10  arm=frozen encoder_ckpt=@/storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/P_full_20261023_085735/p0/seed_42 encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=94208 datamodule.train_max_rows=1860000 trainer.log_every_n_steps=10 optimizer.lr=2e-3

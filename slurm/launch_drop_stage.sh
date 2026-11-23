@@ -14,10 +14,10 @@
 #SBATCH --cpus-per-task=2
 #SBATCH --mem=8G
 #SBATCH --time=00:30:00
-#SBATCH --output=/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/D_drop_launch_%j.out
+#SBATCH --output=/storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/D_drop_launch_%j.out
 
 set -euo pipefail
-REPO=/storage3/DSIP/rriva/research/fm4tag-chunk
+REPO=/storage3/DSIP/rriva/research/fm4tag
 SWEEP_DIR=${1:?abs path of the sweep dir}
 cd "$REPO"
 echo "node $(hostname)  git $(git rev-parse --short HEAD)  $(date)"

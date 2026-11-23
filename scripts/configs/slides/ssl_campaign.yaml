@@ -54,20 +54,20 @@ style:
     bar_muted: '#b7d3f6'
 
 data:
-  s0_table: /storage3/DSIP/rriva/research/fm4tag-chunk-s0/slurm/profiling/s0_20261016_103150_a40/table.csv
-  firstlook_table: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/profiling/firstlook_20261015_230859/table.csv
-  aggpacked_table: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/profiling/aggpacked_20261016_093645/table.csv
-  loader_bench: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/smoke/loader/out_6470015.txt
-  s1_stage: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/S1_arch_20261016_121444
+  s0_table: /storage3/DSIP/rriva/research/fm4tag/slurm/profiling/s0_20261016_103150_a40/table.csv
+  firstlook_table: /storage3/DSIP/rriva/research/fm4tag/slurm/profiling/firstlook_20261015_230859/table.csv
+  aggpacked_table: /storage3/DSIP/rriva/research/fm4tag/slurm/profiling/aggpacked_20261016_093645/table.csv
+  loader_bench: /storage3/DSIP/rriva/research/fm4tag/slurm/smoke/loader/out_6470015.txt
+  s1_stage: /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/S1_arch_20261016_121444
   # Stage directories searched (globs allowed) for a cell; the first that has it wins.
   s2_stages:
-    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/S2_pretrain_20261019_102325
-    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/S2_p1_20261020_112148
-    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/S2_probe_20261020_112146
-    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/S2_probe_p2T03_*
-    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/S2_p2clip_20261020_145001
+    - /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/S2_pretrain_20261019_102325
+    - /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/S2_p1_20261020_112148
+    - /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/S2_probe_20261020_112146
+    - /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/S2_probe_p2T03_*
+    - /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/S2_p2clip_20261020_145001
   # Row-attention logits per checkpoint (slurm/smoke/attn_logits.py, 2026-10-22)
-  row_attn_csv: /storage3/DSIP/rriva/research/fm4tag-chunk/docs/slides/ssl_campaign/data/row_attn_logits.csv
+  row_attn_csv: /storage3/DSIP/rriva/research/fm4tag/docs/slides/ssl_campaign/data/row_attn_logits.csv
 
 # ── Plots ────────────────────────────────────────────────────────────────────
 plots:
@@ -210,10 +210,10 @@ plots:
     val_metric: val/loss
     spike_level: 200
     runs:                                # the stopped 30-epoch pretrainings (lr 1e-3)
-      - {stage: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/P_full_20261021_112456, cell: p0, seed: 42, key: P0, label: "P0, seed 42"}
-      - {stage: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/P_full_20261021_112456, cell: p0, seed: 424, key: P0, label: "P0, seed 424", ls: '--'}
-      - {stage: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/P_full_20261021_161637, cell: p1, seed: 42, key: P1, label: "P1, seed 42"}
-      - {stage: /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/P_full_20261021_161637, cell: p1, seed: 424, key: P1, label: "P1, seed 424", ls: '--'}
+      - {stage: /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/P_full_20261021_112456, cell: p0, seed: 42, key: P0, label: "P0, seed 42"}
+      - {stage: /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/P_full_20261021_112456, cell: p0, seed: 424, key: P0, label: "P0, seed 424", ls: '--'}
+      - {stage: /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/P_full_20261021_161637, cell: p1, seed: 42, key: P1, label: "P1, seed 42"}
+      - {stage: /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/P_full_20261021_161637, cell: p1, seed: 424, key: P1, label: "P1, seed 424", ls: '--'}
     texts:
       xlabel: "epoch"
       ylabel_val: "validation loss"

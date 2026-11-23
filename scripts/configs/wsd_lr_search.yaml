@@ -4,11 +4,11 @@
 
 lr_search:
   stages:
-    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/W_lr_full_20261117_154033
-    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/W_lr_shared_20261117_154042
+    - /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/W_lr_full_20261117_154033
+    - /storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/W_lr_shared_20261117_154042
   seed: 42
   metric: val/head/loss_ce
-  out_dir: /storage3/DSIP/rriva/research/fm4tag-chunk/plots/wsd_lr_search
+  out_dir: /storage3/DSIP/rriva/research/fm4tag/plots/wsd_lr_search
   lr_values: {'38': 3.75e-4, '75': 7.5e-4, '150': 1.5e-3}   # cell-name tag -> learning rate
   epochs: 40
   decay_frac: 0.2                          # the WSD decay = the last 20% of the epochs (shaded)

@@ -16,9 +16,9 @@
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=80G
 #SBATCH --time=04:00:00
-#SBATCH --output=/storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/D_drop_sweep_%j.out
+#SBATCH --output=/storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/D_drop_sweep_%j.out
 
-REPO=/storage3/DSIP/rriva/research/fm4tag-chunk
+REPO=/storage3/DSIP/rriva/research/fm4tag
 cd "$REPO" || exit 1
 nvidia-smi
 export GPU_FREE_MIB_REQUIRED=44000 GPU_WAIT_SECONDS=1800
