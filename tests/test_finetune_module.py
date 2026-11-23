@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 import torch
+import torch.nn.functional as F
 
 from fm4tag.augmentations import Compose, CutMix, FeatureDropout
 from fm4tag.losses import MultiViewSupConLoss
@@ -150,6 +152,61 @@ def test_class_weights_registered_as_buffer(encoders, aggregator, head, two_view
     )
     assert isinstance(module.class_weights, torch.Tensor)
     assert 'class_weights' in dict(module.named_buffers())
+
+
+def test_class_weights_enter_the_cross_entropy(encoders, aggregator, head):
+    """The logged head CE is the class-weighted CE of the logits, and differs from the unweighted one."""
+    weights = [
+        1.5,
+        1.5,
+        1.0,
+        4.0,
+    ]  # flavour_label of the 152051 class_dict: b, c, light, tau
+    module = _make_module(
+        encoders,
+        aggregator,
+        head,
+        [],
+        loss_weights={'cross_entropy': 1.0},
+        class_weights=weights,
+    ).eval()
+    torch.manual_seed(5)
+    batch = _make_batch(B=16)
+    batch['label'] = torch.tensor([0, 1, 2, 3] * 4)
+    with torch.no_grad():
+        _, logits, log_dict = module._compute_loss(batch)
+        expected = F.cross_entropy(logits, batch['label'], weight=torch.tensor(weights))
+        unweighted = F.cross_entropy(logits, batch['label'])
+    assert torch.allclose(log_dict['head/loss_ce'], expected)
+    assert not torch.allclose(expected, unweighted)
+
+
+def test_runner_derives_class_weights_from_the_class_dict(tmp_path):
+    """use_class_weights=true reads <global object>.<label variable> from class_dict_path (what run.py does)."""
+    import yaml
+    from hydra import compose, initialize_config_dir
+
+    import importlib
+
+    runner = importlib.import_module(
+        'fm4tag.runner.run'
+    )  # the package re-exports a function named run
+
+    src = Path(runner.__file__).read_text()
+    assert 'class_dict[cfg.global_object][label_var]' in src
+    config_dir = Path(runner.__file__).resolve().parents[1] / 'configs'
+    with initialize_config_dir(config_dir=str(config_dir), version_base=None):
+        cfg = compose(config_name='campaign_ssl', overrides=['use_class_weights=true'])
+    assert cfg.use_class_weights is True
+    class_dict = tmp_path / 'class_dict.yaml'
+    class_dict.write_text(
+        yaml.safe_dump({'jets': {'flavour_label': [1.5, 1.5, 1.0, 4.0]}})
+    )
+    label_var = cfg.variables[cfg.global_object].label
+    assert cfg.global_object == 'jets' and label_var == 'flavour_label'
+    loaded = yaml.safe_load(class_dict.read_text())
+    assert loaded[cfg.global_object][label_var] == [1.5, 1.5, 1.0, 4.0]
+    assert list(cfg.variables[cfg.global_object].unique_labels) == [0, 1, 2, 3]
 
 
 # ---------------------------------------------------------------------------

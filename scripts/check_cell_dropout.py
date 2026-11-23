@@ -87,7 +87,9 @@ def main() -> None:
         wrong = [
             k
             for k, v in parts.items()
-            if not v or any(abs(p - args.expected) > 1e-12 for p in v)
+            # a part with no dropout module is fine only when no dropout is expected (p = 0 builds none)
+            if (not v and args.expected != 0.0)
+            or any(abs(p - args.expected) > 1e-12 for p in v)
         ]
         bad += bool(wrong)
         print(f'{"FAIL" if wrong else "ok  "} {name}: {summary}')
