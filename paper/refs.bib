@@ -1,0 +1,1775 @@
+% refs.bib -- bibliography for the fm4tag / salt contrastive-learning flavour-tagging paper
+% Generated 2026-11-17. arXiv ids, titles, authors and years were checked against the arXiv API;
+% DOIs against CrossRef/DataCite; venues against arXiv journal_ref, Semantic Scholar, or publisher pages.
+% Keys reused from the author's bibs: diary.bib (somepalli2021saint, oord2018representation,
+% tian2020makes, pmlr-v9-gutmann10a, lee2019settransformerframeworkattentionbased,
+% chen2024tabdecocomprehensivecontrastiveframework, Komiske_2019, Qu_2020, zaheer2018deepsets,
+% vaswani2023attentionneed, golling2024masked, vigl2024finetuning, atlas2020monte, atlas2023transformer)
+% and salt-ririva/paper/paper.bib (GN1, GN2, ATLAS:2019, Qu:2022, Bols:2020, Kingma:2015, Evans:2008,
+% ATLAS:2008, Guest:2018, pytorch, lightning, Birk:2023).
+% Aliases NOT defined here (same paper under a second key in the author's bibs):
+%   Qu:2020 = Qu_2020 ; Zaheer:2017 = zaheer2018deepsets ; 2017arXiv170603762V = vaswani2023attentionneed ;
+%   GN2X = atlas2023transformer.
+% Each entry is preceded by "% [category] relevance" and "% verified: source"; entries or fields that
+% could not be checked carry a "% UNVERIFIED:" line directly above the entry.
+% Categories: ftag = flavour tagging / HEP ML, data, tab = tabular DL, ssl = self-supervised/contrastive,
+% hepssl = SSL and foundation models in HEP, train = training details, own = the author's own talks.
+
+% [ftag] ATLAS GN2 transformer tagger on tracks: the baseline architecture reproduced in salt and the aggregator/head design copied into fm4tag; also the reference for the JetSet sample.
+% verified: arXiv journal_ref + CrossRef; key reused from salt-ririva/paper/paper.bib
+@article{GN2,
+  author        = {{ATLAS Collaboration}},
+  title         = {{Transforming jet flavour tagging at ATLAS}},
+  journal       = {Nature Commun.},
+  volume        = {17},
+  pages         = {541},
+  year          = {2026},
+  doi           = {10.1038/s41467-025-65059-6},
+  eprint        = {2505.19689},
+  archivePrefix = {arXiv},
+  primaryClass  = {hep-ex},
+}
+
+% [ftag] ATLAS GN1 (graph-network tagger with auxiliary track-origin and vertexing tasks), predecessor of GN2.
+% verified: existing entry in salt-ririva/paper/paper.bib (CDS page blocked by bot check, not re-verified online)
+@techreport{GN1,
+  author      = {{ATLAS Collaboration}},
+  title       = {{Graph Neural Network Jet Flavour Tagging with the ATLAS Detector}},
+  number      = {ATL-PHYS-PUB-2022-027},
+  institution = {CERN},
+  year        = {2022},
+  url         = {https://cds.cern.ch/record/2811135},
+}
+
+% [ftag] ATLAS Run-2 taggers DL1r/DL1d (RNNIP/DIPS low-level inputs + DL1 high-level network): the pre-transformer state of the art.
+% verified: arXiv journal_ref; key reused from salt-ririva/paper/paper.bib
+@article{ATLAS:2019,
+  author        = {{ATLAS Collaboration}},
+  title         = {{ATLAS flavour-tagging algorithms for the LHC Run 2 $pp$ collision dataset}},
+  journal       = {Eur. Phys. J. C},
+  volume        = {83},
+  pages         = {681},
+  year          = {2023},
+  doi           = {10.1140/epjc/s10052-023-11699-1},
+  eprint        = {2211.16345},
+  archivePrefix = {arXiv},
+  primaryClass  = {physics.data-an},
+}
+
+% [ftag] GN2X: transformer for boosted H->bb/cc, shows the GN2 architecture family beyond small-R jets (optional).
+% verified: existing entries diary.bib (atlas2023transformer) and salt paper.bib (GN2X); not re-verified online. Alias: GN2X
+@techreport{atlas2023transformer,
+  author      = {{ATLAS Collaboration}},
+  title       = {{Transformer Neural Networks for Identifying Boosted Higgs Bosons decaying into $b\bar{b}$ and $c\bar{c}$ in ATLAS}},
+  number      = {ATL-PHYS-PUB-2023-021},
+  institution = {CERN},
+  year        = {2023},
+  url         = {https://cds.cern.ch/record/2866601},
+}
+
+% [ftag] ATLAS GN3 public plots: transformer adding neutral PFlow constituents and lepton-ID inputs, six output classes, Lion optimiser, geometric loss weighting; the "GN3" point in the Introduction.
+% verified: fetched the ATLAS public plots page (dated 15-08-2025)
+@misc{ATLASFTAG202501,
+  author       = {{ATLAS Collaboration}},
+  title        = {{Flavor tagging performance of a transformer tagger using tracks, neutral particle flow constituents and lepton identification information}},
+  howpublished = {ATLAS public plots ATLAS-FTAG-2025-01},
+  year         = {2025},
+  url          = {https://atlas.web.cern.ch/Atlas/GROUPS/PHYSICS/PLOTS/FTAG-2025-01/},
+}
+
+% [ftag] GN3 PUB note, reported in a CDS listing as ATL-PHYS-PUB-2026-001 (restricted at the time of the search); cite only once public.
+% verified: -
+% UNVERIFIED: title/number seen only in a web-search summary of a CDS listing; the note was not readable
+@techreport{ATLASGN3PubNote2026,
+  author      = {{ATLAS Collaboration}},
+  title       = {{GN3: Multi-task, Multi-modal Transformers for Jet Flavour Tagging in ATLAS}},
+  number      = {ATL-PHYS-PUB-2026-001},
+  institution = {CERN},
+  year        = {2026},
+}
+
+% [ftag] salt framework (JOSS): the training framework used for the GN2 lambda scan.
+% verified: CrossRef + JOSS page; no arXiv version found
+@article{Barr2025Salt,
+  author  = {Barr, Jackson and Biswas, Diptaparna and Draguet, Maxence and Gadow, Philipp and Haines, Emil and Karkout, Osama and Kobylianskii, Dmitrii and Lai, Wei Sheng and Leigh, Matthew and Luongo, Nicholas and others},
+  title   = {{Salt: Multimodal Multitask Machine Learning for High Energy Physics}},
+  journal = {J. Open Source Softw.},
+  volume  = {10},
+  number  = {112},
+  pages   = {7217},
+  year    = {2025},
+  doi     = {10.21105/joss.07217},
+}
+
+% [ftag] CMS DeepJet: multi-class tagger on all jet constituents (charged, neutral, SVs).
+% verified: arXiv journal_ref; key reused from salt paper.bib
+@article{Bols:2020,
+  author        = {Bols, Emil and Kieseler, Jan and Verzetti, Mauro and Stoye, Markus and Stakia, Anna},
+  title         = {{Jet Flavour Classification Using DeepJet}},
+  journal       = {JINST},
+  volume        = {15},
+  pages         = {P12012},
+  year          = {2020},
+  doi           = {10.1088/1748-0221/15/12/P12012},
+  eprint        = {2008.10519},
+  archivePrefix = {arXiv},
+  primaryClass  = {hep-ex},
+}
+
+% [ftag] CMS Run-2 heavy-flavour identification (DeepCSV, cMVA): the CMS baseline before DeepJet/ParT (optional).
+% verified: arXiv journal_ref
+@article{CMS2018HeavyFlavour,
+  author        = {{CMS Collaboration}},
+  title         = {{Identification of heavy-flavour jets with the CMS detector in pp collisions at 13 TeV}},
+  journal       = {JINST},
+  volume        = {13},
+  pages         = {P05011},
+  year          = {2018},
+  doi           = {10.1088/1748-0221/13/05/P05011},
+  eprint        = {1712.07158},
+  archivePrefix = {arXiv},
+  primaryClass  = {physics.ins-det},
+}
+
+% [ftag] ParticleNet: jets as particle clouds with dynamic graph convolutions; first point-cloud SOTA tagger.
+% verified: arXiv journal_ref; key reused from diary.bib (alias Qu:2020 in salt paper.bib)
+@article{Qu_2020,
+  author        = {Qu, Huilin and Gouskos, Loukas},
+  title         = {{ParticleNet: Jet Tagging via Particle Clouds}},
+  journal       = {Phys. Rev. D},
+  volume        = {101},
+  pages         = {056019},
+  year          = {2020},
+  doi           = {10.1103/PhysRevD.101.056019},
+  eprint        = {1902.08570},
+  archivePrefix = {arXiv},
+  primaryClass  = {hep-ph},
+}
+
+% [ftag] Particle Transformer (ParT) + JetClass: pairwise-interaction attention; also shows pretrain-on-JetClass then fine-tune gains.
+% verified: arXiv journal_ref + salt paper.bib (key reused)
+@inproceedings{Qu:2022,
+  author        = {Qu, Huilin and Li, Congqiao and Qian, Sitian},
+  title         = {{Particle Transformer for Jet Tagging}},
+  booktitle     = {Proceedings of the 39th International Conference on Machine Learning},
+  series        = {PMLR},
+  volume        = {162},
+  pages         = {18281--18292},
+  year          = {2022},
+  eprint        = {2202.03772},
+  archivePrefix = {arXiv},
+  primaryClass  = {hep-ph},
+}
+
+% [ftag] CMS UParT v2 (ParT-based unified AK4 tagger, 13.6 TeV): the CMS reference already cited on the poster.
+% verified: CMS BTV public page for DP-2025-081 (title, CDS record 2948917); year inferred from the DP number
+@techreport{CMSDP2025081,
+  author      = {{CMS Collaboration}},
+  title       = {{Flavour tagging performance of the updated Unified Particle Transformer algorithm with the {CMS} experiment at $\sqrt{s}=13.6$~{TeV}}},
+  number      = {CMS-DP-2025-081},
+  institution = {CERN},
+  year        = {2025},
+  url         = {https://cds.cern.ch/record/2948917},
+}
+
+% [ftag] CMS proceedings describing UParT (ParT-based, adds s-tagging) and Run-3 heavy-flavour tagging; citable arXiv companion of the DP notes.
+% verified: arXiv API (proceedings, no journal_ref)
+@misc{Sarkar2024CMSRun3,
+  author        = {Sarkar, Uttiya},
+  title         = {{Run 3 performance and advances in heavy-flavor jet tagging in CMS}},
+  year          = {2024},
+  eprint        = {2412.05863},
+  archivePrefix = {arXiv},
+  primaryClass  = {hep-ex},
+}
+
+% [ftag] Adversarial training to make flavour taggers robust to injected mismodelling: the closest HEP precedent for robustness-oriented training.
+% verified: arXiv journal_ref
+@article{Stein2022Adversarial,
+  author        = {Stein, Annika and Coubez, Xavier and Mondal, Spandan and Novak, Andrzej and Schmidt, Alexander},
+  title         = {{Improving Robustness of Jet Tagging Algorithms with Adversarial Training}},
+  journal       = {Comput. Softw. Big Sci.},
+  volume        = {6},
+  pages         = {15},
+  year          = {2022},
+  doi           = {10.1007/s41781-022-00087-1},
+  eprint        = {2203.13890},
+  archivePrefix = {arXiv},
+  primaryClass  = {physics.data-an},
+}
+
+% [ftag] ATLAS data/MC b-efficiency calibration with ttbar: why data-to-MC differences matter for taggers.
+% verified: arXiv journal_ref
+@article{ATLAS2019bjetCalib,
+  author        = {{ATLAS Collaboration}},
+  title         = {{ATLAS $b$-jet identification performance and efficiency measurement with $t\bar{t}$ events in $pp$ collisions at $\sqrt{s}=13$ TeV}},
+  journal       = {Eur. Phys. J. C},
+  volume        = {79},
+  pages         = {970},
+  year          = {2019},
+  doi           = {10.1140/epjc/s10052-019-7450-8},
+  eprint        = {1907.05120},
+  archivePrefix = {arXiv},
+  primaryClass  = {hep-ex},
+}
+
+% [ftag] ATLAS light-jet mistag calibration with Z+jets: data-MC scale factors (motivation for robustness outlook).
+% verified: arXiv journal_ref
+@article{ATLAS2023LightCalib,
+  author        = {{ATLAS Collaboration}},
+  title         = {{Calibration of the light-flavour jet mistagging efficiency of the $b$-tagging algorithms with $Z$+jets events using 139 $\mathrm{fb}^{-1}$ of ATLAS proton-proton collision data at $\sqrt{s} = 13$ TeV}},
+  journal       = {Eur. Phys. J. C},
+  volume        = {83},
+  pages         = {728},
+  year          = {2023},
+  doi           = {10.1140/epjc/s10052-023-11736-z},
+  eprint        = {2301.06319},
+  archivePrefix = {arXiv},
+  primaryClass  = {hep-ex},
+}
+
+% [ftag] ATLAS continuous calibration of tagger outputs via optimal transport (optional, data-MC outlook).
+% verified: arXiv journal_ref
+@article{ATLAS2025OTCalib,
+  author        = {{ATLAS Collaboration}},
+  title         = {{A continuous calibration of the ATLAS flavour-tagging classifiers via optimal transportation maps}},
+  journal       = {Eur. Phys. J. C},
+  volume        = {85},
+  pages         = {1272},
+  year          = {2025},
+  doi           = {10.1140/epjc/s10052-025-14682-0},
+  eprint        = {2505.13063},
+  archivePrefix = {arXiv},
+  primaryClass  = {hep-ex},
+}
+
+% [ftag] ATLAS MC-to-MC scale factors: tagging efficiency differs between shower generators (MC-to-MC discrepancy in the outlook).
+% verified: -
+% UNVERIFIED: report number ATL-PHYS-PUB-2020-009 is from memory; title, year and CDS record 2718610 verified via a CDS mirror; key reused from diary.bib
+@techreport{atlas2020monte,
+  author      = {{ATLAS Collaboration}},
+  title       = {{Monte Carlo to Monte Carlo scale factors for flavour tagging efficiency calibration}},
+  number      = {ATL-PHYS-PUB-2020-009},
+  institution = {CERN},
+  year        = {2020},
+  url         = {https://cds.cern.ch/record/2718610},
+}
+
+% [ftag] IR-safe jet-flavour definition: background for the remark that experimental truth labels (hadron cone labelling) are not IRC-safe (optional).
+% verified: arXiv journal_ref
+@article{Banfi2006IRSafeFlavour,
+  author        = {Banfi, Andrea and Salam, Gavin P. and Zanderighi, Giulia},
+  title         = {{Infrared safe definition of jet flavour}},
+  journal       = {Eur. Phys. J. C},
+  volume        = {47},
+  pages         = {113--124},
+  year          = {2006},
+  doi           = {10.1140/epjc/s2006-02552-4},
+  eprint        = {hep-ph/0601139},
+  archivePrefix = {arXiv},
+  primaryClass  = {hep-ph},
+}
+
+% [ftag] b/c-hadron lifetimes and masses (c tau ~ 0.45 mm for B hadrons) motivating displaced-track inputs.
+% verified: CrossRef
+@article{PDG2024,
+  author        = {Navas, S. and others},
+  title         = {{Review of Particle Physics}},
+  journal       = {Phys. Rev. D},
+  volume        = {110},
+  pages         = {030001},
+  collaboration = {Particle Data Group},
+  year          = {2024},
+  doi           = {10.1103/PhysRevD.110.030001},
+}
+
+% [ftag] LHC machine reference for the Introduction.
+% verified: CrossRef; key reused from salt paper.bib
+@article{Evans:2008,
+  author  = {Evans, Lyndon and Bryant, Philip},
+  title   = {{{LHC} Machine}},
+  journal = {JINST},
+  volume  = {3},
+  pages   = {S08001},
+  year    = {2008},
+  doi     = {10.1088/1748-0221/3/08/S08001},
+}
+
+% [ftag] ATLAS detector reference.
+% verified: CrossRef; key reused from salt paper.bib
+@article{ATLAS:2008,
+  author  = {{ATLAS Collaboration}},
+  title   = {{The {ATLAS} Experiment at the {CERN} Large Hadron Collider}},
+  journal = {JINST},
+  volume  = {3},
+  pages   = {S08003},
+  year    = {2008},
+  doi     = {10.1088/1748-0221/3/08/S08003},
+}
+
+% [ftag] ATLAS Run-3 detector configuration; JetSet is 13.6 TeV Run-3 simulation.
+% verified: arXiv journal_ref
+@article{ATLAS2024Run3Detector,
+  author        = {{ATLAS Collaboration}},
+  title         = {{The ATLAS Experiment at the CERN Large Hadron Collider: A Description of the Detector Configuration for Run 3}},
+  journal       = {JINST},
+  volume        = {19},
+  pages         = {P05063},
+  year          = {2024},
+  doi           = {10.1088/1748-0221/19/05/P05063},
+  eprint        = {2305.16623},
+  archivePrefix = {arXiv},
+  primaryClass  = {physics.ins-det},
+}
+
+% [data] The JetSet open-data sample (simulated ttbar, 13.6 TeV) used for all trainings; the record asks to also cite GN2.
+% verified: DataCite + CERN Open Data record 93940
+@misc{ATLASJetSet2025,
+  author       = {{ATLAS Collaboration}},
+  title        = {{{ATLAS} $t\bar{t}$ simulation for {ML}-based jet flavour tagging ({JetSet})}},
+  howpublished = {CERN Open Data Portal},
+  year         = {2025},
+  doi          = {10.7483/OPENDATA.ATLAS.QG8W.TO8P},
+  url          = {https://opendata.cern.ch/record/93940},
+}
+
+% [ftag] Energy Flow Networks / Particle Flow Networks: Deep Sets for jets; permutation-invariant set processing in HEP.
+% verified: arXiv journal_ref; key reused from diary.bib
+@article{Komiske_2019,
+  author        = {Komiske, Patrick T. and Metodiev, Eric M. and Thaler, Jesse},
+  title         = {{Energy Flow Networks: Deep Sets for Particle Jets}},
+  journal       = {JHEP},
+  volume        = {01},
+  pages         = {121},
+  year          = {2019},
+  doi           = {10.1007/JHEP01(2019)121},
+  eprint        = {1810.05165},
+  archivePrefix = {arXiv},
+  primaryClass  = {hep-ph},
+}
+
+% [ftag] Deep Sets: the permutation-invariant sum-pooling framework behind set-based taggers.
+% verified: arXiv API; key reused from diary.bib (alias Zaheer:2017 in salt paper.bib); venue from salt paper.bib
+@inproceedings{zaheer2018deepsets,
+  author        = {Zaheer, Manzil and Kottur, Satwik and Ravanbakhsh, Siamak and Poczos, Barnabas and Salakhutdinov, Ruslan and Smola, Alexander},
+  title         = {{Deep Sets}},
+  booktitle     = {Advances in Neural Information Processing Systems},
+  volume        = {30},
+  year          = {2017},
+  eprint        = {1703.06114},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.LG},
+}
+
+% [ftag] LorentzNet: symmetry-equivariant jet tagger, example of physics-informed inductive bias (optional).
+% verified: arXiv journal_ref (DOI)
+@article{Gong2022LorentzNet,
+  author        = {Gong, Shiqi and Meng, Qi and Zhang, Jue and Qu, Huilin and Li, Congqiao and Qian, Sitian and Du, Weitao and Ma, Zhi-Ming and Liu, Tie-Yan},
+  title         = {{An Efficient Lorentz Equivariant Graph Neural Network for Jet Tagging}},
+  journal       = {JHEP},
+  volume        = {07},
+  pages         = {030},
+  year          = {2022},
+  doi           = {10.1007/JHEP07(2022)030},
+  eprint        = {2201.08187},
+  archivePrefix = {arXiv},
+  primaryClass  = {hep-ph},
+}
+
+% [ftag] Community comparison of ML top taggers: precedent for apples-to-apples architecture comparison (optional).
+% verified: arXiv journal_ref
+@article{Kasieczka2019TopTaggers,
+  author        = {Kasieczka, G. and Plehn, T. and Butter, A. and Cranmer, K. and Debnath, D. and Dillon, B. M. and Fairbairn, M. and Faroughy, D. A. and Fedorko, W. and Gay, C. and others},
+  title         = {{The Machine Learning Landscape of Top Taggers}},
+  journal       = {SciPost Phys.},
+  volume        = {7},
+  pages         = {014},
+  year          = {2019},
+  doi           = {10.21468/SciPostPhys.7.1.014},
+  eprint        = {1902.09914},
+  archivePrefix = {arXiv},
+  primaryClass  = {hep-ph},
+}
+
+% [ftag] Review of jet substructure and ML in jet physics (Introduction background).
+% verified: arXiv DOI; volume/pages from memory
+% UNVERIFIED: volume 841 / pages 1-63 not verified online (DOI verified)
+@article{Larkoski2020JetReview,
+  author        = {Larkoski, Andrew J. and Moult, Ian and Nachman, Benjamin},
+  title         = {{Jet Substructure at the Large Hadron Collider: A Review of Recent Advances in Theory and Machine Learning}},
+  journal       = {Phys. Rept.},
+  volume        = {841},
+  pages         = {1--63},
+  year          = {2020},
+  doi           = {10.1016/j.physrep.2019.11.001},
+  eprint        = {1709.04464},
+  archivePrefix = {arXiv},
+  primaryClass  = {hep-ph},
+}
+
+% [ftag] Living review of ML for particle physics (general pointer).
+% verified: arXiv API
+@misc{Feickert2021LivingReview,
+  author        = {Feickert, Matthew and Nachman, Benjamin},
+  title         = {{A Living Review of Machine Learning for Particle Physics}},
+  year          = {2021},
+  eprint        = {2102.02770},
+  archivePrefix = {arXiv},
+  primaryClass  = {hep-ph},
+}
+
+% [ftag] Review: deep learning at the LHC (Introduction).
+% verified: existing entry in salt paper.bib (key reused)
+@article{Guest:2018,
+  author  = {Guest, Dan and Cranmer, Kyle and Whiteson, Daniel},
+  title   = {{Deep Learning and Its Application to {LHC} Physics}},
+  journal = {Ann. Rev. Nucl. Part. Sci.},
+  volume  = {68},
+  pages   = {161--181},
+  year    = {2018},
+  doi     = {10.1146/annurev-nucl-101917-021019},
+}
+
+% [ftag] Scaling-law recipe for HEP models on ATLAS JetSet2 (~11B jets, salt): finds auxiliary objectives lower the jet-classification loss at equal compute; directly relevant to CE+aux-loss and to dataset-size effects.
+% verified: arXiv API (preprint)
+@misc{Vigl2026Scaling,
+  author        = {Vigl, Matthias and Pond, Nikita and Barr, Jackson and Froch, Alexander and Guest, Dan and Hartman, Nicole and Kagan, Michael and Heinrich, Lukas},
+  title         = {{How to scale your HEP ML models: A recipe for robust architecture comparisons at scale}},
+  year          = {2026},
+  eprint        = {2610.06784},
+  archivePrefix = {arXiv},
+  primaryClass  = {hep-ex},
+}
+
+% [tab] SAINT: per-feature embeddings, column (self) + row (intersample) attention, contrastive + denoising pretraining with CutMix/mixup views; the template of the fm4tag encoder and of the lambda augmentation.
+% verified: arXiv API; key reused from diary.bib (arXiv only; a NeurIPS 2022 workshop version exists, not cited)
+@misc{somepalli2021saint,
+  author        = {Somepalli, Gowthami and Goldblum, Micah and Schwarzschild, Avi and Bruss, C. Bayan and Goldstein, Tom},
+  title         = {{SAINT: Improved Neural Networks for Tabular Data via Row Attention and Contrastive Pre-Training}},
+  year          = {2021},
+  eprint        = {2106.01342},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.LG},
+}
+
+% [tab] TabTransformer: contextual embeddings of categorical columns via self-attention; first transformer for tables.
+% verified: arXiv API
+@misc{Huang2020TabTransformer,
+  author        = {Huang, Xin and Khetan, Ashish and Cvitkovic, Milan and Karnin, Zohar},
+  title         = {{TabTransformer: Tabular Data Modeling Using Contextual Embeddings}},
+  year          = {2020},
+  eprint        = {2012.06678},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.LG},
+}
+
+% [tab] FT-Transformer: feature tokenizer (one token per feature) + transformer; the per-feature embedding idea used by fm4tag.
+% verified: arXiv API + Semantic Scholar venue
+@inproceedings{Gorishniy2021FTTransformer,
+  author        = {Gorishniy, Yury and Rubachev, Ivan and Khrulkov, Valentin and Babenko, Artem},
+  title         = {{Revisiting Deep Learning Models for Tabular Data}},
+  booktitle     = {Advances in Neural Information Processing Systems},
+  volume        = {34},
+  year          = {2021},
+  eprint        = {2106.11959},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.LG},
+}
+
+% [tab] Non-Parametric Transformers: attention between datapoints (whole dataset/batch as input); conceptual basis of intersample attention and its batch-dependence caveats.
+% verified: arXiv API + Semantic Scholar venue/pages
+@inproceedings{Kossen2021NPT,
+  author        = {Kossen, Jannik and Band, Neil and Lyle, Clare and Gomez, Aidan N. and Rainforth, Tom and Gal, Yarin},
+  title         = {{Self-Attention Between Datapoints: Going Beyond Individual Input-Output Pairs in Deep Learning}},
+  booktitle     = {Advances in Neural Information Processing Systems},
+  volume        = {34},
+  pages         = {28742--28756},
+  year          = {2021},
+  eprint        = {2106.02584},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.LG},
+}
+
+% [tab] TabPFN: transformer trained on synthetic priors doing in-context tabular classification; start of tabular foundation models.
+% verified: arXiv API + Semantic Scholar venue
+@inproceedings{Hollmann2023TabPFN,
+  author        = {Hollmann, Noah and M{\"u}ller, Samuel and Eggensperger, Katharina and Hutter, Frank},
+  title         = {{TabPFN: A Transformer That Solves Small Tabular Classification Problems in a Second}},
+  booktitle     = {International Conference on Learning Representations (ICLR)},
+  year          = {2023},
+  eprint        = {2207.01848},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.LG},
+}
+
+% [tab] TabPFN v2 (Nature): tabular foundation model beating tuned GBDTs on small data; uses alternating feature/sample attention like SAINT.
+% verified: CrossRef (title, all 8 authors, Nature 637(8045) 319-326, DOI)
+@article{Hollmann2025TabPFNNature,
+  author  = {Hollmann, Noah and M{\"u}ller, Samuel and Purucker, Lennart and Krishnakumar, Arjun and K{\"o}rfer, Max and Hoo, Shi Bin and Schirrmeister, Robin Tibor and Hutter, Frank},
+  title   = {{Accurate predictions on small data with a tabular foundation model}},
+  journal = {Nature},
+  volume  = {637},
+  number  = {8045},
+  pages   = {319--326},
+  year    = {2025},
+  doi     = {10.1038/s41586-024-08328-6},
+}
+
+% [tab] TabICL: column-then-row tabular foundation model with ISAB-style induced attention; source of the ISAB row-attention variant ported into fm4tag.
+% verified: arXiv API + Semantic Scholar venue (ICML)
+@inproceedings{Qu2025TabICL,
+  author        = {Qu, Jingang and Holzm{\"u}ller, David and Varoquaux, Ga{\"e}l and Morvan, Marine Le},
+  title         = {{TabICL: A Tabular Foundation Model for In-Context Learning on Large Data}},
+  booktitle     = {Proceedings of the 42nd International Conference on Machine Learning},
+  series        = {PMLR},
+  year          = {2025},
+  eprint        = {2502.05564},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.LG},
+}
+
+% [tab] Why tree-based models still beat DL on typical tabular data: motivation that tabular DL needs the right inductive biases (BDTs are the standard).
+% verified: arXiv API
+% UNVERIFIED: venue (NeurIPS 2022 Datasets & Benchmarks) from memory
+@inproceedings{Grinsztajn2022TreesTabular,
+  author        = {Grinsztajn, L{\'e}o and Oyallon, Edouard and Varoquaux, Ga{\"e}l},
+  title         = {{Why do tree-based models still outperform deep learning on tabular data?}},
+  booktitle     = {Advances in Neural Information Processing Systems (Datasets and Benchmarks Track)},
+  volume        = {35},
+  year          = {2022},
+  eprint        = {2207.08815},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.LG},
+}
+
+% [tab] Tabular data: deep learning is not all you need (GBDTs vs DL) (optional).
+% verified: arXiv API + Semantic Scholar journal
+@article{ShwartzZiv2022TabularDL,
+  author        = {Shwartz-Ziv, Ravid and Armon, Amitai},
+  title         = {{Tabular Data: Deep Learning is Not All You Need}},
+  journal       = {Inf. Fusion},
+  volume        = {81},
+  pages         = {84--90},
+  year          = {2022},
+  eprint        = {2106.03253},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.LG},
+}
+
+% [tab] XGBoost: gradient-boosted trees, the standard tabular baseline (and historically used in HEP).
+% verified: arXiv DOI + Semantic Scholar venue
+% UNVERIFIED: pages 785-794 from memory
+@inproceedings{Chen2016XGBoost,
+  author        = {Chen, Tianqi and Guestrin, Carlos},
+  title         = {{XGBoost: A Scalable Tree Boosting System}},
+  booktitle     = {Proceedings of the 22nd ACM SIGKDD International Conference on Knowledge Discovery and Data Mining},
+  pages         = {785--794},
+  year          = {2016},
+  doi           = {10.1145/2939672.2939785},
+  eprint        = {1603.02754},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.LG},
+}
+
+% [tab] Set Transformer and ISAB (induced set attention): permutation-invariant attention, and the O(N m) inducing-point row attention used in fm4tag.
+% verified: arXiv API + Semantic Scholar venue; key reused from diary.bib
+@inproceedings{lee2019settransformerframeworkattentionbased,
+  author        = {Lee, Juho and Lee, Yoonho and Kim, Jungtaek and Kosiorek, Adam R. and Choi, Seungjin and Teh, Yee Whye},
+  title         = {{Set Transformer: A Framework for Attention-based Permutation-Invariant Neural Networks}},
+  booktitle     = {Proceedings of the 36th International Conference on Machine Learning},
+  series        = {PMLR},
+  volume        = {97},
+  year          = {2019},
+  eprint        = {1810.00825},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.LG},
+}
+
+% [tab] TabNet: attentive feature selection for tables (optional).
+% verified: arXiv API + Semantic Scholar venue
+@inproceedings{Arik2021TabNet,
+  author        = {Arik, Sercan O. and Pfister, Tomas},
+  title         = {{TabNet: Attentive Interpretable Tabular Learning}},
+  booktitle     = {Proceedings of the AAAI Conference on Artificial Intelligence},
+  volume        = {35},
+  year          = {2021},
+  eprint        = {1908.07442},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.LG},
+}
+
+% [tab] Position paper: why tabular foundation models should be a research priority (frames the FM-for-tables motivation).
+% verified: arXiv API + Semantic Scholar venue (ICML)
+@inproceedings{vanBreugel2024TabularFM,
+  author        = {Breugel, Boris van and Schaar, Mihaela van der},
+  title         = {{Why Tabular Foundation Models Should Be a Research Priority}},
+  booktitle     = {Proceedings of the 41st International Conference on Machine Learning},
+  series        = {PMLR},
+  year          = {2024},
+  eprint        = {2405.01147},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.LG},
+}
+
+% [tab] Comprehensive survey of representation learning for tabular data (specialised, transferable and general/foundation models).
+% verified: arXiv API + Semantic Scholar journal
+% UNVERIFIED: journal year (2025 vs 2026 issue) not checked
+@article{Jiang2025TabularSurvey,
+  author        = {Jiang, Jun-Peng and Liu, Si-Yang and Cai, Hao-Run and Zhou, Qile and Ye, Han-Jia},
+  title         = {{Representation Learning for Tabular Data: A Comprehensive Survey}},
+  journal       = {IEEE Trans. Pattern Anal. Mach. Intell.},
+  volume        = {48},
+  pages         = {6488--6508},
+  year          = {2025},
+  eprint        = {2504.16109},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.LG},
+}
+
+% [tab] Survey of deep tabular learning (covers SAINT intersample attention, TabTransformer, FT-Transformer, TabNet) (optional alternative survey).
+% verified: arXiv API
+@misc{Somvanshi2024TabularSurvey,
+  author        = {Somvanshi, Shriyank and Das, Subasish and Javed, Syed Aaqib and Antariksa, Gian and Hossain, Ahmed},
+  title         = {{A Survey on Deep Tabular Learning}},
+  year          = {2024},
+  eprint        = {2410.12034},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.LG},
+}
+
+% [tab] TabDeco: contrastive tabular framework with strong, image-like augmentations (cited in the plan).
+% verified: arXiv API; key reused from diary.bib
+@misc{chen2024tabdecocomprehensivecontrastiveframework,
+  author        = {Chen, Suiyao and Wu, Jing and Wang, Yunxiao and Ji, Cheng and Xie, Tianpei and Cociorva, Daniel and Sharps, Michael and Levasseur, Cecile and Brunzell, Hakan},
+  title         = {{TabDeco: A Comprehensive Contrastive Framework for Decoupled Representations in Tabular Data}},
+  year          = {2024},
+  eprint        = {2411.11148},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.LG},
+}
+
+% [tab] SCARF: contrastive tabular SSL with random feature corruption (source of fm4tag feature_dropout augmentation).
+% verified: arXiv API + Semantic Scholar venue; cited in fm4tag/augmentations/feature_dropout.py
+@inproceedings{Bahri2022SCARF,
+  author        = {Bahri, Dara and Jiang, Heinrich and Tay, Yi and Metzler, Donald},
+  title         = {{SCARF: Self-Supervised Contrastive Learning using Random Feature Corruption}},
+  booktitle     = {International Conference on Learning Representations (ICLR)},
+  year          = {2022},
+  eprint        = {2106.15147},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.LG},
+}
+
+% [tab] VIME: tabular self/semi-supervised learning via mask estimation and value imputation (denoising-type pretext task).
+% verified: NeurIPS proceedings page (no arXiv)
+% UNVERIFIED: page numbers not verified (omitted)
+@inproceedings{Yoon2020VIME,
+  author    = {Yoon, Jinsung and Zhang, Yao and Jordon, James and Schaar, Mihaela van der},
+  title     = {{{VIME}: Extending the Success of Self- and Semi-supervised Learning to Tabular Domain}},
+  booktitle = {Advances in Neural Information Processing Systems},
+  volume    = {33},
+  year      = {2020},
+  url       = {https://proceedings.neurips.cc/paper/2020/hash/7d97667a3e056acab9aaf653807b4a03-Abstract.html},
+}
+
+% [tab] SubTab: feature-subset views for tabular SSL (optional).
+% verified: arXiv API + Semantic Scholar venue
+@inproceedings{Ucar2021SubTab,
+  author        = {Ucar, Talip and Hajiramezanali, Ehsan and Edwards, Lindsay},
+  title         = {{SubTab: Subsetting Features of Tabular Data for Self-Supervised Representation Learning}},
+  booktitle     = {Advances in Neural Information Processing Systems},
+  volume        = {34},
+  year          = {2021},
+  eprint        = {2110.04361},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.LG},
+}
+
+% [tab] Revisiting pretraining objectives for tabular DL: SSL pretraining gains are modest; target-aware objectives help. Context for "pretraining does not beat scratch".
+% verified: arXiv API
+@misc{Rubachev2022TabularPretraining,
+  author        = {Rubachev, Ivan and Alekberov, Artem and Gorishniy, Yury and Babenko, Artem},
+  title         = {{Revisiting Pretraining Objectives for Tabular Deep Learning}},
+  year          = {2022},
+  eprint        = {2207.03208},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.LG},
+}
+
+% [tab] Transfer learning with deep tabular models: fine-tuning vs frozen features in the tabular setting.
+% verified: arXiv journal_ref (ICLR)
+@inproceedings{Levin2023TabularTransfer,
+  author        = {Levin, Roman and Cherepanova, Valeriia and Schwarzschild, Avi and Bansal, Arpit and Bruss, C. Bayan and Goldstein, Tom and Wilson, Andrew Gordon and Goldblum, Micah},
+  title         = {{Transfer Learning with Deep Tabular Models}},
+  booktitle     = {International Conference on Learning Representations (ICLR)},
+  year          = {2023},
+  eprint        = {2206.15306},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.LG},
+}
+
+% [tab] Entity embeddings of categorical variables: learned embeddings for categorical columns (optional).
+% verified: arXiv API
+@misc{Guo2016EntityEmbeddings,
+  author        = {Guo, Cheng and Berkhahn, Felix},
+  title         = {{Entity Embeddings of Categorical Variables}},
+  year          = {2016},
+  eprint        = {1604.06737},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.LG},
+}
+
+% [ssl] Noise-contrastive estimation: origin of the contrastive (data vs noise) estimation principle.
+% verified: existing entry in diary.bib (key reused)
+@inproceedings{pmlr-v9-gutmann10a,
+  author    = {Gutmann, Michael and Hyv{\"a}rinen, Aapo},
+  title     = {{Noise-contrastive estimation: A new estimation principle for unnormalized statistical models}},
+  booktitle = {Proceedings of the Thirteenth International Conference on Artificial Intelligence and Statistics},
+  series    = {PMLR},
+  volume    = {9},
+  pages     = {297--304},
+  year      = {2010},
+}
+
+% [ssl] CPC / InfoNCE: the InfoNCE loss and its mutual-information lower bound (log K - L).
+% verified: arXiv API; key reused from diary.bib
+@misc{oord2018representation,
+  author        = {Oord, Aaron van den and Li, Yazhe and Vinyals, Oriol},
+  title         = {{Representation Learning with Contrastive Predictive Coding}},
+  year          = {2018},
+  eprint        = {1807.03748},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.LG},
+}
+
+% [ssl] SimCLR: NT-Xent with augmented views + projection head; shows augmentation composition/strength is decisive.
+% verified: arXiv API + Semantic Scholar venue
+% UNVERIFIED: pages 1597-1607 from memory
+@inproceedings{Chen2020SimCLR,
+  author        = {Chen, Ting and Kornblith, Simon and Norouzi, Mohammad and Hinton, Geoffrey},
+  title         = {{A Simple Framework for Contrastive Learning of Visual Representations}},
+  booktitle     = {Proceedings of the 37th International Conference on Machine Learning},
+  series        = {PMLR},
+  volume        = {119},
+  pages         = {1597--1607},
+  year          = {2020},
+  eprint        = {2002.05709},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.LG},
+}
+
+% [ssl] MoCo: momentum-encoder queue of negatives (optional, alternative to large-batch negatives).
+% verified: arXiv API + Semantic Scholar
+@inproceedings{He2020MoCo,
+  author        = {He, Kaiming and Fan, Haoqi and Wu, Yuxin and Xie, Saining and Girshick, Ross},
+  title         = {{Momentum Contrast for Unsupervised Visual Representation Learning}},
+  booktitle     = {IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
+  pages         = {9726--9735},
+  year          = {2020},
+  eprint        = {1911.05722},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.CV},
+}
+
+% [ssl] BYOL: non-contrastive SSL without negatives (optional).
+% verified: arXiv API + Semantic Scholar venue
+@inproceedings{Grill2020BYOL,
+  author        = {Grill, Jean-Bastien and Strub, Florian and Altch{\'e}, Florent and Tallec, Corentin and Richemond, Pierre H. and Buchatskaya, Elena and Doersch, Carl and Pires, Bernardo Avila and Guo, Zhaohan Daniel and Azar, Mohammad Gheshlaghi and Piot, Bilal and Kavukcuoglu, Koray and Munos, R{\'e}mi and Valko, Michal},
+  title         = {{Bootstrap your own latent: A new approach to self-supervised Learning}},
+  booktitle     = {Advances in Neural Information Processing Systems},
+  volume        = {33},
+  year          = {2020},
+  eprint        = {2006.07733},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.LG},
+}
+
+% [ssl] Supervised contrastive learning; fm4tag MultiViewSupConLoss generalises its L_out to unlabelled multi-view setting.
+% verified: arXiv API + Semantic Scholar venue; cited in fm4tag/losses/contrastive.py
+@inproceedings{Khosla2020SupCon,
+  author        = {Khosla, Prannay and Teterwak, Piotr and Wang, Chen and Sarna, Aaron and Tian, Yonglong and Isola, Phillip and Maschinot, Aaron and Liu, Ce and Krishnan, Dilip},
+  title         = {{Supervised Contrastive Learning}},
+  booktitle     = {Advances in Neural Information Processing Systems},
+  volume        = {33},
+  year          = {2020},
+  eprint        = {2004.11362},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.LG},
+}
+
+% [ssl] Alignment and uniformity on the hypersphere: the uniformity metric (t=2) logged on the jet embedding.
+% verified: arXiv API + Semantic Scholar venue/pages; cited in fm4tag/metrics/uniformity.py
+@inproceedings{Wang2020AlignmentUniformity,
+  author        = {Wang, Tongzhou and Isola, Phillip},
+  title         = {{Understanding Contrastive Representation Learning through Alignment and Uniformity on the Hypersphere}},
+  booktitle     = {Proceedings of the 37th International Conference on Machine Learning},
+  series        = {PMLR},
+  volume        = {119},
+  pages         = {9929--9939},
+  year          = {2020},
+  eprint        = {2005.10242},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.LG},
+}
+
+% [ssl] InfoMin: optimal views share only task-relevant information; reverse-U of performance vs view strength = the theoretical lens for the lambda scan.
+% verified: arXiv API; key reused from diary.bib
+@inproceedings{tian2020makes,
+  author        = {Tian, Yonglong and Sun, Chen and Poole, Ben and Krishnan, Dilip and Schmid, Cordelia and Isola, Phillip},
+  title         = {{What Makes for Good Views for Contrastive Learning?}},
+  booktitle     = {Advances in Neural Information Processing Systems},
+  volume        = {33},
+  year          = {2020},
+  eprint        = {2005.10243},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.CV},
+}
+
+% [ssl] CLIP: symmetric cross-view InfoNCE (the salt ContrastiveLoss default follows SAINT/CLIP).
+% verified: arXiv API + Semantic Scholar venue/pages; cited in salt/models/ssl.py
+@inproceedings{Radford2021CLIP,
+  author        = {Radford, Alec and Kim, Jong Wook and Hallacy, Chris and Ramesh, Aditya and Goh, Gabriel and Agarwal, Sandhini and Sastry, Girish and Askell, Amanda and Mishkin, Pamela and Clark, Jack and Krueger, Gretchen and Sutskever, Ilya},
+  title         = {{Learning Transferable Visual Models From Natural Language Supervision}},
+  booktitle     = {Proceedings of the 38th International Conference on Machine Learning},
+  series        = {PMLR},
+  volume        = {139},
+  pages         = {8748--8763},
+  year          = {2021},
+  eprint        = {2103.00020},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.CV},
+}
+
+% [ssl] Decoupled contrastive learning (positives removed from the denominator); option in both salt and fm4tag losses.
+% verified: arXiv API + Semantic Scholar venue; cited in salt/models/ssl.py
+@inproceedings{Yeh2022DCL,
+  author        = {Yeh, Chun-Hsiao and Hong, Cheng-Yao and Hsu, Yen-Chi and Liu, Tyng-Luh and Chen, Yubei and LeCun, Yann},
+  title         = {{Decoupled Contrastive Learning}},
+  booktitle     = {European Conference on Computer Vision (ECCV)},
+  year          = {2022},
+  eprint        = {2110.06848},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.LG},
+}
+
+% [ssl] mixup: convex combination of samples; used (in embedding space) as the second half of the lambda-controlled view corruption.
+% verified: arXiv API + Semantic Scholar venue
+@inproceedings{Zhang2018mixup,
+  author        = {Zhang, Hongyi and Cisse, Moustapha and Dauphin, Yann N. and Lopez-Paz, David},
+  title         = {{mixup: Beyond Empirical Risk Minimization}},
+  booktitle     = {International Conference on Learning Representations (ICLR)},
+  year          = {2018},
+  eprint        = {1710.09412},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.LG},
+}
+
+% [ssl] CutMix: replace part of a sample with another sample; SAINT adapts it to tables (feature-wise replacement with probability lambda).
+% verified: arXiv API + Semantic Scholar
+@inproceedings{Yun2019CutMix,
+  author        = {Yun, Sangdoo and Han, Dongyoon and Oh, Seong Joon and Chun, Sanghyuk and Choe, Junsuk and Yoo, Youngjoon},
+  title         = {{CutMix: Regularization Strategy to Train Strong Classifiers with Localizable Features}},
+  booktitle     = {IEEE/CVF International Conference on Computer Vision (ICCV)},
+  pages         = {6022--6031},
+  year          = {2019},
+  eprint        = {1905.04899},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.CV},
+}
+
+% [ssl] Denoising autoencoders: the denoising-reconstruction objective used alongside the contrastive loss in pretraining.
+% verified: CrossRef
+@inproceedings{Vincent2008DAE,
+  author    = {Vincent, Pascal and Larochelle, Hugo and Bengio, Yoshua and Manzagol, Pierre-Antoine},
+  title     = {{Extracting and composing robust features with denoising autoencoders}},
+  booktitle = {Proceedings of the 25th International Conference on Machine Learning (ICML)},
+  pages     = {1096--1103},
+  year      = {2008},
+  doi       = {10.1145/1390156.1390294},
+}
+
+% [ssl] Effective rank = exp(entropy of normalised singular values): the embedding-quality metric implemented in fm4tag.
+% verified: DataCite (Zenodo record 40328) + EPFL/Zenodo pages; cited in fm4tag/metrics/effective_rank.py
+% UNVERIFIED: page numbers (606-610 from memory) not verified, omitted
+@inproceedings{Roy2007EffectiveRank,
+  author    = {Roy, Olivier and Vetterli, Martin},
+  title     = {{The Effective Rank: a Measure of Effective Dimensionality}},
+  booktitle = {15th European Signal Processing Conference (EUSIPCO)},
+  address   = {Pozna{\'n}, Poland},
+  year      = {2007},
+  doi       = {10.5281/zenodo.40328},
+}
+
+% [ssl] RankMe: effective rank of SSL embeddings predicts downstream performance; justifies monitoring effective rank.
+% verified: arXiv journal_ref + Semantic Scholar venue
+@inproceedings{Garrido2023RankMe,
+  author        = {Garrido, Quentin and Balestriero, Randall and Najman, Laurent and Lecun, Yann},
+  title         = {{RankMe: Assessing the downstream performance of pretrained self-supervised representations by their rank}},
+  booktitle     = {Proceedings of the 40th International Conference on Machine Learning},
+  series        = {PMLR},
+  volume        = {202},
+  year          = {2023},
+  eprint        = {2210.02885},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.LG},
+}
+
+% [ssl] Dimensional collapse in contrastive SSL: embeddings span a low-dimensional subspace; why effective rank is tracked.
+% verified: arXiv journal_ref
+@inproceedings{Jing2022DimCollapse,
+  author        = {Jing, Li and Vincent, Pascal and LeCun, Yann and Tian, Yuandong},
+  title         = {{Understanding Dimensional Collapse in Contrastive Self-supervised Learning}},
+  booktitle     = {International Conference on Learning Representations (ICLR)},
+  year          = {2022},
+  eprint        = {2110.09348},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.CV},
+}
+
+% [ssl] Feature decorrelation / complete vs dimensional collapse in SSL (optional).
+% verified: arXiv API + Semantic Scholar
+@inproceedings{Hua2021FeatureDecorrelation,
+  author        = {Hua, Tianyu and Wang, Wenxiao and Xue, Zihui and Ren, Sucheng and Wang, Yue and Zhao, Hang},
+  title         = {{On Feature Decorrelation in Self-Supervised Learning}},
+  booktitle     = {IEEE/CVF International Conference on Computer Vision (ICCV)},
+  pages         = {9578--9588},
+  year          = {2021},
+  eprint        = {2105.00470},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.LG},
+}
+
+% [ssl] Intriguing properties of contrastive losses: feature suppression, easy shared features (e.g. identical jet pT/eta across views) can dominate the contrastive solution.
+% verified: arXiv API
+% UNVERIFIED: venue (NeurIPS 2021) from memory
+@inproceedings{Chen2021FeatureSuppression,
+  author        = {Chen, Ting and Luo, Calvin and Li, Lala},
+  title         = {{Intriguing Properties of Contrastive Losses}},
+  booktitle     = {Advances in Neural Information Processing Systems},
+  volume        = {34},
+  year          = {2021},
+  eprint        = {2011.02803},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.LG},
+}
+
+% [ssl] Can contrastive learning avoid shortcut solutions? (implicit feature modification); same shortcut concern as above.
+% verified: arXiv API
+% UNVERIFIED: venue (NeurIPS 2021) from memory
+@inproceedings{Robinson2021Shortcuts,
+  author        = {Robinson, Joshua and Sun, Li and Yu, Ke and Batmanghelich, Kayhan and Jegelka, Stefanie and Sra, Suvrit},
+  title         = {{Can contrastive learning avoid shortcut solutions?}},
+  booktitle     = {Advances in Neural Information Processing Systems},
+  volume        = {34},
+  year          = {2021},
+  eprint        = {2106.11230},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.LG},
+}
+
+% [ssl] Joint CE + supervised contrastive loss during fine-tuning improves robustness/few-shot: precedent for multi-task CE + contrastive.
+% verified: arXiv API + Semantic Scholar venue
+@inproceedings{Gunel2021SCLFinetune,
+  author        = {Gunel, Beliz and Du, Jingfei and Conneau, Alexis and Stoyanov, Ves},
+  title         = {{Supervised Contrastive Learning for Pre-trained Language Model Fine-tuning}},
+  booktitle     = {International Conference on Learning Representations (ICLR)},
+  year          = {2021},
+  eprint        = {2011.01403},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.CL},
+}
+
+% [ssl] Joint self-supervised contrastive + supervised objective transfers better than either alone: precedent for CE + JC multi-task training.
+% verified: arXiv API (abstract) + Semantic Scholar
+@inproceedings{Islam2021BroadStudy,
+  author        = {Islam, Ashraful and Chen, Chun-Fu and Panda, Rameswar and Karlinsky, Leonid and Radke, Richard and Feris, Rogerio},
+  title         = {{A Broad Study on the Transferability of Visual Representations with Contrastive Learning}},
+  booktitle     = {IEEE/CVF International Conference on Computer Vision (ICCV)},
+  pages         = {8825--8835},
+  year          = {2021},
+  eprint        = {2103.13517},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.CV},
+}
+
+% [ssl] S4L: supervised loss + self-supervised auxiliary loss trained jointly (semi-supervised); multi-task SSL precedent.
+% verified: arXiv API + Semantic Scholar
+@inproceedings{Zhai2019S4L,
+  author        = {Zhai, Xiaohua and Oliver, Avital and Kolesnikov, Alexander and Beyer, Lucas},
+  title         = {{S4L: Self-Supervised Semi-Supervised Learning}},
+  booktitle     = {IEEE/CVF International Conference on Computer Vision (ICCV)},
+  pages         = {1476--1485},
+  year          = {2019},
+  eprint        = {1905.03670},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.CV},
+}
+
+% [ssl] Auxiliary self-supervised loss alongside CE improves robustness and OOD detection: motivation for the data-MC robustness outlook.
+% verified: arXiv API + Semantic Scholar venue
+@inproceedings{Hendrycks2019SSLRobustness,
+  author        = {Hendrycks, Dan and Mazeika, Mantas and Kadavath, Saurav and Song, Dawn},
+  title         = {{Using Self-Supervised Learning Can Improve Model Robustness and Uncertainty}},
+  booktitle     = {Advances in Neural Information Processing Systems},
+  volume        = {32},
+  year          = {2019},
+  eprint        = {1906.12340},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.LG},
+}
+
+% [ssl] Defines "foundation models" (large-scale pretraining, adaptation to many downstream tasks): Background section.
+% verified: arXiv API
+@misc{Bommasani2021FoundationModels,
+  author        = {Bommasani, Rishi and Hudson, Drew A. and Adeli, Ehsan and Altman, Russ and Arora, Simran and Arx, Sydney von and Bernstein, Michael S. and Bohg, Jeannette and Bosselut, Antoine and Brunskill, Emma and others},
+  title         = {{On the Opportunities and Risks of Foundation Models}},
+  year          = {2021},
+  eprint        = {2108.07258},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.LG},
+}
+
+% [ssl] Cookbook of SSL: practical survey of SSL families, collapse, evaluation (Background).
+% verified: arXiv API
+@misc{Balestriero2023SSLCookbook,
+  author        = {Balestriero, Randall and Ibrahim, Mark and Sobal, Vlad and Morcos, Ari and Shekhar, Shashank and Goldstein, Tom and Bordes, Florian and Bardes, Adrien and Mialon, Gregoire and Tian, Yuandong and others},
+  title         = {{A Cookbook of Self-Supervised Learning}},
+  year          = {2023},
+  eprint        = {2304.12210},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.LG},
+}
+
+% [ssl] Framework/review of contrastive representation learning (optional Background).
+% verified: arXiv DOI + Semantic Scholar pages
+@article{LeKhac2020ContrastiveReview,
+  author        = {Le-Khac, Phuc H. and Healy, Graham and Smeaton, Alan F.},
+  title         = {{Contrastive Representation Learning: A Framework and Review}},
+  journal       = {IEEE Access},
+  volume        = {8},
+  pages         = {193907--193934},
+  year          = {2020},
+  doi           = {10.1109/ACCESS.2020.3031549},
+  eprint        = {2010.05113},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.LG},
+}
+
+% [ssl] Theoretical analysis of contrastive unsupervised learning (optional Background).
+% verified: arXiv API + Semantic Scholar
+@inproceedings{Arora2019ContrastiveTheory,
+  author        = {Arora, Sanjeev and Khandeparkar, Hrishikesh and Khodak, Mikhail and Plevrakis, Orestis and Saunshi, Nikunj},
+  title         = {{A Theoretical Analysis of Contrastive Unsupervised Representation Learning}},
+  booktitle     = {Proceedings of the 36th International Conference on Machine Learning},
+  series        = {PMLR},
+  volume        = {97},
+  pages         = {5628--5637},
+  year          = {2019},
+  eprint        = {1902.09229},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.LG},
+}
+
+% [ssl] How transferable are features: frozen vs fine-tuned layers; classic reference for FR vs FT.
+% verified: arXiv journal_ref
+@inproceedings{Yosinski2014Transferable,
+  author        = {Yosinski, Jason and Clune, Jeff and Bengio, Yoshua and Lipson, Hod},
+  title         = {{How transferable are features in deep neural networks?}},
+  booktitle     = {Advances in Neural Information Processing Systems},
+  volume        = {27},
+  year          = {2014},
+  eprint        = {1411.1792},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.LG},
+}
+
+% [ssl] Fine-tuning can distort pretrained features (LP vs FT vs LP-FT): directly relevant to FR vs FT comparison and staged unfreezing.
+% verified: arXiv API + Semantic Scholar venue
+@inproceedings{Kumar2022FTDistorts,
+  author        = {Kumar, Ananya and Raghunathan, Aditi and Jones, Robbie and Ma, Tengyu and Liang, Percy},
+  title         = {{Fine-Tuning can Distort Pretrained Features and Underperform Out-of-Distribution}},
+  booktitle     = {International Conference on Learning Representations (ICLR)},
+  year          = {2022},
+  eprint        = {2202.10054},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.LG},
+}
+
+% [ssl] Rethinking ImageNet pretraining: with enough labelled data and schedule, from-scratch matches pretrain+FT; parallels the finding that pretraining does not beat SC on JetSet.
+% verified: arXiv API + Semantic Scholar
+@inproceedings{He2019RethinkingPretraining,
+  author        = {He, Kaiming and Girshick, Ross and Doll{\'a}r, Piotr},
+  title         = {{Rethinking ImageNet Pre-training}},
+  booktitle     = {IEEE/CVF International Conference on Computer Vision (ICCV)},
+  pages         = {4917--4926},
+  year          = {2019},
+  eprint        = {1811.08883},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.CV},
+}
+
+% [ssl] How useful is SSL pretraining: gains shrink as labelled data grow; parallels the label-fraction (L_scan) result.
+% verified: arXiv API + Semantic Scholar
+@inproceedings{Newell2020SSLUseful,
+  author        = {Newell, Alejandro and Deng, Jia},
+  title         = {{How Useful is Self-Supervised Pretraining for Visual Tasks?}},
+  booktitle     = {IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
+  pages         = {7343--7352},
+  year          = {2020},
+  eprint        = {2003.14323},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.CV},
+}
+
+% [ssl] Masked autoencoders: masked-reconstruction SSL (background for MPM-type HEP pretraining; optional).
+% verified: arXiv API + Semantic Scholar
+@inproceedings{He2022MAE,
+  author        = {He, Kaiming and Chen, Xinlei and Xie, Saining and Li, Yanghao and Doll{\'a}r, Piotr and Girshick, Ross},
+  title         = {{Masked Autoencoders Are Scalable Vision Learners}},
+  booktitle     = {IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
+  pages         = {15979--15988},
+  year          = {2022},
+  eprint        = {2111.06377},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.CV},
+}
+
+% [ssl] BERT: masked-token pretraining + fine-tuning paradigm (optional Background).
+% verified: arXiv API + Semantic Scholar venue
+% UNVERIFIED: pages 4171-4186 from memory
+@inproceedings{Devlin2019BERT,
+  author        = {Devlin, Jacob and Chang, Ming-Wei and Lee, Kenton and Toutanova, Kristina},
+  title         = {{BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding}},
+  booktitle     = {Proceedings of NAACL-HLT 2019},
+  pages         = {4171--4186},
+  year          = {2019},
+  eprint        = {1810.04805},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.CL},
+}
+
+% [ssl] Uncertainty-based multi-task loss weighting: context for choosing the CE vs contrastive weight (optional).
+% verified: arXiv API
+% UNVERIFIED: venue (CVPR 2018) from memory
+@inproceedings{Kendall2018UncertaintyWeighting,
+  author        = {Kendall, Alex and Gal, Yarin and Cipolla, Roberto},
+  title         = {{Multi-Task Learning Using Uncertainty to Weigh Losses for Scene Geometry and Semantics}},
+  booktitle     = {IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
+  year          = {2018},
+  eprint        = {1705.07115},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.CV},
+}
+
+% [ssl] Geometric loss strategy for multi-task learning (used by ATLAS GN3; optional).
+% verified: arXiv API
+% UNVERIFIED: venue (CVPR workshops 2019) from memory
+@inproceedings{Chennupati2019MultiNetPP,
+  author        = {Chennupati, Sumanth and Sistu, Ganesh and Yogamani, Senthil and Rawashdeh, Samir A},
+  title         = {{MultiNet++: Multi-Stream Feature Aggregation and Geometric Loss Strategy for Multi-Task Learning}},
+  booktitle     = {IEEE/CVF Conference on Computer Vision and Pattern Recognition Workshops (CVPRW)},
+  year          = {2019},
+  eprint        = {1904.08492},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.CV},
+}
+
+% [hepssl] JetCLR: contrastive learning of jet representations with physics augmentations (rotations, translations, soft/collinear splittings) for IRC safety; the founding HEP CLR paper.
+% verified: arXiv journal_ref
+@article{Dillon2022JetCLR,
+  author        = {Dillon, Barry M. and Kasieczka, Gregor and Olischlager, Hans and Plehn, Tilman and Sorrenson, Peter and Vogel, Lorenz},
+  title         = {{Symmetries, Safety, and Self-Supervision}},
+  journal       = {SciPost Phys.},
+  volume        = {12},
+  pages         = {188},
+  year          = {2022},
+  doi           = {10.21468/SciPostPhys.12.6.188},
+  eprint        = {2108.04253},
+  archivePrefix = {arXiv},
+  primaryClass  = {hep-ph},
+}
+
+% [hepssl] Self-supervised (contrastive) anomaly detection for new physics: CLR embeddings used for weakly supervised searches.
+% verified: arXiv journal_ref
+@article{Dillon2022SSLAnomaly,
+  author        = {Dillon, Barry M. and Mastandrea, Radha and Nachman, Benjamin},
+  title         = {{Self-supervised Anomaly Detection for New Physics}},
+  journal       = {Phys. Rev. D},
+  volume        = {106},
+  pages         = {056005},
+  year          = {2022},
+  doi           = {10.1103/PhysRevD.106.056005},
+  eprint        = {2205.10380},
+  archivePrefix = {arXiv},
+  primaryClass  = {hep-ph},
+}
+
+% [hepssl] AnomCLR: contrastive representations with anomaly augmentations (optional).
+% verified: arXiv journal_ref
+@article{Dillon2024AnomCLR,
+  author        = {Dillon, Barry M. and Favaro, Luigi and Feiden, Friedrich and Modak, Tanmoy and Plehn, Tilman},
+  title         = {{Anomalies, Representations, and Self-Supervision}},
+  journal       = {SciPost Phys. Core},
+  volume        = {7},
+  pages         = {056},
+  year          = {2024},
+  doi           = {10.21468/SciPostPhysCore.7.3.056},
+  eprint        = {2301.04660},
+  archivePrefix = {arXiv},
+  primaryClass  = {hep-ph},
+}
+
+% [hepssl] RS3L: re-simulation-based SSL, contrastive views made by re-running parts of the simulation (shower/detector), giving robust, transferable representations; the poster reference [7] and the closest method to compare against.
+% verified: arXiv journal_ref
+@article{Harris2025Resim,
+  author        = {Harris, Philip and Kagan, Michael and Krupa, Jeffrey and Maier, Benedikt and Woodward, Nathaniel},
+  title         = {{Re-Simulation-based Self-Supervised Learning for Pre-Training Foundation Models}},
+  journal       = {Phys. Rev. D},
+  volume        = {111},
+  pages         = {032010},
+  year          = {2025},
+  doi           = {10.1103/PhysRevD.111.032010},
+  eprint        = {2403.07066},
+  archivePrefix = {arXiv},
+  primaryClass  = {hep-ph},
+}
+
+% [hepssl] MACK: contrastive learning to reduce sensitivity to simulation mismodelling (data-MC) in jet tagging, no prior knowledge of the mismodelling needed; key reference for the robustness outlook.
+% verified: arXiv journal_ref
+@article{Sheldon2025MACK,
+  author        = {Sheldon, Liam Rankin and Rankin, Dylan Sheldon and Harris, Philip},
+  title         = {{MACK: Mismodeling Addressed with Contrastive Knowledge}},
+  journal       = {SciPost Phys.},
+  volume        = {18},
+  pages         = {150},
+  year          = {2025},
+  doi           = {10.21468/SciPostPhys.18.5.150},
+  eprint        = {2410.13947},
+  archivePrefix = {arXiv},
+  primaryClass  = {hep-ph},
+}
+
+% [hepssl] OmniJet-alpha: generative (GPT-style, tokenised) pretraining transferring to jet tagging; first cross-task HEP foundation model.
+% verified: arXiv journal_ref
+@article{Birk2024OmniJet,
+  author        = {Birk, Joschka and Hallin, Anna and Kasieczka, Gregor},
+  title         = {{OmniJet-$\alpha$: The first cross-task foundation model for particle physics}},
+  journal       = {Mach. Learn. Sci. Tech.},
+  volume        = {5},
+  pages         = {035031},
+  year          = {2024},
+  doi           = {10.1088/2632-2153/ad66ad},
+  eprint        = {2403.05618},
+  archivePrefix = {arXiv},
+  primaryClass  = {hep-ph},
+}
+
+% [hepssl] Masked particle modelling (MPM): BERT-style masked pretraining on particle sets; fine-tuning gains largest with few labels.
+% verified: arXiv journal_ref; key reused from diary.bib
+@article{golling2024masked,
+  author        = {Golling, Tobias and Heinrich, Lukas and Kagan, Michael and Klein, Samuel and Leigh, Matthew and Osadchy, Margarita and Raine, John Andrew},
+  title         = {{Masked Particle Modeling on Sets: Towards Self-Supervised High Energy Physics Foundation Models}},
+  journal       = {Mach. Learn. Sci. Tech.},
+  volume        = {5},
+  number        = {3},
+  pages         = {035074},
+  year          = {2024},
+  doi           = {10.1088/2632-2153/ad64a8},
+  eprint        = {2401.13537},
+  archivePrefix = {arXiv},
+  primaryClass  = {hep-ph},
+}
+
+% [hepssl] MPM follow-up: is tokenisation needed? continuous-target masked particle modelling.
+% verified: arXiv API + Semantic Scholar journal
+% UNVERIFIED: article number not verified
+@article{Leigh2025MPMTokenization,
+  author        = {Leigh, Matthew and Klein, Samuel and Charton, Fran{\c{c}}ois and Golling, Tobias and Heinrich, Lukas and Kagan, Michael and Ochoa, In{\^e}s and Osadchy, Margarita},
+  title         = {{Is Tokenization Needed for Masked Particle Modelling?}},
+  journal       = {Mach. Learn. Sci. Tech.},
+  volume        = {6},
+  year          = {2025},
+  eprint        = {2409.12589},
+  archivePrefix = {arXiv},
+  primaryClass  = {hep-ph},
+}
+
+% [hepssl] OmniLearn: jet foundation model (pretrained on JetClass) adapted to many tasks; FM fine-tuning in HEP.
+% verified: arXiv journal_ref
+@article{Mikuni2025OmniLearn,
+  author        = {Mikuni, Vinicius and Nachman, Benjamin},
+  title         = {{Solving Key Challenges in Collider Physics with Foundation Models}},
+  journal       = {Phys. Rev. D},
+  volume        = {111},
+  pages         = {L051504},
+  year          = {2025},
+  doi           = {10.1103/PhysRevD.111.L051504},
+  eprint        = {2404.16091},
+  archivePrefix = {arXiv},
+  primaryClass  = {hep-ph},
+}
+
+% [hepssl] OmniLearned: foundation-model framework for all jet-physics tasks (successor of OmniLearn).
+% verified: arXiv journal_ref
+@article{Bhimji2026OmniLearned,
+  author        = {Bhimji, Wahid and Harris, Chris and Mikuni, Vinicius and Nachman, Benjamin},
+  title         = {{OmniLearned: A Foundation Model Framework for All Tasks Involving Jet Physics}},
+  journal       = {Phys. Rev. D},
+  volume        = {113},
+  pages         = {032020},
+  year          = {2026},
+  doi           = {10.1103/knmd-f5jm},
+  eprint        = {2510.24066},
+  archivePrefix = {arXiv},
+  primaryClass  = {hep-ph},
+}
+
+% [hepssl] Fine-tuning foundation models (pretrained taggers) for joint analysis optimisation; FT vs frozen in HEP.
+% verified: arXiv API + diary.bib (key reused)
+@article{vigl2024finetuning,
+  author        = {Vigl, Matthias and Hartman, Nicole and Heinrich, Lukas},
+  title         = {{Finetuning Foundation Models for Joint Analysis Optimization}},
+  journal       = {Mach. Learn. Sci. Tech.},
+  volume        = {5},
+  number        = {2},
+  pages         = {025075},
+  year          = {2024},
+  eprint        = {2401.13536},
+  archivePrefix = {arXiv},
+  primaryClass  = {hep-ex},
+}
+
+% [hepssl] Pretraining on real collision data for event classification (optional).
+% verified: arXiv API
+@misc{Kishimoto2023RealDataPretraining,
+  author        = {Kishimoto, Tomoe and Morinaga, Masahiro and Saito, Masahiko and Tanaka, Junichi},
+  title         = {{Pre-training strategy using real particle collision data for event classification in collider physics}},
+  year          = {2023},
+  eprint        = {2312.06909},
+  archivePrefix = {arXiv},
+  primaryClass  = {hep-ex},
+}
+
+% [hepssl] Sophon: large-scale supervised pretraining on JetClass-II for transfer to many boosted final states (CMS-side FM).
+% verified: arXiv API
+@misc{Li2024Sophon,
+  author        = {Li, Congqiao and Agapitos, Antonios and Drews, Jovin and Duarte, Javier and Fu, Dawei and Gao, Leyun and Kansal, Raghav and Kasieczka, Gregor and Moureaux, Louis and Qu, Huilin and Suarez, Cristina Mantilla and Li, Qiang},
+  title         = {{Accelerating Resonance Searches via Signature-Oriented Pre-training}},
+  year          = {2024},
+  eprint        = {2405.12972},
+  archivePrefix = {arXiv},
+  primaryClass  = {hep-ph},
+}
+
+% [hepssl] HEP-JEPA: joint-embedding predictive SSL on JetClass (non-contrastive alternative).
+% verified: arXiv API
+@misc{Bardhan2025HEPJEPA,
+  author        = {Bardhan, Jai and Agrawal, Radhikesh and Tilak, Abhiram and Neeraj, Cyrin and Mitra, Subhadip},
+  title         = {{HEP-JEPA: A foundation model for collider physics using joint embedding predictive architecture}},
+  year          = {2025},
+  eprint        = {2502.03933},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.LG},
+}
+
+% [hepssl] Controlled comparison of contrastive, MPM and generative pretraining objectives on a shared jet encoder; closest "which SSL objective" benchmark.
+% verified: arXiv API
+@misc{Chen2025RepLearningEval,
+  author        = {Chen, Michael and Kansal, Raghav and Gandrakota, Abhijith and Hao, Zichun and Ngadiuba, Jennifer and Spiropulu, Maria},
+  title         = {{An Evaluation of Representation Learning Methods in Particle Physics Foundation Models}},
+  year          = {2025},
+  eprint        = {2511.12829},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.LG},
+}
+
+% [hepssl] JetParticle-JEPA: tokenisation-free JEPA for jet tagging (optional, recent).
+% verified: arXiv API
+@misc{Letellier2026JetParticleJEPA,
+  author        = {Letellier, Guillaume and Vacheret, Antonin and Jurie, Fr{\'e}d{\'e}ric},
+  title         = {{JetParticle-JEPA: An Efficient Self-Supervised Representation Learning method for Jet Tagging in High-Energy Physics}},
+  year          = {2026},
+  eprint        = {2606.14813},
+  archivePrefix = {arXiv},
+  primaryClass  = {hep-ph},
+}
+
+% [hepssl] Self-supervised transformer for heavy-flavour decay maps at LHCb: the only SSL work found aimed at flavour tagging specifically (LHCb, not ATLAS/CMS jets).
+% verified: arXiv API (abstract read)
+@misc{Stamenkovic2026LHCbSSL,
+  author        = {Stamenkovic, Marko and Landsberg, Greg},
+  title         = {{"Transforming" LHCb: self-supervised maps of heavy-flavour decays}},
+  year          = {2026},
+  eprint        = {2609.09275},
+  archivePrefix = {arXiv},
+  primaryClass  = {hep-ex},
+}
+
+% [hepssl] Scaling laws for particle-physics foundation models: lower pretraining loss -> better fine-tuned tagging (optional).
+% verified: arXiv API (abstract read)
+@misc{Uslu2026ScalingFM,
+  author        = {Uslu, Jan-Lucas and Nachman, Benjamin and Re, Christopher},
+  title         = {{Predict before you train: Scaling Laws for particle physics foundation models}},
+  year          = {2026},
+  eprint        = {2607.23377},
+  archivePrefix = {arXiv},
+  primaryClass  = {hep-ex},
+}
+
+% [train] Transformer architecture.
+% verified: arXiv API + Semantic Scholar pages; key reused from diary.bib (year corrected to 2017; alias 2017arXiv170603762V in salt paper.bib)
+@inproceedings{vaswani2023attentionneed,
+  author        = {Vaswani, Ashish and Shazeer, Noam and Parmar, Niki and Uszkoreit, Jakob and Jones, Llion and Gomez, Aidan N. and Kaiser, Lukasz and Polosukhin, Illia},
+  title         = {{Attention Is All You Need}},
+  booktitle     = {Advances in Neural Information Processing Systems},
+  volume        = {30},
+  pages         = {5998--6008},
+  year          = {2017},
+  eprint        = {1706.03762},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.CL},
+}
+
+% [train] Adam optimiser.
+% verified: arXiv API; key reused from salt paper.bib
+@inproceedings{Kingma:2015,
+  author        = {Kingma, Diederik P. and Ba, Jimmy},
+  title         = {{Adam: A Method for Stochastic Optimization}},
+  booktitle     = {International Conference on Learning Representations (ICLR)},
+  year          = {2015},
+  eprint        = {1412.6980},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.LG},
+}
+
+% [train] AdamW (decoupled weight decay): the optimiser of fm4tag (all modules) and of the salt GN2 runs.
+% verified: arXiv API
+% UNVERIFIED: venue (ICLR 2019) from memory
+@inproceedings{Loshchilov2019AdamW,
+  author        = {Loshchilov, Ilya and Hutter, Frank},
+  title         = {{Decoupled Weight Decay Regularization}},
+  booktitle     = {International Conference on Learning Representations (ICLR)},
+  year          = {2019},
+  eprint        = {1711.05101},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.LG},
+}
+
+% [train] Cosine annealing (SGDR): fm4tag default schedule = linear warmup + cosine decay to 0.
+% verified: arXiv API + Semantic Scholar venue
+@inproceedings{Loshchilov2017SGDR,
+  author        = {Loshchilov, Ilya and Hutter, Frank},
+  title         = {{SGDR: Stochastic Gradient Descent with Warm Restarts}},
+  booktitle     = {International Conference on Learning Representations (ICLR)},
+  year          = {2017},
+  eprint        = {1608.03983},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.LG},
+}
+
+% [train] One-cycle learning-rate policy: salt GN2 runs use torch OneCycleLR (initial 1e-7, max 5e-4, end 1e-5, pct_start 0.01).
+% verified: arXiv API
+@misc{Smith2019SuperConvergence,
+  author        = {Smith, Leslie N. and Topin, Nicholay},
+  title         = {{Super-Convergence: Very Fast Training of Neural Networks Using Large Learning Rates}},
+  year          = {2017},
+  eprint        = {1708.07120},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.LG},
+}
+
+% [train] MiniCPM: introduces the warmup-stable-decay (WSD) schedule; fm4tag-chunk finetune.schedule=wsd (decay_frac 0.2) used in the Nov-2026 dropout sweeps.
+% verified: arXiv API
+@misc{Hu2024MiniCPM,
+  author        = {Hu, Shengding and Tu, Yuge and Han, Xu and He, Chaoqun and Cui, Ganqu and Long, Xiang and Zheng, Zhi and Fang, Yewei and Huang, Yuxiang and Zhao, Weilin and others},
+  title         = {{MiniCPM: Unveiling the Potential of Small Language Models with Scalable Training Strategies}},
+  year          = {2024},
+  eprint        = {2404.06395},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.CL},
+}
+
+% [train] Scaling laws beyond fixed durations: WSD/cooldown matches cosine; justification for WSD.
+% verified: arXiv API + Semantic Scholar venue
+@inproceedings{Hagele2024WSD,
+  author        = {H{\"a}gele, Alexander and Bakouch, Elie and Kosson, Atli and Allal, Loubna Ben and Werra, Leandro Von and Jaggi, Martin},
+  title         = {{Scaling Laws and Compute-Optimal Training Beyond Fixed Training Durations}},
+  booktitle     = {Advances in Neural Information Processing Systems},
+  volume        = {37},
+  year          = {2024},
+  eprint        = {2405.18392},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.LG},
+}
+
+% [train] Query-key normalisation: the row_qk_norm option (RMS-normalised q,k per head) switched on for every SSL-campaign arm after contrastive pretraining blew up row-attention logits to 1e5-1e7.
+% verified: arXiv API + Semantic Scholar
+@inproceedings{Henry2020QKNorm,
+  author        = {Henry, Alex and Dachapally, Prudhvi Raj and Pawar, Shubham and Chen, Yuxuan},
+  title         = {{Query-Key Normalization for Transformers}},
+  booktitle     = {Findings of the Association for Computational Linguistics: EMNLP 2020},
+  pages         = {4246--4253},
+  year          = {2020},
+  eprint        = {2010.04245},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.CL},
+}
+
+% [train] ViT-22B: attention-logit growth causes divergence, fixed by QK LayerNorm; same failure mode seen in fm4tag pretraining.
+% verified: arXiv API + Semantic Scholar
+@inproceedings{Dehghani2023ViT22B,
+  author        = {Dehghani, Mostafa and Djolonga, Josip and Mustafa, Basil and Padlewski, Piotr and Heek, Jonathan and Gilmer, Justin and Steiner, Andreas and Caron, Mathilde and Geirhos, Robert and Alabdulmohsin, Ibrahim and others},
+  title         = {{Scaling Vision Transformers to 22 Billion Parameters}},
+  booktitle     = {Proceedings of the 40th International Conference on Machine Learning},
+  series        = {PMLR},
+  volume        = {202},
+  pages         = {7480--7512},
+  year          = {2023},
+  eprint        = {2302.05442},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.CV},
+}
+
+% [train] Small-scale proxies for transformer instabilities: attention-logit growth and its QK-layernorm fix at small scale (matches fm4tag observation).
+% verified: arXiv API
+% UNVERIFIED: venue (ICLR 2024) from memory
+@inproceedings{Wortsman2024SmallScaleProxies,
+  author        = {Wortsman, Mitchell and Liu, Peter J. and Xiao, Lechao and Everett, Katie and Alemi, Alex and Adlam, Ben and Co-Reyes, John D. and Gur, Izzeddin and Kumar, Abhishek and Novak, Roman and others},
+  title         = {{Small-scale proxies for large-scale Transformer training instabilities}},
+  booktitle     = {International Conference on Learning Representations (ICLR)},
+  year          = {2024},
+  eprint        = {2309.14322},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.LG},
+}
+
+% [train] Attention entropy collapse as a source of transformer instability (fm4tag RowAttentionMonitor logs row-attention entropy) (optional).
+% verified: arXiv journal_ref
+@inproceedings{Zhai2023EntropyCollapse,
+  author        = {Zhai, Shuangfei and Likhomanenko, Tatiana and Littwin, Etai and Busbridge, Dan and Ramapuram, Jason and Zhang, Yizhe and Gu, Jiatao and Susskind, Josh},
+  title         = {{Stabilizing Transformer Training by Preventing Attention Entropy Collapse}},
+  booktitle     = {Proceedings of the 40th International Conference on Machine Learning},
+  series        = {PMLR},
+  volume        = {202},
+  pages         = {40770--40803},
+  year          = {2023},
+  eprint        = {2303.06296},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.LG},
+}
+
+% [train] Gradient-norm clipping (pretrain arm uses gradient_clip_val 1.0; SC+JC clip runs).
+% verified: arXiv API
+% UNVERIFIED: venue/pages from memory
+@inproceedings{Pascanu2013GradClip,
+  author        = {Pascanu, Razvan and Mikolov, Tomas and Bengio, Yoshua},
+  title         = {{On the difficulty of training Recurrent Neural Networks}},
+  booktitle     = {Proceedings of the 30th International Conference on Machine Learning},
+  series        = {PMLR},
+  volume        = {28},
+  pages         = {1310--1318},
+  year          = {2013},
+  eprint        = {1211.5063},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.LG},
+}
+
+% [train] FlashAttention (IO-aware exact attention).
+% verified: arXiv API + Semantic Scholar venue
+@inproceedings{Dao2022FlashAttention,
+  author        = {Dao, Tri and Fu, Daniel Y. and Ermon, Stefano and Rudra, Atri and R{\'e}, Christopher},
+  title         = {{FlashAttention: Fast and Memory-Efficient Exact Attention with IO-Awareness}},
+  booktitle     = {Advances in Neural Information Processing Systems},
+  volume        = {35},
+  year          = {2022},
+  eprint        = {2205.14135},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.LG},
+}
+
+% [train] FlashAttention-2: fm4tag routes attention through flash_attn_func; salt GN2 uses the flash-varlen kernel.
+% verified: arXiv API + Semantic Scholar venue
+@inproceedings{Dao2024FlashAttention2,
+  author        = {Dao, Tri},
+  title         = {{FlashAttention-2: Faster Attention with Better Parallelism and Work Partitioning}},
+  booktitle     = {International Conference on Learning Representations (ICLR)},
+  year          = {2024},
+  eprint        = {2307.08691},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.LG},
+}
+
+% [train] Pre-LN transformers: the PreNormResidual fix in fm4tag (optional).
+% verified: arXiv journal_ref + Semantic Scholar
+@inproceedings{Xiong2020PreLN,
+  author        = {Xiong, Ruibin and Yang, Yunchang and He, Di and Zheng, Kai and Zheng, Shuxin and Xing, Chen and Zhang, Huishuai and Lan, Yanyan and Wang, Liwei and Liu, Tie-Yan},
+  title         = {{On Layer Normalization in the Transformer Architecture}},
+  booktitle     = {Proceedings of the 37th International Conference on Machine Learning},
+  series        = {PMLR},
+  volume        = {119},
+  pages         = {10524--10533},
+  year          = {2020},
+  eprint        = {2002.04745},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.LG},
+}
+
+% [train] GLU variants (GEGLU feed-forward used in fm4tag blocks).
+% verified: arXiv API; cited in salt/models/transformer.py
+@misc{Shazeer2020GLU,
+  author        = {Shazeer, Noam},
+  title         = {{GLU Variants Improve Transformer}},
+  year          = {2020},
+  eprint        = {2002.05202},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.LG},
+}
+
+% [train] RMSNorm (used for QK-norm / salt option) (optional).
+% verified: arXiv API + Semantic Scholar
+@inproceedings{Zhang2019RMSNorm,
+  author        = {Zhang, Biao and Sennrich, Rico},
+  title         = {{Root Mean Square Layer Normalization}},
+  booktitle     = {Advances in Neural Information Processing Systems},
+  volume        = {32},
+  year          = {2019},
+  eprint        = {1910.07467},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.LG},
+}
+
+% [train] GELU activation (optional).
+% verified: arXiv API
+@misc{Hendrycks2016GELU,
+  author        = {Hendrycks, Dan and Gimpel, Kevin},
+  title         = {{Gaussian Error Linear Units (GELUs)}},
+  year          = {2016},
+  eprint        = {1606.08415},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.LG},
+}
+
+% [train] LayerScale (salt transformer option; optional).
+% verified: arXiv API + Semantic Scholar
+@inproceedings{Touvron2021CaiT,
+  author        = {Touvron, Hugo and Cord, Matthieu and Sablayrolles, Alexandre and Synnaeve, Gabriel and J{\'e}gou, Herv{\'e}},
+  title         = {{Going deeper with Image Transformers}},
+  booktitle     = {IEEE/CVF International Conference on Computer Vision (ICCV)},
+  pages         = {32--42},
+  year          = {2021},
+  eprint        = {2103.17239},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.CV},
+}
+
+% [train] Register tokens (salt transformer option; optional).
+% verified: arXiv API + Semantic Scholar venue
+@inproceedings{Darcet2024Registers,
+  author        = {Darcet, Timoth{\'e}e and Oquab, Maxime and Mairal, Julien and Bojanowski, Piotr},
+  title         = {{Vision Transformers Need Registers}},
+  booktitle     = {International Conference on Learning Representations (ICLR)},
+  year          = {2024},
+  eprint        = {2309.16588},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.CV},
+}
+
+% [train] Lion optimiser (ATLAS GN3 switched AdamW -> Lion; optional).
+% verified: arXiv API + Semantic Scholar venue
+@inproceedings{Chen2023Lion,
+  author        = {Chen, Xiangning and Liang, Chen and Huang, Da and Real, Esteban and Wang, Kaiyuan and Liu, Yao and Pham, Hieu and Dong, Xuanyi and Luong, Thang and Hsieh, Cho-Jui and Lu, Yifeng and Le, Quoc V.},
+  title         = {{Symbolic Discovery of Optimization Algorithms}},
+  booktitle     = {Advances in Neural Information Processing Systems},
+  volume        = {36},
+  year          = {2023},
+  eprint        = {2302.06675},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.LG},
+}
+
+% [train] Dropout: the D_drop / P_drop arms (dropout 0.1-0.2).
+% verified: JMLR page
+@article{Srivastava2014Dropout,
+  author  = {Srivastava, Nitish and Hinton, Geoffrey and Krizhevsky, Alex and Sutskever, Ilya and Salakhutdinov, Ruslan},
+  title   = {{Dropout: A Simple Way to Prevent Neural Networks from Overfitting}},
+  journal = {J. Mach. Learn. Res.},
+  volume  = {15},
+  number  = {56},
+  pages   = {1929--1958},
+  year    = {2014},
+}
+
+% [train] Optuna: HPO used in fm4tag (hpo.py) and salt_hpo.
+% verified: arXiv API + Semantic Scholar venue
+% UNVERIFIED: pages and DOI from memory
+@inproceedings{Akiba2019Optuna,
+  author        = {Akiba, Takuya and Sano, Shotaro and Yanase, Toshihiko and Ohta, Takeru and Koyama, Masanori},
+  title         = {{Optuna: A Next-generation Hyperparameter Optimization Framework}},
+  booktitle     = {Proceedings of the 25th ACM SIGKDD International Conference on Knowledge Discovery and Data Mining},
+  pages         = {2623--2631},
+  year          = {2019},
+  doi           = {10.1145/3292500.3330701},
+  eprint        = {1907.10902},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.LG},
+}
+
+% [train] Permutation feature importance (origin) for the track-feature importance study (optional).
+% verified: CrossRef
+@article{Breiman2001RandomForests,
+  author  = {Breiman, Leo},
+  title   = {{Random Forests}},
+  journal = {Mach. Learn.},
+  volume  = {45},
+  pages   = {5--32},
+  year    = {2001},
+  doi     = {10.1023/A:1010933404324},
+}
+
+% [train] PyTorch.
+% verified: existing entry in salt paper.bib (key reused)
+@inproceedings{pytorch,
+  author    = {Paszke, Adam and Gross, Sam and Massa, Francisco and Lerer, Adam and Bradbury, James and Chanan, Gregory and Killeen, Trevor and Lin, Zeming and Gimelshein, Natalia and Antiga, Luca and others},
+  title     = {{{PyTorch}: An Imperative Style, High-Performance Deep Learning Library}},
+  booktitle = {Advances in Neural Information Processing Systems},
+  volume    = {32},
+  pages     = {8024--8035},
+  year      = {2019},
+}
+
+% [train] PyTorch Lightning (fm4tag and salt).
+% verified: existing entry in salt paper.bib (key reused)
+@misc{lightning,
+  author = {Falcon, William and {The PyTorch Lightning team}},
+  title  = {{{PyTorch Lightning}}},
+  year   = {2019},
+  doi    = {10.5281/zenodo.3828935},
+  url    = {https://github.com/Lightning-AI/lightning},
+}
+
+% [train] puma plotting toolkit (ROC curves).
+% verified: existing entry in salt paper.bib (key reused; cite the version actually used)
+@misc{Birk:2023,
+  author       = {Birk, Joschka and Froch, Alexander and VS, Sam and Guth, Manuel and Gadow, Philipp and Schr{\"o}er, Tomke and Kobylianskii, Dmitrii and Rettie, S{\'e}bastien and Strebler, Thomas},
+  title        = {{umami-hep/puma}},
+  howpublished = {Zenodo},
+  year         = {2023},
+  doi          = {10.5281/ZENODO.7806395},
+}
+
+% [own] Earlier stage of this work presented at IFAE 2026 (poster ref [5]).
+% verified: -
+% UNVERIFIED: taken from the poster reference list; not searched online (own talk); add speaker, title, URL
+@misc{IFAE2026,
+  title = {{Incontri di Fisica delle Alte Energie 2026 ({IFAE} 2026)}},
+  year  = {2026},
+}
+
+% [own] Earlier stage presented at the SIF 2026 congress (poster ref [6]).
+% verified: -
+% UNVERIFIED: URL from the poster; congress number and talk title not verified (own talk, not searched online)
+@misc{SIF2026,
+  title = {{Congresso Nazionale della Societ{\`a} Italiana di Fisica ({SIF} 2026), talk 303}},
+  year  = {2026},
+  url   = {https://2026.congresso.sif.it/talk/303},
+}

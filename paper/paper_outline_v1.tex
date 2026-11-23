@@ -1,0 +1,196 @@
+% =====================================================================
+%  paper_outline_v1.tex  --  short outline of the paper (2-3 pages + toc)
+%  One short description per paragraph. Long version with numbers, tables
+%  and TODOs: paper_summary_v1.tex. Sources: paper/factsheets/.
+% =====================================================================
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[a4paper,top=2cm,bottom=2cm,left=2cm,right=2cm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\setlist{itemsep=1pt,topsep=2pt}
+\newcommand{\from}[2]{#1$\leftarrow$#2}
+\newcommand{\open}[1]{\textcolor{red}{[#1]}}
+
+\title{Contrastive self-supervision for jet flavour tagging:\\
+augmentation strength, intersample attention and training strategies\\[4pt]
+\large Paper outline v1}
+\author{Riccardo Riva}
+\date{November 2026}
+
+\begin{document}
+\maketitle
+\tableofcontents
+\newpage
+
+\noindent Two studies. \textbf{Study I}: multi-task training (CE + contrastive loss on the jet
+embedding, JC) as a function of the augmentation strength $\lambda$, for our model and for
+GN2. \textbf{Study II}: contrastive pretraining (P0, P1) followed by training from scratch
+(SC), fine-tuning (FT) or frozen encoders (FR). Red brackets: open points.
+
+% ---------------------------------------------------------------------
+\section{Introduction}
+\begin{enumerate}
+  \item \textbf{Flavour tagging.} What $b$/$c$-tagging is, why it matters at the LHC (Higgs,
+        top, searches), and the physics it exploits (long-lived hadrons, displaced tracks).
+  \item \textbf{Transformer taggers and their embedding.} From DL1 to GN1/GN2 and ParT/UParT;
+        all map the jet to a latent embedding, shaped only indirectly by the classification loss.
+  \item \textbf{Jets as tabular data.} Jet and track features as a table; tabular models
+        (SAINT) embed each feature separately and add attention across features and across samples.
+  \item \textbf{Contrastive self-supervision.} InfoNCE between augmented views shapes the
+        embedding directly; in jet physics so far mostly with physics-motivated augmentations.
+  \item \textbf{This work and contributions.} The two questions (multi-task vs pretraining),
+        the contributions list, and the outline of the paper.
+\end{enumerate}
+
+% ---------------------------------------------------------------------
+\section{Related work}
+\begin{enumerate}
+  \item \textbf{Transformer flavour tagging.} GN1/GN2 (Salt), DeepJet, ParticleNet, ParT,
+        UParT; none shapes its embedding with SSL or lets a jet attend to other jets.
+  \item \textbf{Deep learning on tabular data.} Trees vs deep models, TabTransformer,
+        FT-Transformer, SAINT, non-parametric transformers, Set Transformer, tabular FMs.
+  \item \textbf{Contrastive learning.} CPC/SimCLR/SupCon, alignment and uniformity, InfoMin
+        (role of the views), tabular augmentations (CutMix, Mixup, SCARF), dimensional collapse.
+  \item \textbf{SSL in jet physics.} JetCLR, RS3L, masked particle modelling, OmniJet, OmniLearn,
+        contrastive approaches to mismodelling; how our generic augmentations differ.
+\end{enumerate}
+
+% ---------------------------------------------------------------------
+\section{Dataset}
+\begin{enumerate}
+  \item \textbf{JetSet sample.} ATLAS Open Data, simulated $t\bar t$ at 13.6\,TeV, about 192M
+        jets after $20<p_\mathrm{T}<250$\,GeV, $|\eta|<2.5$; truth flavour labels $b$, $c$, light, $\tau$.
+  \item \textbf{Preprocessing and splits.} UPP resampling to the $c$-jet spectrum, fixed flavour
+        fractions; dataset A (52M train) for study I, dataset B (40M pretrain, 18.6M train) for study II.
+  \item \textbf{Inputs.} 2 jet features and 19 track features (10 continuous, 9 categorical hit
+        counts), the same as GN2; about 7 tracks per jet.
+\end{enumerate}
+
+% ---------------------------------------------------------------------
+\section{Model}
+\begin{enumerate}
+  \item \textbf{Per-feature tokens.} Every feature gets its own embedding (MLP for continuous,
+        lookup table for categorical), unlike GN-like taggers that embed the whole track at once.
+  \item \textbf{Column and intersample attention.} Attention across the features of an object,
+        then across objects of the batch (jets with jets, tracks with tracks of all jets).
+  \item \textbf{Aggregator and head.} GN2-like transformer over the tracks of each jet, pooled and
+        joined with the jet features into the global jet embedding; MLP head with 4 classes.
+  \item \textbf{Two variants.} Model A (ISAB row attention, 2.2M parameters, study I) and Model B
+        (chunked row attention with QK-norm, 7.5M parameters, study II). \open{one model or two?}
+  \item \textbf{GN2-like reference.} GN2 trained in Salt on the same jets, classification only;
+        the production GN2v01 scores are used only as an external yardstick.
+\end{enumerate}
+
+% ---------------------------------------------------------------------
+\section{Training objectives and strategies}
+\begin{enumerate}
+  \item \textbf{Augmented views.} A clean view and a view corrupted by CutMix + Mixup with
+        strength $\lambda$ (the ``noise parameter'').
+  \item \textbf{Contrastive losses.} Symmetric InfoNCE between the two views: on the global jet
+        embedding (JC) and on the per-track and jet-feature embeddings (pretraining only).
+  \item \textbf{Multi-task training (study I).} $\mathcal{L}=\mathcal{L}_\mathrm{CE}+0.3\,\mathcal{L}_\mathrm{JC}$
+        from scratch, CE-only baseline, scan over $\lambda$.
+  \item \textbf{Pretraining recipes (study II).} P0: contrastive on track and jet-feature
+        embeddings (aggregator untrained); P1: P0 + JC (aggregator trained). 40M jets, no labels.
+  \item \textbf{Downstream strategies.} SC, FT (pretrained parts at lr/10), FR (encoders frozen),
+        each with or without JC. Table~\ref{tab:kinds} lists the kinds of training done.
+  \item \textbf{Metrics.} Embedding quality (uniformity, effective rank); $b$-tagging
+        discriminant, light/$c$/$\tau$ rejections with optimised $f_c$, $f_\tau$; seeds and
+        selection rules.
+\end{enumerate}
+
+\begin{table}[h]
+\centering\small
+\caption{Kinds of training done with P0 and P1 (study II).}
+\label{tab:kinds}
+\begin{tabular}{l|cc|cc|cc}
+\toprule
+ & \multicolumn{2}{c|}{From scratch} & \multicolumn{2}{c|}{Fine-tuning} & \multicolumn{2}{c}{Frozen encoders} \\
+Pretraining & CE & CE+JC & CE & CE+JC & CE & CE+JC \\
+\midrule
+none & \checkmark & \checkmark & -- & -- & -- & -- \\
+P0   & -- & -- & \checkmark & -- & \checkmark & -- \\
+P1   & -- & -- & \checkmark & \checkmark & \checkmark & \checkmark \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ---------------------------------------------------------------------
+\section{Results I: multi-task training and augmentation strength}
+\begin{enumerate}
+  \item \textbf{$\lambda$ scan, our model.} Weak augmentation hurts; strong augmentation
+        ($\lambda\gtrsim0.55$) delays overfitting and gives the best validation CE.
+        \open{batch/schedule confound, dropout baseline}
+  \item \textbf{Same scan for GN2.} The contrastive term is neutral for GN2 at every $\lambda$,
+        also in the HPO studies; it delays the best epoch but does not improve it.
+  \item \textbf{Embedding quality.} JC drives uniformity to its floor and raises the effective
+        rank; among JC runs a lower rank goes with better CE: metrics are diagnostics, not targets.
+  \item \textbf{Performance vs GN2.} With optimised fractions the best $\lambda$ gives about
+        +2\% $c$-rejection over GN2 at equal light and $\tau$ rejection; CE only is below GN2.
+\end{enumerate}
+
+% ---------------------------------------------------------------------
+\section{Results II: pretraining and training strategies}
+\begin{enumerate}
+  \item \textbf{Pretraining.} P0 and P1 train stably with high-rank, uniform embeddings;
+        JC-only pretraining (P2) collapses the jet-feature embedding.
+  \item \textbf{Training strategies (best validation CE).} Fine-tuning gives the best models:
+        \from{FT}{P0} with dropout is the best overall, then \from{FT}{P1}, both below training
+        from scratch; fine-tuning always beats frozen encoders. Without dropout P1 beats P0
+        (FT and FR); with dropout only P0 was run. The test rejections follow the same ranking
+        on average. \open{\from{FT}{P1} with dropout not run}
+  \item \textbf{Dropout and downstream JC.} Dropout helps only \from{FT}{P0} (it hurts scratch
+        and frozen encoders); downstream JC is neutral from scratch, worse after P1, and breaks
+        down with dropout. \open{dropout runs confounded: 80 vs 40 epochs, untuned lr; WSD redo}
+  \item \textbf{Fewer labels.} With 1--100\% of the labels, P0 pretraining never overtakes
+        training from scratch, and its gap shrinks as labels grow. \open{P1 not scanned}
+  \item \textbf{Dataset size.} The CE gap between the two studies is explained by the number of
+        labelled jets, not by model or batch size.
+\end{enumerate}
+
+% ---------------------------------------------------------------------
+\section{Training stability}
+\begin{enumerate}
+  \item \textbf{Attention-logit growth.} Contrastive pretraining makes the intersample attention
+        logits explode (one-hot attention, gradient spikes); QK-normalisation fixes it.
+  \item \textbf{Collapse of CE+JC from scratch.} Without tight gradient clipping (1.0) most runs
+        collapse to the class priors; in GN2, strong JC diverges without clipping.
+\end{enumerate}
+
+% ---------------------------------------------------------------------
+\section{Discussion}
+\begin{enumerate}
+  \item \textbf{JC as a regulariser.} The contrastive term mainly delays overfitting, which helps
+        a model that overfits strongly (ours) and not GN2.
+  \item \textbf{What makes pretraining work.} Only pretraining that includes the aggregator,
+        followed by fine-tuning, helps; possible reasons and the test to confirm them.
+  \item \textbf{InfoMin view.} $\lambda$ controls the information shared by the views
+        monotonically; a proper linear-probe test is left for future work.
+  \item \textbf{Limitations.} Simulation only, one process, resampled pretraining data,
+        GN2 without auxiliary tasks, predictions that depend on the batch-mates.
+\end{enumerate}
+
+% ---------------------------------------------------------------------
+\section{Conclusions and outlook}
+\begin{enumerate}
+  \item \textbf{Conclusions.} One short paragraph for each study, with the main number.
+  \item \textbf{Outlook.} Robustness to data/MC and MC/MC differences, physics-motivated
+        augmentations, pretraining for GN2 in Salt, larger pretraining samples.
+\end{enumerate}
+
+% ---------------------------------------------------------------------
+\section*{Appendices}
+\begin{enumerate}
+  \item Hyper-parameters and compute.
+  \item Pilot studies: architecture choice, pretraining temperature and $\lambda$, learning rates.
+  \item P2 (JC-only pretraining) and the fraction-optimisation details.
+\end{enumerate}
+
+\end{document}

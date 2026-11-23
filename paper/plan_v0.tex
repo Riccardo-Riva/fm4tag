@@ -1,0 +1,127 @@
+\documentclass[12pt]{article}
+\usepackage{graphicx} % Required for inserting images
+\usepackage[letterpaper,top=2cm,bottom=2cm,left=2cm,right=2cm,marginparwidth=1.75cm]{geometry}
+\usepackage{xcolor}
+
+\usepackage{titlesec}
+
+% Solo il numero della sottosezione, senza quello della sezione: 1.
+\titleformat{\subsection}
+  {\normalfont\large\bfseries}
+  {\arabic{subsection}}
+  {1em}{}
+
+\newcommand{\discussion}{\textcolor{red}{\Large ?}}
+
+\title{Contrastive Learning and Inter-sample Attention for Flavour Tagging paper plan}
+\author{Riccardo Riva}
+\date{September 2026}
+
+\begin{document}
+
+\maketitle
+
+\section*{Work plan}
+
+What do we want to show in our paper? Two aspects:
+
+\begin{enumerate}
+    \item The effectiveness of using a contrastive loss in improving the performance of flavour-tagging classifiers
+    \item The effectiveness of the SAINT-like encoder for jet-level global features and track-level features\footnote{This refers to the fact that, in GN-like transformers, the entire feature vector of a track is embedded simultaneously into a single vector representation. In contrast, in the models I developed, each individual feature is embedded into its own vector representation. This allows for the use of the inter-feature attention block followed by the inter-sample attention blocks for each feature.}
+\end{enumerate}
+
+In the following sections, I describe the two steps in the order in which I will carry them out.
+
+\subsection{Contrastive loss}
+
+To investigate the effectiveness of the contrastive loss, we can start by applying it to the jet embedding representation obtained after the transformer and the weighted pooling (attention pooling) layer in GN2 (see Fig. \ref{fig:gn2}).
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.65\linewidth]{images/gn2.png}
+    \caption{GN2 architecture}
+    \label{fig:gn2}
+\end{figure}
+
+In this way, we can simply check whether the contrastive loss is effective on any kind of transformer-based model. For this, I only need to replicate the GN2 model exactly in my framework and run the standard training strategies:
+
+\begin{itemize}
+    \item training from scratch on $\mathcal{L}_{cross-entropy} + \alpha \mathcal{L}_{contrastive}$
+    \item pre-training on $\mathcal{L}_{contrastive}$ and then training the classifier on $\mathcal{L}_{cross-entropy}$ with the transformer frozen
+    \item pre-training on $\mathcal{L}_{contrastive}$ and then fine-tuning on $\mathcal{L}_{cross-entropy}$ (i.e. allowing the transformer weights to be updated as well)
+\end{itemize}
+
+\subsection{Inter-sample attention}
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.65\linewidth]{images/fm4tag.png}
+    \caption{Our model}
+    \label{fig:fm4tag}
+\end{figure}
+
+Our model is shown in Fig. \ref{fig:fm4tag}. The idea is that the aggregator + head part is essentially the same as in GN2 (there is a small difference in how the two global jet features are used, but I can change it). So, our model is simply GN2 with the addition of an encoder based on embedding each feature individually and applying inter-feature and inter-sample attention to them. This will also allow for a more direct comparison between our model and GN2-like architectures.\\
+
+N.B.: the general idea is a 2x2 grid experiment {GN2, our model} × {only CE, CE + contrastive}. When I talk about comparison I mean ROCs, but also haing a look to the quality metrics of the embeddings (uniformity, effective rank,...)
+
+
+\newpage
+\section*{Structure scheme}
+
+\begin{itemize}
+    \item Introduction
+    \begin{enumerate}
+        \item Description of flavour tagging of jets
+        \item Physical motivation of jet flavour tagging, focus on $pp$ collisions at LHC
+        \item The development of flavour tagging algorithms in the past years, transformer based models
+        \item Typical jet inputs (e.g. global jet and constituent track features for GN2, addition of PFlow and electron features in GN3)
+    \end{enumerate}
+    
+    \item Related works
+    \begin{enumerate}
+        \item Transformer-based algorithms in flavour tagging
+        \item View of jet global and constituent features as tabular data
+        \item ML models for tabular data: BDTs are the standard, but many works in the past five years investigated the use of transformer-based models, especially Foundation models \discussion
+        \item Foundation models with contrastive loss SSL pretraining or assimultaneous objective (started with remarkable results in image representation for classification, then extended to other fields, including tabular data)
+        \item Contrastive loss in particle (jet) physics. To date, the studies were more focused on physics-informed data augmentations, to implement simmetries and physics related results (e.g. QCD IR Safety), or avoid data-MC and MC-MC discrepancies in tagging efficiencies
+        \item We stronger data augmentations, more similar to those in visual models, which are also used in few tabular FMs (e.g. SAINT, TabDeco). MOTIVATION \discussion 
+    \end{enumerate}
+
+    \item Background
+    \begin{enumerate}
+        \item Foundation models: Large models, huge pretraining/small finetuning, many downstream tasks, SSL methods, effort on perfecting latent representations
+        \item Contrastive loss
+        \item typical properties of contrastive loss: uniformity and alignment
+        \item effective rank
+    \end{enumerate}
+
+    \item Dataset and Model
+    \begin{enumerate}
+        \item Dataset
+        \item Model
+        \item BONUS: descritption of intersample attentions (and motivation \discussion)
+    \end{enumerate}
+
+    \item Training strategies \\
+    \textbf{Legend:} $L_{CE}$ $\rightarrow$ Cross-entropy loss, $L_{JE-CL}$ $\rightarrow$ Contrastive loss on jet embeddings
+    \begin{enumerate}
+        \item Cross-entropy + Contrastive loss on Jet embedding training ($L_{CE}$ + $L_{JE-CL}$)
+        \item Pretraining ($L_{JE-CL}$) + training on frozen embeddings ($L_{CE}$)
+        \item Pretraining ($L_{JE-CL}$) + fine-tuning ($L_{CE}$ or $L_{CE}$ + $L_{JE-CL}$)
+
+        \item Pretraining of feature embeddings + training/fine-tuning \discussion
+    \end{enumerate}
+
+    \item Results
+    \begin{enumerate}
+        \item Quality of latent embedding representations 
+        \item Noise strength comparison \discussion
+        \item Training strategy comparison \discussion
+        \item Model comparison (also against GN2), maybe ablation studies \discussion
+    \end{enumerate}
+
+    \item Conclusions
+    
+\end{itemize}
+
+\end{document}

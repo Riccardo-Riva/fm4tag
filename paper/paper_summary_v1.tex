@@ -1,0 +1,1009 @@
+% =====================================================================
+%  paper_summary_v1.tex  --  structure of the paper, one summary per section
+%  Started 2026-11-17 from paper/plan_v0.tex and the fact sheets in
+%  paper/factsheets/ (every number below is taken from them; the fact
+%  sheets give the run directory / csv each number comes from).
+%
+%  Colour code used in the text:
+%    red    [TODO: ...]   something to run, check or decide
+%    blue   [note]        comment for the author, not paper text
+%    orange numbers       PROVISIONAL: study II numbers, to be replaced by
+%                         the WSD redo (one batch size, no early stopping)
+%  Figure boxes are placeholders; the path printed in each box is relative
+%  to /storage3/DSIP/rriva/research/ and points to the existing plot.
+%  Compile with pdflatex + bibtex (refs.bib in the same folder).
+% =====================================================================
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[a4paper,top=2.2cm,bottom=2.2cm,left=2.2cm,right=2.2cm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage{url}
+\usepackage[numbers,sort&compress]{natbib}
+\usepackage{caption}
+\usepackage[colorlinks=true,linkcolor=blue!50!black,citecolor=green!40!black,urlcolor=blue!50!black]{hyperref}
+
+\captionsetup{font=small,labelfont=bf}
+
+% ---------------------------------------------------------------- macros
+\newcommand{\todo}[1]{\textcolor{red}{\textbf{[TODO:} #1\textbf{]}}}
+\newcommand{\note}[1]{\textcolor{blue!70!black}{[\emph{#1}]}}
+\newcommand{\prov}[1]{\textcolor{orange!85!black}{#1}}
+\newcommand{\LCE}{\mathcal{L}_{\mathrm{CE}}}
+\newcommand{\LJC}{\mathcal{L}_{\mathrm{JC}}}
+\newcommand{\Ltrk}{\mathcal{L}_{\mathrm{trk}}}
+\newcommand{\Ljet}{\mathcal{L}_{\mathrm{jet}}}
+\newcommand{\from}[2]{#1$\leftarrow$#2}
+\newcommand{\ttbar}{\ensuremath{t\bar{t}}}
+\newcommand{\pT}{\ensuremath{p_{\mathrm{T}}}}
+
+% placeholder for a figure that already exists as a plot
+\newcommand{\figph}[4]{%
+  \begin{figure}[htbp]
+    \centering
+    \fbox{\parbox[c][#1][c]{0.93\linewidth}{\centering\small\textit{Figure placeholder}\\[4pt]
+      \footnotesize existing plot: \url{#2}}}
+    \caption{#3}
+    \label{#4}
+  \end{figure}}
+% placeholder for a figure that still has to be made
+\newcommand{\figtodo}[4]{%
+  \begin{figure}[htbp]
+    \centering
+    \fbox{\parbox[c][#1][c]{0.93\linewidth}{\centering\small\textit{Figure placeholder (to be made)}\\[4pt]
+      \footnotesize #2}}
+    \caption{#3}
+    \label{#4}
+  \end{figure}}
+
+% ------------------------------------------------------------- front matter
+\title{Contrastive self-supervision for jet flavour tagging:\\
+augmentation strength, intersample attention and training strategies\\[4pt]
+\large Summary draft v1 (structure of the paper, one summary per section)}
+\author{Riccardo Riva, Marco Cristoforetti, Roberto Iuppa, Francesco Maria Follega
+\todo{confirm author list, order and affiliations (FBK, Univ.\ Trento, TIFPA?)}}
+\date{17 November 2026}
+
+\begin{document}
+\maketitle
+
+% =====================================================================
+\begin{abstract}
+Deep-learning flavour taggers compress the features of a jet and of its tracks into a
+latent embedding from which the jet flavour is predicted. We study whether contrastive
+self-supervised objectives acting directly on this embedding improve flavour tagging,
+using the public ATLAS Open Data JetSet sample (simulated \ttbar{} events at
+$\sqrt{s}=13.6$\,TeV). Jets are treated as tabular data and encoded by a SAINT-like
+transformer with per-feature tokens, attention across features and intersample attention
+across the jets and tracks of a batch, followed by a GN2-like track aggregator. An InfoNCE
+loss between an augmented and a clean view of each jet is used in two ways:
+(i) multi-task training, where it is added to the classification loss, and
+(ii) contrastive pretraining on a disjoint sample of 40M jets, followed by training from
+scratch, fine-tuning or training on frozen encoders. In multi-task training the augmentation
+strength is the decisive parameter. Weak augmentations degrade the classifier. Strong ones
+delay overfitting, spread the jet embedding uniformly over the hypersphere and give the
+lowest validation loss. They also give a c-jet rejection about 2\% higher than a GN2-like
+tagger trained on the same jets, at equal light- and $\tau$-jet rejection. The same objective
+has no effect on the GN2-like tagger. In the pretraining study, only pretraining the full
+network including the aggregator, followed by fine-tuning, outperforms training from scratch:
+\prov{+11\%} c-jet rejection at equal light- and $\tau$-jet rejection. Pretraining only the
+per-feature embeddings and freezing the encoders do not help, at any fraction of labelled
+jets between 1\% and 100\%. We also show that contrastive pretraining with intersample
+attention needs query--key normalisation to avoid unbounded attention-logit growth. Finally,
+we discuss embedding-quality metrics (uniformity, effective rank) as diagnostics rather than
+targets.
+\end{abstract}
+
+\noindent\note{Abstract = the whole paper in 180--250 words. Rewrite it last, once the
+numbers are final. The study-II numbers (orange) will change with the WSD redo.}
+
+\medskip
+\noindent\todo{DECISION before writing the results: the two studies currently use different
+models and datasets (study I: Model A, 2.2M parameters, 52M training jets; study II: Model B,
+7.5M parameters, 18.6M training jets). Either (a) present them as two explicitly separate
+set-ups, or (b) add a CE+JC $\lambda$ ladder of Model B and a GN2 CE / CE+JC pair on the
+same 18.6M-jet split to the WSD redo, so the whole paper uses one model and one dataset,
+with the Model-A scan as supporting material. See the review in the chat of 2026-11-17.}
+
+\tableofcontents
+\newpage
+
+% =====================================================================
+\section{Introduction}
+\label{sec:intro}
+
+\note{Purpose: why flavour tagging matters, what is missing in current taggers (an
+explicitly shaped embedding), what we do, and the list of contributions. Write this section
+last; the contributions list is the paper's spine and should be written first.}
+
+\paragraph{Flavour tagging.}
+Identifying jets that originate from $b$- and $c$-quarks (and from hadronic $\tau$ decays)
+is central to the LHC physics programme: Higgs couplings to heavy quarks, top physics and
+many searches. It relies on the long lifetime of $b$- and $c$-hadrons, which shows up as
+tracks with large impact parameters and as displaced vertices inside the jet.
+
+\paragraph{Transformer taggers and their embedding.}
+Flavour taggers have moved from likelihood and BDT combinations of hand-crafted
+variables~\citep{ATLAS:2019} to graph and transformer networks that read the tracks
+directly: GN1~\citep{GN1} and GN2~\citep{GN2} in ATLAS, and DeepJet~\citep{Bols:2020},
+ParticleNet~\citep{Qu_2020}, ParT~\citep{Qu:2022} and UParT~\citep{CMSDP2025081} in CMS.
+All of them map the jet to a latent representation from which the flavour is predicted.
+That representation drives the performance, and possibly the behaviour outside the
+training sample, yet it is shaped only indirectly, through the classification loss and
+auxiliary tasks.
+
+\paragraph{Jets as tabular data.}
+The inputs of a jet (two jet-level kinematic features and, for each track, 19 heterogeneous
+continuous and categorical features) form a small table. Deep tabular models such as
+SAINT~\citep{somepalli2021saint} embed every feature individually and combine attention
+across features with \emph{intersample attention} across the rows of a batch. GN-like
+taggers instead embed the whole feature vector of a track at once. We adapt the tabular
+approach to jets and tracks.
+
+\paragraph{Contrastive self-supervision.}
+Contrastive learning shapes an embedding directly. An InfoNCE loss~\citep{oord2018representation,Chen2020SimCLR}
+pulls together two views of the same object and pushes apart other objects. It optimises
+the alignment and uniformity of the embedding~\citep{Wang2020AlignmentUniformity}, and the
+strength of the augmentation controls how much information the views share~\citep{tian2020makes}.
+In jet physics, contrastive learning has mostly used physics-motivated augmentations,
+for symmetries and safety~\citep{Dillon2022JetCLR}, re-simulation~\citep{Harris2025Resim}
+or data/simulation differences~\citep{Sheldon2025MACK}. Here we use generic,
+feature-agnostic tabular augmentations (CutMix and Mixup with strength $\lambda$).
+
+\paragraph{This work.}
+We ask two questions:
+(Q1) does adding a contrastive term on the jet embedding to the classification loss
+(\emph{multi-task training}) improve a tagger, and how does the answer depend on the
+augmentation strength and on the architecture?
+(Q2) does \emph{contrastive pretraining} on a large unlabelled sample help, which
+pretraining objective works, and is it better used by fine-tuning or with frozen encoders?
+For both questions we report flavour-tagging performance and embedding-quality metrics.
+
+\paragraph{Contributions} \note{draft, to be sharpened once the results are final}
+\begin{itemize}
+  \item A SAINT-like jet tagger with per-feature tokens, column attention and intersample
+        attention across the jets and tracks of a batch, combined with a GN2-like track
+        aggregator (Section~\ref{sec:model}).
+  \item A scan of the augmentation strength $\lambda$ in multi-task training (cross-entropy
+        plus jet-embedding contrastive loss), repeated for a GN2-like tagger trained on the
+        same jets: the contrastive term helps our model only for strong augmentations and
+        is neutral for GN2 (Section~\ref{sec:res-multitask}).
+  \item A controlled comparison of contrastive pretraining recipes (P0, P1) and downstream
+        strategies (from scratch, fine-tuning, frozen encoders) on a 40M-jet pretraining
+        split, including a scan of the labelled-data fraction (Section~\ref{sec:res-pretrain}).
+  \item Training-stability findings for intersample attention under contrastive objectives:
+        attention-logit growth cured by QK-normalisation, and collapse of multi-task training
+        from scratch without tight gradient clipping (Section~\ref{sec:stability}).
+\end{itemize}
+
+\paragraph{Outline.} Sec.~\ref{sec:related} related work; Sec.~\ref{sec:data} dataset;
+Sec.~\ref{sec:model} model; Sec.~\ref{sec:methods} objectives, training strategies and
+metrics; Secs.~\ref{sec:res-multitask}--\ref{sec:stability} results;
+Sec.~\ref{sec:discussion} discussion and limitations; Sec.~\ref{sec:conclusions} conclusions.
+
+% =====================================================================
+\section{Related work}
+\label{sec:related}
+
+\note{Purpose: place the work in four literatures in about 1.5 pages. Each paragraph ends
+with how we differ. The "Background" part of plan\_v0 (foundation models, contrastive
+loss, uniformity, effective rank) moves to Section~\ref{sec:methods}, where the
+quantities are defined and used.}
+
+\subsection{Transformer-based flavour tagging}
+GN1/GN2 in ATLAS~\citep{GN1,GN2} (implemented in Salt~\citep{Barr2025Salt}) and ParT/UParT
+in CMS~\citep{Qu:2022,CMSDP2025081}: per-track embeddings, self-attention over the tracks
+of one jet, attention pooling, auxiliary track-origin and vertexing tasks. The GN2 paper
+also released the JetSet open-data sample~\citep{ATLASJetSet2025} we use. \emph{Difference:}
+no existing tagger shapes its embedding with a self-supervised loss, and none lets a jet
+attend to other jets.
+
+\subsection{Deep learning for tabular data and intersample attention}
+Gradient-boosted trees remain strong on tabular data~\citep{Grinsztajn2022TreesTabular}.
+Attention models close the gap with per-feature tokens: TabTransformer~\citep{Huang2020TabTransformer},
+FT-Transformer~\citep{Gorishniy2021FTTransformer}, and SAINT~\citep{somepalli2021saint},
+which adds intersample (row) attention and contrastive pretraining. Non-parametric
+transformers~\citep{Kossen2021NPT} and the Set Transformer's induced attention~\citep{lee2019settransformerframeworkattentionbased}
+are related ways of attending across data points. Tabular foundation models (TabPFN~\citep{Hollmann2025TabPFNNature},
+TabICL~\citep{Qu2025TabICL}) are the long-term motivation. \emph{Difference:} our
+"table" is hierarchical (jets and their variable-length track sets), and we apply row
+attention to both levels.
+
+\subsection{Contrastive self-supervised learning}
+InfoNCE / CPC~\citep{oord2018representation}, SimCLR~\citep{Chen2020SimCLR},
+MoCo~\citep{He2020MoCo}, SupCon~\citep{Khosla2020SupCon}. Alignment and
+uniformity~\citep{Wang2020AlignmentUniformity}; views and InfoMin~\citep{tian2020makes};
+tabular augmentations: SCARF~\citep{Bahri2022SCARF}, VIME~\citep{Yoon2020VIME}, the
+CutMix/Mixup corruption of SAINT~\citep{Yun2019CutMix,Zhang2018mixup};
+dimensional collapse and effective rank~\citep{Jing2022DimCollapse,Roy2007EffectiveRank,Garrido2023RankMe};
+contrastive terms added to supervised training~\citep{Gunel2021SCLFinetune}; fine-tuning
+versus linear probing~\citep{Kumar2022FTDistorts}. \emph{Difference:} we measure how
+the augmentation strength interacts with a supervised loss on a physics task.
+
+\subsection{Self-supervision and foundation models in jet physics}
+JetCLR~\citep{Dillon2022JetCLR}; re-simulation-based SSL (RS3L)~\citep{Harris2025Resim};
+masked particle modelling~\citep{golling2024masked}; OmniJet-$\alpha$~\citep{Birk2024OmniJet};
+OmniLearn~\citep{Mikuni2025OmniLearn}; fine-tuning foundation models for
+analyses~\citep{vigl2024finetuning}; contrastive approaches to mismodelling~\citep{Sheldon2025MACK}.
+\emph{Difference:} generic tabular augmentations, a flavour-tagging target, intersample
+attention, and an explicit comparison of multi-task training with pretraining.
+\todo{check whether any SSL work targets flavour tagging specifically; the literature
+fact sheet lists 2025--26 entries (HEP-JEPA, LHCb SSL, scaling laws) that are worth one
+sentence each.}
+
+% =====================================================================
+\section{Dataset}
+\label{sec:data}
+
+\note{Purpose: everything needed to reproduce the inputs. Short, factual, with one
+table of the splits and one of the input features.}
+
+\subsection{JetSet sample and selection}
+ATLAS Open Data JetSet~\citep{ATLASJetSet2025}: about 48.7M simulated \ttbar{} events at
+$\sqrt{s}=13.6$\,TeV, 199.8M jets with up to 40 associated tracks. Jets are required to
+have $20<\pT<250$\,GeV and $|\eta|<2.5$, which leaves about 192M jets. Flavour labels
+($b$, $c$, light, $\tau$) come from the truth hadron/lepton cone labelling.
+\todo{check jet collection and track association against the Open Data record; check the
+13.6\,TeV value in the record (some old plot labels say 13\,TeV).}
+
+\subsection{Preprocessing and splits}
+Preprocessing with UPP: \pT--$\eta$ resampling (``countup'') to the $c$-jet spectrum on a
+$50\times40$ grid, fixed flavour composition $b:c:\text{light}:\tau = 25.8:25.8:38.7:9.7\%$,
+and $z$-score normalisation with the training-split statistics. Splits are defined by the
+event number, so no event is shared between splits (Table~\ref{tab:splits}). Study I uses
+dataset~A. Study II uses dataset~B, whose ``pretrain'' split serves for contrastive
+pretraining with the labels unused.
+
+\begin{table}[htbp]
+\centering\small
+\caption{Dataset splits. Both datasets come from the same JetSet events with the same
+preprocessing; 43\% of the distinct jets of every dataset-B split are also in the dataset-A
+training split, so models trained on A are never evaluated on B.}
+\label{tab:splits}
+\begin{tabular}{llllll}
+\toprule
+Dataset & Split & event-number rule & Jets & Used for \\
+\midrule
+A (\texttt{251112\_112022}) & train & $\bmod 62 \in [0,51]$  & 52.0M  & Study I training \\
+                            & val   & $\bmod 62 \in [52,56]$ & 5.0M   & early stopping, model selection \\
+                            & test  & $\bmod 62 \in [57,61]$ & 5.0M   & performance \\
+\midrule
+B (\texttt{251112\_152051}) & pretrain & $\bmod 100 \in [0,63]$  & 39.68M & contrastive pretraining (no labels) \\
+                            & train    & $\bmod 100 \in [64,93]$ & 18.60M & Study II supervised training \\
+                            & val      & $\bmod 100 \in [94,96]$ & 1.86M  & early stopping, fraction search \\
+                            & test     & $\bmod 100 \in [97,99]$ & 1.86M  & performance \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\note{Say explicitly that the ``unlabelled'' pretraining split still has the flavour
+composition fixed by truth-based resampling, so it is not a realistic unlabelled sample
+(limitation, Section~\ref{sec:discussion}).}
+
+\subsection{Input features}
+Two jet features (\texttt{pt\_btagJes}, \texttt{eta\_btagJes}) and 19 track features: 10
+continuous (\texttt{d0}, \texttt{z0SinTheta}, \texttt{dphi}, \texttt{deta}, \texttt{qOverP},
+the two lifetime-signed impact-parameter significances and three uncertainties) and 9
+categorical hit counts (pixel, SCT, innermost-layer, shared and split hits). These are the
+same inputs as the GN2-like reference. On average a jet has 7.15 valid tracks (82\% of the
+40-slot grid is padding); $\tau$-jets have 3.7.
+\todo{full feature table in an appendix, with the embedding cardinality of each
+categorical feature.}
+
+% =====================================================================
+\section{Model}
+\label{sec:model}
+
+\note{Purpose: describe the architecture once, then the two variants used in the two
+studies, then the GN2 reference. The architecture figure does not exist yet
+(\texttt{images/fm4tag.png} in plan\_v0 was never drawn); \texttt{diary/figures/gn2.png}
+is the ATLAS figure with handwritten notes and must be redrawn or cited.}
+
+\subsection{Per-feature tokenisation}
+Every input feature becomes its own 16-dimensional token. Each continuous feature has its
+own small MLP ($1\to32\to16$), and the categorical hit counts share one embedding table
+with per-feature offsets. A jet is a $2\times16$ token grid and a track a $19\times16$ grid.
+
+\subsection{Column and intersample (row) attention}
+The encoder is a stack of depth 6. Each step applies pre-norm \emph{column} attention
+across the feature tokens of one object, then pre-norm \emph{row} attention across
+objects: jets attend to other jets, and tracks attend to the valid tracks of
+\emph{all} jets. Feed-forward layers use GEGLU~\citep{Shazeer2020GLU}, and the residual
+is a true pre-norm, $x+f(\mathrm{LN}(x))$~\citep{Xiong2020PreLN}. A per-object projector
+maps the tokens to per-track embeddings (128-d) and a jet-feature embedding (32-d in
+Model A, 128-d in Model B).
+Two variants of the row attention are used (Table~\ref{tab:variants}):
+\begin{itemize}
+  \item \textbf{Model A} (study I): induced set attention~\citep{lee2019settransformerframeworkattentionbased}
+        with 16 inducing points per feature token (``per-token'' mode) over the whole
+        batch on each GPU.
+  \item \textbf{Model B} (study II): SAINT-style ``concat'' mode, where the feature tokens
+        of an object are concatenated into one vector, with full softmax attention inside
+        chunks of 512 consecutive jets (variable-length FlashAttention~\citep{Dao2024FlashAttention2})
+        and RMS normalisation of queries and keys~\citep{Henry2020QKNorm,Zhang2019RMSNorm}
+        (Section~\ref{sec:stability}).
+\end{itemize}
+
+\subsection{Track aggregator and classification head}
+A 6-layer transformer runs over the track embeddings of each jet separately (128-d,
+$4\times64$ heads), followed by a mean pool. The pooled vector is concatenated with the
+jet-feature embedding to form the \emph{global jet embedding} $z_{\mathrm{jet}}$ (160-d in
+Model A, 256-d in Model B). An MLP head ($z_{\mathrm{jet}}\to256\to4$) predicts the
+flavour. There are no auxiliary tasks.
+
+\begin{table}[htbp]
+\centering\small
+\caption{The two model variants and the GN2-like reference.}
+\label{tab:variants}
+\begin{tabular}{p{4.2cm}p{3.4cm}p{3.6cm}p{3.6cm}}
+\toprule
+ & Model A (study I) & Model B (study II) & GN2-like (Salt) \\
+\midrule
+Feature embedding      & per feature, 16-d & per feature, 16-d & per track (init MLP 256) \\
+Row (intersample) attention & ISAB, 16 inducing points, per token, whole batch & full attention in 512-jet chunks, concat, QK-norm & none \\
+Track transformer      & aggregator, 6 layers & aggregator, 6 layers & 4 layers, 256-d \\
+Pooling                & mean & mean & attention pooling \\
+Jet embedding dim.     & 160 & 256 & 128 \\
+Trainable parameters   & 2.22M (89\% in aggregator) & 7.47M (70\% in track row attention) & 2.24M \\
+Contrastive negatives (JC) & global batch (2047 or 4095) & 511 (same chunk) & global batch (4095) \\
+Dataset                & A & B & A (study I), B (reference) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{GN2-like reference}
+The reference is a GN2 architecture trained in Salt~\citep{Barr2025Salt} on the same inputs
+and training jets, with the jet-classification task only (no track-origin or vertexing
+heads). It has 2.2M parameters, about the same size as Model A. The production GN2v01
+scores stored in the open-data files are shown only as an external yardstick: that tagger
+was trained on a different, larger sample.
+\note{Call it ``GN2-like'' everywhere: without the auxiliary tasks it is not the ATLAS GN2.}
+
+\figtodo{5cm}{To draw: per-feature tokens $\to$ [column attention $\to$ row attention]
+$\times6$ $\to$ projectors $\to$ track aggregator + mean pool $\to$ $z_{\mathrm{jet}}$
+$\to$ head. Mark where $\LCE$, $\LJC$, $\Ltrk$ and $\Ljet$ act. Blueprints:
+\texttt{fm4tag/README.md}, \texttt{fm4tag-chunk/docs/encoder\_dataflow.md}.}
+{Architecture of the tagger, and where each loss acts.}{fig:arch}
+
+% =====================================================================
+\section{Learning objectives, training strategies and metrics}
+\label{sec:methods}
+
+\note{Purpose: define every loss, every training recipe and every metric used in
+Sections~\ref{sec:res-multitask}--\ref{sec:stability}. The P0/P1 table
+(Table~\ref{tab:kinds}) is the centre of this section.}
+
+\subsection{Supervised loss}
+Unweighted four-class cross-entropy $\LCE$ on the clean (un-augmented) forward pass.
+\note{Salt's GN2 uses class-weighted CE by default. Every CE value in this paper must be
+unweighted, or labelled as weighted.}
+
+\subsection{Augmented views}
+Two views of each batch: a clean view and a view corrupted with strength
+$\lambda\in[0,1]$. \emph{CutMix} replaces each normalised feature value, with probability
+$\lambda$, by the same feature of a randomly chosen other row (another jet, or another
+track of the batch). \emph{Mixup} then sets $x'=(1-\lambda)\,x+\lambda\,x_{\pi}$ on the
+feature embeddings. One $\lambda$ drives both. For $\lambda\ge0.5$ the Mixup view is closer
+to its partner than to itself.
+
+\subsection{Contrastive losses}
+All contrastive terms use the same symmetric cross-view InfoNCE on L2-normalised embeddings
+with temperature $\tau=0.1$. The positive is the other view of the same object; the
+negatives are the other objects of the other view. We use two such terms:
+\begin{itemize}
+  \item the \textbf{jet-embedding contrastive loss} $\LJC$, on the global jet embedding
+        $z_{\mathrm{jet}}$ (the input of the head);
+  \item the \textbf{per-object losses} $\Ltrk$ and $\Ljet$, on the per-track and the
+        jet-feature embeddings at the encoder output (pretraining only).
+\end{itemize}
+\note{A denoising/reconstruction loss is implemented but used in no reported run. Remove it
+from the paper, and from the poster wording ``and a denoising reconstruction loss''.}
+
+\subsection{Multi-task training (study I)}
+$\mathcal{L}=\LCE+w\,\LJC$ with $w=0.3$, trained from scratch. The CE-only baseline is
+$w=0$, where $\lambda$ has no effect.
+
+\subsection{Contrastive pretraining and downstream training (study II)}
+Pretraining runs on the pretrain split with no labels in the loss, with $\lambda=0.4$ and
+$\tau=0.1$. These were the best values of a pilot grid judged by a frozen-encoder probe
+(Appendix~\ref{app:pilots}). The recipes are listed in Table~\ref{tab:pretrain}.
+Downstream, the tagger is trained on the labelled train split in one of three ways:
+\begin{itemize}
+  \item \textbf{SC}, from scratch;
+  \item \textbf{FT}, fine-tuning: start from the pretrained weights, keep them fixed for 2
+        epochs, then train them at 1/10 of the learning rate;
+  \item \textbf{FR}, frozen encoders: encoders and projectors frozen; aggregator and head
+        trained.
+\end{itemize}
+Each method is run with or without the downstream term $0.3\,\LJC$.
+Tables~\ref{tab:kinds} and~\ref{tab:downstream} list every combination that was run.
+
+\begin{table}[htbp]
+\centering\small
+\caption{Contrastive pretraining recipes (study II, Model B, 2 seeds each).
+P2 was run only as a pilot and is reported in Appendix~\ref{app:p2}.}
+\label{tab:pretrain}
+\begin{tabular}{p{3.6cm}p{3.7cm}p{3.9cm}p{3.7cm}}
+\toprule
+ & \textbf{P0} & \textbf{P1} & P2 (pilot only) \\
+\midrule
+Loss & $\Ltrk+\Ljet$ & $\Ltrk+\Ljet+\LJC$ & $\LJC$ \\
+Acts on & track and jet-feature embeddings & + global jet embedding & global jet embedding only \\
+Trained modules & encoders, projectors & encoders, projectors, aggregator & encoders, projectors, aggregator \\
+Aggregator after pretraining & untrained (random) & pretrained & pretrained \\
+\midrule
+Data & \multicolumn{3}{p{11.9cm}}{pretrain split, 39.68M jets, labels not used} \\
+Views and loss & \multicolumn{3}{p{11.9cm}}{CutMix + Mixup ($\lambda=0.4$) vs.\ clean; $\tau=0.1$; negatives within the 512-jet chunk} \\
+Optimisation & \multicolumn{3}{p{11.9cm}}{AdamW, peak lr $10^{-3}$, 2\% warm-up + cosine, 30 epochs, batch 12\,288, clip 1.0, QK-norm} \\
+\midrule
+Final val.\ loss (two seeds) & 5.44 / 5.51 & 5.67 / 5.73 & 0.222 / 0.223 \\
+Eff.\ rank: tracks / jet feat. / $z_{\mathrm{jet}}$ & 121 / 62 / -- & 126 / 62 / 130 & 59 / 1 / 127 \\
+Wall time per seed & 43\,h (A40) & 34\,h (L40S) & 43\,h (A40) \\
+Used downstream & FT, FR & FT, FR, with and without JC & no \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[htbp]
+\centering\small
+\caption{Kinds of training done with P0 and P1 (study II). \checkmark: run with 4 seeds
+(pretrained arms: 2 pretraining $\times$ 2 downstream seeds). The downstream loss is
+$\LCE$ or $\LCE+0.3\,\LJC$.}
+\label{tab:kinds}
+\begin{tabular}{l|cc|cc|cc}
+\toprule
+ & \multicolumn{2}{c|}{From scratch (SC)} & \multicolumn{2}{c|}{Fine-tuning (FT)} & \multicolumn{2}{c}{Frozen encoders (FR)} \\
+Pretraining & CE & CE+JC & CE & CE+JC & CE & CE+JC \\
+\midrule
+none & \checkmark & \checkmark & -- & -- & -- & -- \\
+P0   & -- & -- & \checkmark & not run$^{a}$ & \checkmark & not run$^{a}$ \\
+P1   & -- & -- & \checkmark & \checkmark & \checkmark & \checkmark \\
+P2   & -- & -- & not run & not run & probe only$^{b}$ & not run \\
+\bottomrule
+\multicolumn{7}{l}{\footnotesize $^{a}$ by design: P0 leaves the aggregator untrained.
+$^{b}$ 15-epoch frozen probe in the pilot grid.}
+\end{tabular}
+\end{table}
+
+\begin{table}[htbp]
+\centering\small
+\caption{Downstream training recipes (study II). Common settings: train split (18.6M jets),
+AdamW, 2\% warm-up + cosine over 40 epochs, early stopping (patience 12) on the validation
+CE, JC with $w=0.3$, $\lambda=0.4$, $\tau=0.1$. FT holds the pretrained parts at lr\,=\,0
+for 2 epochs. \prov{To be replaced by the WSD redo: one batch size (12\,800) for every
+method, warm-up--stable--decay schedule, no early stopping.}}
+\label{tab:downstream}
+\begin{tabular}{p{2.3cm}p{3.2cm}p{3.0cm}p{1.5cm}p{1.3cm}p{2.7cm}}
+\toprule
+Method & Initialisation & Trainable & Loss & Batch & lr (pretrained) \\
+\midrule
+SC              & random & all & CE & 28\,672 & $1.1\cdot10^{-3}$ \\
+SC+JC           & random & all (grad.\ clip 1.0) & CE+JC & 14\,336 & $8\cdot10^{-4}$ \\
+\from{FT}{P0}   & P0 encoders; aggregator random & all & CE & 28\,672 & $1.1\cdot10^{-3}$ ($1.1\cdot10^{-4}$) \\
+\from{FR}{P0}   & P0 encoders; aggregator random & aggregator, head & CE & 94\,208 & $2\cdot10^{-3}$ \\
+\from{FT}{P1}   & P1 encoders + aggregator & all & CE & 28\,672 & $1.1\cdot10^{-3}$ ($1.1\cdot10^{-4}$) \\
+\from{FR}{P1}   & P1 encoders + aggregator & aggregator, head & CE & 94\,208 & $2\cdot10^{-3}$ \\
+\from{FT}{P1}+JC & P1 encoders + aggregator & all & CE+JC & 14\,336 & $8\cdot10^{-4}$ ($8\cdot10^{-5}$) \\
+\from{FR}{P1}+JC & P1 encoders + aggregator & aggregator, head & CE+JC & 53\,760 & $1.5\cdot10^{-3}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Embedding-quality metrics}
+On $\le 8192$ validation jets per epoch:
+\begin{itemize}
+  \item \emph{uniformity}~\citep{Wang2020AlignmentUniformity},
+        $\log\langle e^{-2\|\hat z_i-\hat z_j\|^2}\rangle$ on unit-normalised embeddings;
+        lower is more uniform, about $-4$ in the high-dimensional limit;
+  \item \emph{effective rank}~\citep{Roy2007EffectiveRank}, the exponential of the entropy
+        of the normalised singular values of the centred embedding.
+\end{itemize}
+\note{Alignment, listed in plan\_v0, is not implemented. Either add it (cheap: mean
+$\|\hat z-\hat z'\|^2$ between the two views) or drop it from the text.}
+
+\subsection{Flavour-tagging performance}
+The $b$-tagging discriminant is
+$D_b=\ln\!\big[p_b/(f_c\,p_c+f_\tau\,p_\tau+(1-f_c-f_\tau)\,p_{\mathrm{light}})\big]$.
+The rejection of flavour $X$ at a $b$-efficiency working point is $1/\varepsilon_X$. We use
+two settings of the fractions:
+\begin{itemize}
+  \item nominal: $f_c=0.2$, $f_\tau=0.01$;
+  \item \emph{constrained optimal}: per model, maximise the $c$-rejection on a grid of
+        $(f_c,f_\tau)$ (step 0.002), subject to light- and $\tau$-rejection at least equal
+        to the reference's.
+\end{itemize}
+\todo{one protocol for the whole paper: optimise the fractions on the validation split, then
+evaluate on test, at one working point. Study~I currently optimises on the test split at
+80\%; study~II optimises on validation at 80\% and quotes test at 77\%.}
+
+\subsection{Training protocol and statistics}
+Optimiser AdamW~\citep{Loshchilov2019AdamW}, bf16 mixed precision. Each configuration is
+run with 2--8 seeds. We quote mean $\pm$ standard deviation of the best validation CE.
+Selection rules are fixed before the comparison:
+\begin{itemize}
+  \item study I: ``stuck'' seeds (validation CE never below 0.610 within 20 epochs) are
+        excluded from the scan and the baselines alike and listed;
+  \item study II: collapse rule (validation CE $>0.85$ after a best epoch within the first
+        6), pre-registered.
+\end{itemize}
+Learning rates are tuned per method on one seed (42), which is excluded from the final runs.
+Compute: Appendix~\ref{app:hyper}.
+
+% =====================================================================
+\section{Results I: multi-task training and augmentation strength}
+\label{sec:res-multitask}
+
+\note{Purpose: answer Q1. Claim: strong augmentation turns the contrastive term into a
+useful regulariser for our model (Model A) but not for GN2. All numbers are on dataset A
+(52M training jets), with the unweighted validation CE on the 5M-jet validation split.
+This is the plan\_v0 2$\times$2 grid \{GN2, ours\} $\times$ \{CE, CE+CL\}.}
+
+\subsection{Augmentation-strength scan with Model A}
+We scan $\lambda$ from 0.05 to 0.8 at $w=0.3$, $\tau=0.1$, lr $3\cdot10^{-4}$; 67 trainings,
+of which 6 are excluded as stuck (Table~\ref{tab:lambda-fm4tag}, Fig.~\ref{fig:lambda-fm4tag}).
+\begin{itemize}
+  \item Weak augmentations ($\lambda\le0.2$) make the validation CE \emph{worse} than CE
+        only ($0.60345\pm0.00049$).
+  \item The loss improves with $\lambda$ (not strictly: $\lambda=0.5$ is an outlier) and
+        reaches a plateau at
+        $\lambda\approx0.55$--$0.65$ ($\approx0.5999$), $0.0035$ below CE only.
+  \item Stronger augmentation delays overfitting. The best epoch moves from about 8
+        (CE only) to 60--99, and the validation CE barely rises after its minimum.
+  \item Stuck seeds: 3 of 8 for CE only, 3 of 52 with JC.
+\end{itemize}
+Regime-pure check: in the same batch regime and the same 50-epoch schedule, $\lambda=0.3$
+reaches $0.60192\pm0.00026$ against $0.60345\pm0.00049$ for CE only ($n=4$ each).
+
+\begin{table}[htbp]
+\centering\small
+\caption{Model A, multi-task $\LCE+0.3\,\LJC$: best validation CE (unweighted, mean $\pm$
+std over $n$ seeds) and change of the constrained-optimal $c$-rejection at 80\% $b$-efficiency
+with respect to the GN2-like reference (best seed per row). Batch regimes: A = $1024\times2$
+GPUs, B = $2048\times1$, C = $2048\times2$. Rows with one usable seed
+($\lambda=0.64,0.7,0.75,0.8$: 0.5992--0.6001, +1.3\% to +2.5\%) are omitted.}
+\label{tab:lambda-fm4tag}
+\begin{tabular}{lllccc}
+\toprule
+$\lambda$ & regime & $n$ & best val.\ CE & best epochs & $\Delta$ c-rej vs GN2-like \\
+\midrule
+CE only & A & 4 & $0.60345\pm0.00049$ & 5--10   & $-2.2\%$ \\
+0.05    & A & 6 & $0.60742\pm0.00047$ & 7--11   & $-5.6\%$ \\
+0.1     & A & 5 & $0.60620\pm0.00035$ & 9--14   & $-3.6\%$ \\
+0.2     & A, B & 3 & $0.60461\pm0.00019$ & 17   & $-3.0\%$ \\
+0.25    & A & 4 & $0.60243\pm0.00023$ & 17--20  & $-1.3\%$ \\
+0.3     & A, B & 5 & $0.60206\pm0.00038$ & 20--27 & $+0.4\%$ \\
+0.35    & A, B & 5 & $0.60207\pm0.00059$ & 22--32 & $+0.4\%$ \\
+0.4     & B, C & 3 & $0.60179\pm0.00047$ & 27--48 & $+0.0\%$ \\
+0.45    & B, C & 2 & $0.60145\pm0.00041$ & 48, 72 & $+0.6\%$ \\
+0.5     & A, B, C & 5 & $0.60231\pm0.00032$ & 36--46 & $-0.7\%$ \\
+0.55    & B, C & 2 & $0.59987\pm0.00081$ & 62, 98 & $+2.2\%$ \\
+0.6     & A, B, C & 3 & $0.59993\pm0.00078$ & 48--95 & $+2.1\%$ \\
+0.65    & B, C & 2 & $0.59973\pm0.00053$ & 62, 71 & $+2.1\%$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\figph{4.5cm}{fm4tag/plots/val_loss_ce/val_loss_ce_best_vs_lambda_no_dropout_min2_categorical.png}
+{Model A: mean best validation CE versus $\lambda$, with the seed spread (seeds with
+$\ge2$ usable runs). Companion: per-seed curves with the best epoch marked
+(\texttt{...\_categorical\_curves.png}).}{fig:lambda-fm4tag}
+
+\todo{Controls a referee will ask for. (1) $\lambda$ is confounded with the batch regime and
+the schedule: low-$\lambda$ runs stop early at the peak learning rate, high-$\lambda$ runs
+reach a learning rate near zero. Across healthy JC runs, Spearman(lr at best epoch, best CE)
+$=+0.91$. Needed: a regime-pure re-run (one batch size, fixed-length schedule or WSD, no early
+stopping) with CE only, a dropout baseline and 4--5 values of $\lambda$. (2) The CE-only +
+dropout-0.1 baseline ($0.60162\pm0.00096$, regime C) matches $\lambda=0.3$--$0.5$, so only
+$\lambda\ge0.55$ beats a simple regulariser. Discuss this openly. (3) More seeds at
+$\lambda\ge0.45$ ($n=1$--$2$ now).}
+
+\subsection{The same study for the GN2-like tagger}
+Same recipe in Salt ($w=0.3$, $\tau=0.1$, unweighted CE, lr $3\cdot10^{-4}$,
+$2\times2048$; 41 seeds, no divergence; Table~\ref{tab:lambda-gn2}):
+\begin{itemize}
+  \item the contrastive term is \emph{neutral} for $\lambda\le0.4$ and slightly worse and
+        noisier for $\lambda\ge0.5$;
+  \item it still delays the best epoch (16 $\to$ 83);
+  \item the test $c$-rejection at 77\% varies by less than 1\% across $\lambda$; the light
+        and $\tau$ rejections scatter by up to about 10\%, with no trend in $\lambda$;
+  \item the InfoNCE lower bound on the mutual information between the views,
+        $I_{\mathrm{NCE}}=\log K-\mathcal{L}_{\mathrm{NCE}}$, falls monotonically with
+        $\lambda$, which makes $\lambda$ a clean knob on view information (InfoMin~\citep{tian2020makes}).
+\end{itemize}
+Hyper-parameter searches (Optuna~\citep{Akiba2019Optuna}, seven studies) over $w$, $\tau$,
+$\lambda$ and the learning rate never find a contrastive setting that beats CE only at the
+same learning rate by more than about $1\sigma$ (0.0004). When the search is free it switches
+the contrastive term off ($w\to0.01$--$0.02$, $\lambda\to0.02$--$0.16$, $\tau\to1$). With $w=1$ and lr $5\cdot10^{-4}$,
+14 of 16 contrastive seeds diverge (Section~\ref{sec:stability}).
+
+\begin{table}[htbp]
+\centering\small
+\caption{GN2-like tagger (Salt), multi-task $\LCE+0.3\,\LJC$, dataset A: best validation CE
+(unweighted), mean best epoch, $I_{\mathrm{NCE}}$ at the best epoch ($\log K=8.32$), and test
+rejections at 77\% $b$-efficiency (best seed, nominal fractions).}
+\label{tab:lambda-gn2}
+\begin{tabular}{lcccccc}
+\toprule
+$\lambda$ & $n$ & best val.\ CE & best epoch & $I_{\mathrm{NCE}}$ [nats] & c-rej & light / $\tau$-rej \\
+\midrule
+CE only & 8 & $0.60075\pm0.00029$ & 15.6 & --   & 14.45 & 362 / 48.9 \\
+0.2     & 8 & $0.60065\pm0.00021$ & 30.6 & 7.90 & 14.57 & 333 / 50.4 \\
+0.3     & 6 & $0.60074\pm0.00026$ & 48.7 & 7.67 & 14.56 & 330 / 44.8 \\
+0.4     & 5 & $0.60067\pm0.00045$ & 73.2 & 7.26 & 14.50 & 334 / 51.2 \\
+0.5     & 5 & $0.60178\pm0.00105$ & 76.2 & 6.50 & 14.49 & 338 / 48.9 \\
+0.6     & 5 & $0.60113\pm0.00107$ & 77.6 & 5.89 & 14.58 & 337 / 47.1 \\
+0.7     & 4 & $0.60109\pm0.00084$ & 82.5 & 5.47 & 14.45 & 335 / 49.3 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\figph{4.5cm}{salt-ririva/slurm/scratch_lambda_scan/output/run_20260928_195621/plots/best_vs_lambda_jets_classification_loss.png}
+{GN2-like tagger: best validation CE versus $\lambda$ (same axes as
+Fig.~\ref{fig:lambda-fm4tag}; ideally one figure with both models).}{fig:lambda-gn2}
+
+\paragraph{Summary of the 2$\times$2 grid} (best validation CE, unweighted, dataset A):
+\begin{center}\small
+\begin{tabular}{lcc}
+\toprule
+ & CE only & CE + JC (best $\lambda$) \\
+\midrule
+GN2-like (Salt) & $0.60075\pm0.00029$ (8) & $0.60065\pm0.00021$ (8, $\lambda=0.2$) \\
+Model A (ours)  & $0.60345\pm0.00049$ (4) & $0.59993\pm0.00078$ (3, $\lambda=0.6$) \\
+\bottomrule
+\end{tabular}
+\end{center}
+Without the contrastive term our model is worse than GN2-like; with strong augmentation it
+is better. \todo{make the two JC implementations identical, or state the difference: Salt
+puts a $128\to256\to128$ projector before the loss, while fm4tag applies $\LJC$ directly to
+$z_{\mathrm{jet}}$. The global batch also differs: 4096 (Salt) vs 2048/4096 (fm4tag regimes).}
+
+\subsection{Embedding quality}
+At the best epoch:
+\begin{itemize}
+  \item CE only: uniformity $-1.63$, effective rank $97$;
+  \item every contrastive run: uniformity $-3.9$ (the floor), effective rank 121--148.
+\end{itemize}
+The contrastive term therefore spreads $z_{\mathrm{jet}}$ over the sphere and raises its
+dimensionality. Among the contrastive runs, however, the \emph{lower} effective rank goes
+with the better CE (Spearman $+0.88$; rank $146\to121$ from $\lambda=0.05$ to $0.8$).
+Embedding metrics thus separate ``with and without JC'' but do not rank the JC runs: they
+are diagnostics, not targets. During training, the CE-only embedding becomes \emph{less}
+uniform (uniformity $-2.43\to-1.20$) while its rank grows ($81\to106$), as the validation CE
+overfits (from epoch 7). The $\lambda=0.6$ embedding stays at the uniformity floor
+($-3.85$ to $-3.91$) throughout.
+\todo{GN2-like runs log the same metrics (Salt \texttt{EmbeddingMetrics}): add them for the
+2$\times$2 comparison. Explain the $\lambda=0.5$ rank anomaly (144 in all 5 seeds).}
+
+\figph{4.5cm}{fm4tag/plots/ce_vs_embedding/cl_effective_rank.png}
+{Validation CE and effective rank of $z_{\mathrm{jet}}$ per epoch, best CE-only run vs best
+contrastive run (companions: \texttt{ce\_only\_effective\_rank.png},
+\texttt{*\_uniformity.png}).}{fig:emb-lambda}
+
+\subsection{Flavour-tagging performance}
+With the constrained-optimal fractions at 80\% $b$-efficiency:
+\begin{itemize}
+  \item the best $\lambda$ ($0.55$--$0.65$) reach a $c$-rejection 2.1--2.5\% above the
+        GN2-like tagger (10.35) at equal light- and $\tau$-rejection;
+  \item CE only is 2.2\% below it;
+  \item the statistical error of the test $c$-rejection is $\pm0.27\%$.
+\end{itemize}
+With the nominal fractions no Model-A tagger beats GN2-like in $c$-rejection. Our models
+have much higher light rejection (192--216 vs 171) and lower $\tau$ rejection (23--31 vs 38),
+which is why the comparison needs the fraction optimisation. The best validation CE
+predicts the optimised $c$-rejection very well (Spearman $-0.98$ over 17 models).
+\todo{(a) Re-derive the fractions on validation, not test. (b) Optimise the GN2-like
+fractions under the same constraints. (c) Use the multi-seed CE-only cell of the Salt scan
+as the reference instead of the single Salt-pt run (weighted CE, 50 epochs, fp16). (d) Give
+the seed spread of the $c$-rejection, not only the best seed.}
+
+\figph{5cm}{fm4tag/scripts/plots/run_20261001_110047_lambda_scan_final_wp080_u100_tau100/categorical_no_dropout_min2/ce_only_gn2_best_worst_valce_600dpi/roc_ce_only_gn2_best_second_worst_valce_colours_600dpi.png}
+{Light, $c$ and $\tau$ rejection versus $b$-efficiency: CE only, the GN2-like reference,
+the best and the worst $\lambda$, each at its constrained-optimal fractions.}{fig:roc-lambda}
+
+% =====================================================================
+\section{Results II: contrastive pretraining and training strategies}
+\label{sec:res-pretrain}
+
+\note{Purpose: answer Q2 with Model B on dataset B. Every number here is \prov{provisional}
+and will be replaced by the WSD redo. Write the text around the qualitative conclusions,
+which are the ones expected to survive.}
+
+\subsection{Pretraining}
+All three recipes train stably for 30 epochs with QK-norm. For P0 and P1 the validation loss
+is still falling at the end (best epoch 28--29), and the training and validation losses
+agree (no overfitting on 39.7M jets).
+\begin{itemize}
+  \item \textbf{P0 and P1}: per-track embeddings reach an effective rank of 114--126 (of 128)
+        and uniformity $-3.9$. The jet-feature embedding has rank about 62, with only two
+        input features.
+  \item \textbf{P1}: the aggregator learns an embedding of rank 130 (of 256).
+  \item \textbf{P2} (JC only): the jet-feature embedding collapses to rank 1--2, and in the
+        pilot it is barely better than random encoders (Appendix~\ref{app:p2}).
+\end{itemize}
+
+\figph{4.5cm}{fm4tag-chunk/plots/pretrain_curves/final/p1_s42_loss_terms.png}
+{P1 pretraining: total loss and its terms per epoch, training and validation (companions:
+P0, the effective-rank and uniformity versions).}{fig:pretrain}
+
+\subsection{Comparison of training strategies}
+Table~\ref{tab:results-ssl}, Fig.~\ref{fig:ssl-summary}:
+\begin{itemize}
+  \item \textbf{\from{FT}{P1} beats training from scratch} on validation CE
+        (\prov{$0.6158\pm0.0002$} vs \prov{$0.6240\pm0.0029$}) and on test $c$-rejection at
+        equal light and $\tau$ rejection (\prov{10.8 vs 9.7, +11\%}). With nominal fractions
+        it is better on all three rejections.
+  \item \textbf{\from{FT}{P0} does not, without dropout} (\prov{0.6312}; with dropout 0.2 it
+        becomes the best method, \prov{0.6105} and \prov{+25\%} $c$-rejection, see the note at
+        the end of this section): only the per-object embeddings are
+        pretrained, and the randomly initialised aggregator is trained at the full learning
+        rate. It peaks after 4--5 epochs.
+  \item \textbf{Frozen encoders are always worse} than fine-tuning. P1 is better than P0
+        for both FT and FR, by 0.015 and 0.014 in CE.
+  \item \textbf{The downstream contrastive term does not help.} From scratch, SC+JC = SC
+        (\prov{0.6241 vs 0.6240}). Given P1, it hurts: FT \prov{+0.013}, FR \prov{+0.0075}.
+\end{itemize}
+The production GN2v01 (\prov{$c$-rej 15.6}) is far ahead of every model here, but it was
+trained on a much larger, different sample and serves only as a yardstick.
+\todo{Fair GN2 reference on dataset B: the Salt GN2-like CE-only run on the 18.6M-jet split
+exists (8 seeds, weighted val CE $0.61463\pm0.00062$). Needed: unweighted CE and test
+predictions.}
+
+\begin{table}[htbp]
+\centering\small
+\caption{\prov{Provisional.} Study II, Model B, dataset B: best validation CE (unweighted,
+mean $\pm$ std of 4 runs) and test rejections at 77\% $b$-efficiency with the
+constrained-optimal fractions (optimised on validation at 80\% against GN2v01) and with the
+nominal fractions. $^\dagger$infeasible: the constraints are not met in any run ($f_c=0$).}
+\label{tab:results-ssl}
+\begin{tabular}{lccccc}
+\toprule
+Method & best val.\ CE & c-rej (opt.) & light-rej (opt.) & $\tau$-rej (opt.) & c-rej (nominal) \\
+\midrule
+SC               & \prov{$0.6240\pm0.0029$} & \prov{$9.69\pm0.57$}  & \prov{$434\pm4$}  & \prov{$65.1\pm4.0$} & \prov{$11.99\pm0.45$} \\
+SC+JC (clip 1)   & \prov{$0.6241\pm0.0063$} & \prov{$9.79\pm0.92$}  & \prov{$437\pm15$} & \prov{$65.5\pm3.5$} & \prov{$11.97\pm0.48$} \\
+\from{FT}{P0}    & \prov{$0.6312\pm0.0007$} & \prov{$8.26\pm0.39$}  & \prov{$452\pm8$}  & \prov{$63.8\pm0.1$} & \prov{$11.05\pm0.28$} \\
+\from{FR}{P0}    & \prov{$0.6500\pm0.0008$} & \prov{$4.66\pm0.05^\dagger$} & \prov{$441\pm7$} & \prov{$55.3\pm1.3$} & \prov{$9.71\pm0.09$} \\
+\from{FT}{P1}    & \prov{$\mathbf{0.6158\pm0.0002}$} & \prov{$\mathbf{10.78\pm0.10}$} & \prov{$437\pm14$} & \prov{$62.9\pm0.9$} & \prov{$\mathbf{12.62\pm0.06}$} \\
+\from{FR}{P1}    & \prov{$0.6361\pm0.0031$} & \prov{$7.42\pm0.41$}  & \prov{$447\pm8$}  & \prov{$65.4\pm1.6$} & \prov{$10.60\pm0.43$} \\
+\from{FT}{P1}+JC & \prov{$0.6288\pm0.0002$} & \prov{$8.97\pm0.06$}  & \prov{$442\pm12$} & \prov{$65.0\pm1.3$} & \prov{$11.26\pm0.02$} \\
+\from{FR}{P1}+JC & \prov{$0.6436\pm0.0024$} & \prov{$6.41\pm0.65$}  & \prov{$471\pm23$} & \prov{$63.0\pm2.1$} & \prov{$10.05\pm0.22$} \\
+\midrule
+GN2v01 (yardstick) & -- & 15.58 & 438 & 67.6 & 15.58 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\figph{4.5cm}{fm4tag-chunk/plots/arm_comparison/test_metrics/test_rejections_optimal_wp77.png}
+{\prov{Provisional.} Test $c$, light and $\tau$ rejections at 77\% for the eight training
+methods (4 runs each; companion: best validation CE per method,
+\texttt{arm\_comparison/summary/best\_val\_ce\_per\_method.png}).}{fig:ssl-summary}
+
+\note{Current caveats, all addressed by the WSD redo: the batch size differs between
+methods (14\,336--94\,208); SC, \from{FT}{P0} and \from{FR}{P0} are early-stopped at
+84--95\% of the peak learning rate, while \from{FT}{P1} is still improving when its
+40-epoch schedule ends (best epochs 34--39); the P1 CE-only methods reuse learning rates
+tuned for P0.}
+
+\subsection{Dependence on the number of labelled jets}
+Training on 1, 3, 10, 30 and 100\% of the labels (P0 only, 3 seeds per point;
+Table~\ref{tab:labels}, Fig.~\ref{fig:labels}):
+\begin{itemize}
+  \item P0 pretraining never overtakes training from scratch;
+  \item its disadvantage \emph{shrinks} as labels are added (FT: $+0.064$ at 1\% $\to$
+        $+0.007$ at 100\%), the opposite of the usual SSL expectation;
+  \item every method overfits within a few epochs at $\le10\%$ of the labels, and the
+        pretrained ones fastest.
+\end{itemize}
+Changing the learning rate or adding regularisation moves these numbers by $\le0.01$, much
+less than the gaps between methods.
+
+\begin{table}[htbp]
+\centering\small
+\caption{\prov{Provisional.} Best validation CE versus the fraction of labelled training
+jets: mean of 3 downstream seeds (4 at 100\%); below 100\% the pretrained methods start
+from one P0 pretraining (seed 42).}
+\label{tab:labels}
+\begin{tabular}{lrcccc}
+\toprule
+Labels & jets & SC & \from{FT}{P0} & \from{FR}{P0} & FT$-$SC \\
+\midrule
+1\%   & 186k  & \prov{$0.7443$} & \prov{$0.8079$} & \prov{$0.8305$} & \prov{$+0.064$} \\
+3\%   & 558k  & \prov{$0.7163$} & \prov{$0.7691$} & \prov{$0.7891$} & \prov{$+0.053$} \\
+10\%  & 1.86M & \prov{$0.6919$} & \prov{$0.7253$} & \prov{$0.7500$} & \prov{$+0.033$} \\
+30\%  & 5.58M & \prov{$0.6640$} & \prov{$0.6759$} & \prov{$0.7064$} & \prov{$+0.012$} \\
+100\% & 18.6M & \prov{$0.6240$} & \prov{$0.6312$} & \prov{$0.6500$} & \prov{$+0.007$} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\figph{4.5cm}{fm4tag-chunk/plots/label_scan/learning_curve/best_val_ce_vs_labelled_jets.png}
+{\prov{Provisional.} Best validation CE versus the number of labelled jets for SC,
+\from{FT}{P0} and \from{FR}{P0}.}{fig:labels}
+
+\todo{The label scan is the natural place for a pretraining gain, but it was run only for
+P0, the recipe that does not help. Add \from{FT}{P1} (and \from{FR}{P1}) at 1--30\% of the
+labels; without it the reader will ask.}
+
+\subsection{Effect of the dataset size}
+The same from-scratch recipe trained on dataset A (2.8$\times$ more distinct training jets)
+reaches 0.6036, against 0.6240 on dataset B. A batch-size control (2048 instead of 28\,672)
+gives 0.6221. The difference in CE between the two studies is therefore due to the amount
+of labelled data, not to the model or the batch size.
+
+\note{Dropout study (dropout 0.2, 80 epochs): \from{FT}{P0}+dropout reaches 0.6105 and a
+$c$-rejection 25\% above SC, but it is confounded (schedule, batch, untuned lr) and is being
+redone. Report it only if it survives the WSD redo, possibly as a short subsection on
+regularisation.}
+
+% =====================================================================
+\section{Training stability with intersample attention and contrastive objectives}
+\label{sec:stability}
+
+\note{Purpose: practical findings that cost weeks and will help others. Keep it to about
+one page; it can move to an appendix if space is tight.}
+
+\subsection{Attention-logit growth during contrastive pretraining}
+The first 30-epoch pretrainings without QK-norm (lr $10^{-3}$, clip 1.0) failed: 3 of 4
+collapsed or spiked. The cause was the row (intersample) attention of the track encoder in
+its first blocks:
+\begin{itemize}
+  \item the scaled logits $q\cdot k/\sqrt d$ grew to $10^5$--$10^7$, so each track attended
+        to a single other track of the chunk (normalised entropy $\to0$);
+  \item $\|W_{qkv}\|$ grew from 24 to over 300;
+  \item bf16 rounding of such logits flips the arg-max and produces gradient spikes.
+\end{itemize}
+From-scratch supervised models do not show this (logits $\approx20$), so it is specific to
+contrastive pretraining. RMS normalisation of queries and keys~\citep{Henry2020QKNorm,Dehghani2023ViT22B}
+fixes it: the final P0, P1 and P2 pretrainings (2 seeds each) ran 30 epochs without
+spikes. Related observations: \citep{Wortsman2024SmallScaleProxies,Zhai2023EntropyCollapse}.
+\todo{the running dropout-0.1 pretrainings show new instabilities with a different
+signature (P2 seed 424 collapsed from epoch 0; P0 seed 42 degrading since epoch 9, logits
+still about 24). Check them before claiming QK-norm is sufficient.}
+\todo{The logit growth has no figure yet; rerun the logit monitor on the old checkpoints.
+With a learnable gain, the logits still reach 2.7k--6k in the final P0/P1 without
+instability: say ``controlled'', not ``bounded''.}
+
+\subsection{Collapse of multi-task training from scratch}
+In Model B, SC+JC without gradient clipping collapsed in 3 of 4 seeds, and with clipping at
+5.0 in 2 of 4. Within one epoch the validation CE jumps to the class-prior value (1.29), the
+track embeddings collapse to a point (uniformity 0), and the run never recovers. With
+clipping at 1.0 none of 4 collapse. This QK-normalised model keeps its attention logits
+small (5--9), so the collapse has a different mechanism from the pretraining one. Global
+gradient clipping under AdamW does not bound the size of the update.
+
+\subsection{Divergences in the GN2-like tagger}
+In Salt, $w=1$ with lr $5\cdot10^{-4}$ diverges in 14 of 16 contrastive seeds. The
+divergences are loss spikes at 80--95\% of the peak learning rate. Clipping at 1.0 only
+delays them (epoch 20 $\to$ 36). A calibration check (temperature scaling per epoch) shows
+that the rise of the validation CE after its minimum is mostly genuine overfitting, not
+over-confidence.
+
+% =====================================================================
+\section{Discussion}
+\label{sec:discussion}
+
+\note{Purpose: interpret, reconcile the two studies, state the limitations honestly.}
+
+\paragraph{The contrastive term as a regulariser.}
+In multi-task training, the contrastive term mainly delays overfitting: the CE-only
+baselines peak early and overfit, and strong augmentation keeps the validation CE flat for
+tens of epochs. This explains why it helps Model A, which overfits strongly (train--validation
+gap 0.045 at the early stop), and not the GN2-like tagger. It also explains why a dropout
+baseline recovers part of the gain.
+\todo{check this interpretation against the regime-pure re-run.}
+
+\paragraph{Why the two studies disagree on JC.}
+JC helps Model A on dataset A (52M jets, lr $3\cdot10^{-4}$, long schedules, 2047--4095
+negatives) but not Model B on dataset B (18.6M jets, tuned lr $8\cdot10^{-4}$, 40 epochs,
+511 negatives per chunk). The paper must either reconcile this with one controlled
+experiment or present the two set-ups as distinct. \note{This is the main structural risk
+of the paper; see the decision box at the top.}
+
+\paragraph{What makes pretraining work.}
+Only pretraining that includes the aggregator (P1) helps, and only when fine-tuned. A
+plausible reason is that \from{FT}{P0} starts from a random aggregator trained at the full
+learning rate and overfits within 5 epochs, whereas \from{FT}{P1} loads a pretrained
+aggregator at 1/10 of the learning rate and keeps improving. \todo{test this directly,
+e.g.\ \from{FT}{P0} with the aggregator at lr/10.}
+
+\paragraph{Embedding metrics.}
+Uniformity and effective rank detect collapse very well: they mark P2's collapsed
+jet-feature embedding, the SC+JC collapses and the pretraining instabilities. They separate runs with
+and without a contrastive term. They do \emph{not} rank models by performance (lower rank
+is better among contrastive runs).
+
+\paragraph{InfoMin view.}
+$\lambda$ controls $I_{\mathrm{NCE}}$ monotonically. A proper InfoMin test (pretraining only,
+then a linear probe, performance versus $I_{\mathrm{NCE}}$) was not done. The
+frozen-encoder probes of the pilot grid are only a partial proxy.
+
+\paragraph{Limitations.}
+\begin{itemize}
+  \item Simulation only, one process (\ttbar) and one generator.
+  \item The ``unlabelled'' pretraining split has a truth-resampled flavour composition.
+  \item The GN2-like reference has no auxiliary tasks.
+  \item GN2v01 is not a same-data baseline.
+  \item With intersample attention, a jet's prediction depends on its batch-mates: about
+        1\% of jets change arg-max when re-chunked. \todo{quantify properly and say how
+        inference batches are formed.}
+  \item 2--8 seeds per configuration.
+  \item Fraction optimisation differs between the studies (to be unified).
+\end{itemize}
+
+% =====================================================================
+\section{Conclusions and outlook}
+\label{sec:conclusions}
+
+\note{Purpose: one paragraph per research question, then the outlook. No new numbers.}
+
+For multi-task training, the augmentation strength decides whether a contrastive term on
+the jet embedding helps. With strong augmentation it makes our SAINT-like tagger the best
+model on the same jets, slightly ahead of a GN2-like tagger, while it is neutral for GN2
+itself. For pretraining, a contrastive objective on the full network, including the
+aggregator, followed by fine-tuning, improves the $c$-jet rejection at fixed light and
+$\tau$ rejection. Feature-level pretraining and frozen encoders do not help, even with few
+labels. Contrastive pretraining with intersample attention requires QK-normalisation.
+
+\emph{Outlook:} robustness to data/MC and MC/MC differences (the original motivation; cf.\
+\citep{Sheldon2025MACK,Harris2025Resim}), physics-motivated augmentations (track dropout,
+impact-parameter smearing), an InfoMin linear-probe study, pretraining of the GN2-like
+tagger in Salt, and scaling of the pretraining sample.
+
+% =====================================================================
+\section*{Acknowledgements}
+\todo{funding, computing resources (FBK cluster), ATLAS Open Data. Check with the
+supervisors and the ATLAS publication policy what an ATLAS member must do to publish a
+paper based on ATLAS Open Data (authorship, wording, review, plot labels).}
+
+% =====================================================================
+\appendix
+
+\section{Hyper-parameters and compute}
+\label{app:hyper}
+One table per study with every setting (optimiser, schedule, batch, learning rates,
+epochs, early stopping, clipping, dropout, seeds), plus GPU hours.
+\begin{itemize}
+  \item Pretraining: 34--43\,h per run.
+  \item Downstream: 2--18\,h per run.
+  \item Model A $\lambda$ cells: up to 88\,h per seed on A40.
+\end{itemize}
+
+\section{Pilot studies}
+\label{app:pilots}
+\begin{itemize}
+  \item \textbf{S1, architecture} (scratch CE, 2 seeds): per-token vs concat row attention
+        and chunk 128 vs 512 are equal within noise (0.620--0.621). Concat is 1.45$\times$
+        faster.
+  \item \textbf{S2, pretraining recipe}: grid $\tau\in\{0.1,0.3\}$, $\lambda\in\{0.1,0.4\}$,
+        judged by a 15-epoch frozen-encoder probe (random encoders: 0.6563). $\tau=0.1$,
+        $\lambda=0.4$ wins for P0 (0.6353), P1 (0.6318) and P2.
+  \item \textbf{S3, learning rate per method} (seed 42): grid $\times2$ around
+        $3\cdot10^{-4}\sqrt{B/2048}$; for FT, backbone lr = lr (0.643) vs lr/10 (0.630).
+\end{itemize}
+
+\section{P2: jet-embedding-only pretraining}
+\label{app:p2}
+Without per-object terms, the jet-feature embedding receives no direct signal and collapses
+(rank 1--2). Unclipped runs collapse entirely (loss $=\ln 511$). The frozen probe beats
+random encoders by only 0.005. This negative result motivates P0 and P1, and it contradicts
+plan\_v0's ``pretraining on $\LJC$'' as the default recipe.
+
+\section{Fraction optimisation}
+\label{app:fractions}
+Grid, constraints and feasibility for each model, and the dependence on the working point.
+
+\section{Additional figures}
+Per-seed validation curves, rejection versus jet \pT, effective-rank and uniformity curves
+for every method, and the SC+JC collapse curves.
+
+% =====================================================================
+\bibliographystyle{unsrtnat}
+\bibliography{refs}
+
+\end{document}
