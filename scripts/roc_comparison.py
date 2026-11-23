@@ -64,6 +64,7 @@ import numpy as np
 import pandas as pd
 import torch
 import yaml
+from matplotlib.backends.backend_agg import FigureCanvasAgg
 from hydra.utils import instantiate as hydra_instantiate
 from omegaconf import DictConfig, OmegaConf
 from tqdm import tqdm
@@ -463,6 +464,18 @@ def make_tagger(
 # ---------------------------------------------------------------------------
 
 
+def _draw(plot) -> None:
+    """``plot.draw()`` on a figure that is guaranteed an Agg canvas.
+
+    With an empty ``atlas_first_tag`` puma's figure keeps the bare ``FigureCanvasBase``
+    (nothing in atlasify draws on it), which has no ``get_renderer()``, and puma's own
+    ``draw()`` (common ratio label) fails with an AttributeError.
+    """
+    if not hasattr(plot.fig.canvas, 'get_renderer'):
+        FigureCanvasAgg(plot.fig)
+    plot.draw()
+
+
 def _legend_outside(plot, plot_cfg: dict) -> None:
     """Move a puma plot's tagger legend to the right of the figure.
 
@@ -557,7 +570,19 @@ def plot_rocs(
     ratio_order += [b for b in backgrounds if b not in ratio_order]
     for panel, bkg in enumerate(ratio_order, start=1):
         roc_plot.set_ratio_class(panel, Flavours[PUMA_CLASS[bkg]])
-    roc_plot.draw()
+    _draw(roc_plot)
+
+    # Optional vertical guide at a b-efficiency (e.g. the working point), through all panels.
+    if plot_cfg.get('wp_line') is not None:
+        for ax in (roc_plot.axis_top, *roc_plot.ratio_axes):
+            ax.axvline(
+                float(plot_cfg['wp_line']),
+                color=plot_cfg.get('wp_line_color', 'black'),
+                linestyle=':',
+                linewidth=1.2,
+                alpha=float(plot_cfg.get('wp_line_alpha', 0.5)),
+                zorder=0.5,
+            )
 
     if plot_cfg.get('legend_outside'):
         _legend_outside(roc_plot, plot_cfg)
@@ -601,7 +626,7 @@ def plot_disc_distributions(
                     label=puma_flavour.label,
                 )
             )
-        hist_plot.draw()
+        _draw(hist_plot)
         slug = re.sub(r'[^A-Za-z0-9]+', '_', tagger.label).strip('_').lower()
         hist_plot.savefig(str(out_dir / f'disc_{slug}.png'), transparent=False)
         print(f'Saved {out_dir / f"disc_{slug}.png"}')
@@ -630,7 +655,7 @@ def plot_disc_distributions(
             ),
             reference=tagger.is_reference,
         )
-    hist_plot.draw()
+    _draw(hist_plot)
     if plot_cfg.get('legend_outside'):
         _legend_outside(hist_plot, plot_cfg)
     hist_plot.savefig(str(out_dir / 'disc_signal.png'), transparent=False)
@@ -691,7 +716,7 @@ def plot_eff_vs_pt(
         )
         for curve, is_reference in curves(bkg):
             eff_plot.add(curve, reference=is_reference)
-        eff_plot.draw()
+        _draw(eff_plot)
         if plot_cfg.get('legend_outside'):
             _legend_outside(eff_plot, plot_cfg)
         eff_plot.savefig(str(out_dir / f'rej_vs_pt_{bkg}.png'), transparent=False)
@@ -703,7 +728,7 @@ def plot_eff_vs_pt(
     )
     for curve, is_reference in curves(backgrounds[0]):
         eff_plot.add(curve, reference=is_reference)
-    eff_plot.draw()
+    _draw(eff_plot)
     if plot_cfg.get('legend_outside'):
         _legend_outside(eff_plot, plot_cfg)
     eff_plot.savefig(str(out_dir / 'sig_eff_vs_pt.png'), transparent=False)
