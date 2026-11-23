@@ -106,7 +106,9 @@ def footnote(fig, cfg: dict, text: str) -> None:
 def plot_scan(runs: pd.DataFrame, cfg: dict, out: Path) -> None:
     t = cfg['texts']
     fig, axes = panel_grid(cfg)
-    ref = runs.query('arm == @cfg["reference_arm"] and not dropout')['best'].min()
+    ref = runs.loc[
+        (runs['arm'] == cfg['reference_arm']) & ~runs['dropout'], 'best'
+    ].min()
     for ax, (arm, spec) in zip(axes, cfg['arms'].items()):
         colour = cfg['colours'][spec['method']]
         sub = runs[runs['arm'] == arm]
