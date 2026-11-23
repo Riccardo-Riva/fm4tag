@@ -225,3 +225,6 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# generated slide decks and their plots (scripts/report_deck.py, ssl_campaign_slides.py)
+docs/slides/
