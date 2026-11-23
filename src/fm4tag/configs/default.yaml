@@ -229,6 +229,9 @@ pretrain:
   lr:           ${optimizer.lr}
   weight_decay: ${optimizer.weight_decay}
   warmup_frac:  0.1
+  warmup_epochs: null      # warmup length in epochs; when set it replaces warmup_frac
+  schedule:     cosine     # cosine | wsd (warmup, constant, linear decay over the last decay_frac)
+  decay_frac:   0.2
   chunk_size:   ${chunk_size}
 
 # ── Fine-tuning settings (runner-level) ───────────────────────────────────────

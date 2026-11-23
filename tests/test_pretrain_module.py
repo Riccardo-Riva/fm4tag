@@ -75,7 +75,7 @@ def three_views():
     ]
 
 
-def _make_module(encoders, aggregator, views, loss_weights=None):
+def _make_module(encoders, aggregator, views, loss_weights=None, **kwargs):
     return PretrainModule(
         encoders=encoders,
         aggregator=aggregator,
@@ -86,6 +86,7 @@ def _make_module(encoders, aggregator, views, loss_weights=None):
         contrastive_loss=MultiViewSupConLoss(temperature=0.1),
         jet_contrastive_loss=MultiViewSupConLoss(temperature=0.1),
         lr=1e-3,
+        **kwargs,
     )
 
 
@@ -292,3 +293,45 @@ def test_denoising_only_freezes_projectors_and_aggregator(
 def test_all_weights_active_freezes_nothing(encoders, aggregator, two_views):
     module = _make_module(encoders, aggregator, two_views)
     assert all(p.requires_grad for p in module.parameters())
+
+
+def _lr_factors(module, steps, max_epochs):
+    from types import SimpleNamespace
+
+    module._trainer = SimpleNamespace(
+        estimated_stepping_batches=steps, max_epochs=max_epochs
+    )
+    cfg = module.configure_optimizers()
+    opt, sched = cfg['optimizer'], cfg['lr_scheduler']['scheduler']
+    out = []
+    for _ in range(steps):
+        out.append(opt.param_groups[0]['lr'] / 1e-3)
+        opt.step()
+        sched.step()
+    return out
+
+
+def test_wsd_schedule_in_pretraining(encoders, aggregator, two_views):
+    # 800 steps over 80 epochs: warmup 4 epochs = 40 steps, decay = last 160 steps
+    module = _make_module(
+        encoders, aggregator, two_views, schedule='wsd', warmup_epochs=4, decay_frac=0.2
+    )
+    f = _lr_factors(module, 800, 80)
+    assert f[0] == pytest.approx(0.01)
+    assert f[20] == pytest.approx(0.01 + 0.99 * 20 / 40)
+    assert all(x == pytest.approx(1.0) for x in f[40:640])
+    assert f[720] == pytest.approx(0.5)
+    assert f[799] == pytest.approx(1 / 160)
+
+
+def test_cosine_stays_the_default_in_pretraining(encoders, aggregator, two_views):
+    module = _make_module(encoders, aggregator, two_views)
+    assert module.schedule == 'cosine'
+    f = _lr_factors(module, 100, 10)  # warmup_frac 0.1 = 10 steps, then cosine
+    assert f[10] == pytest.approx(1.0)
+    assert f[55] == pytest.approx(0.5, abs=1e-6)
+
+
+def test_pretraining_rejects_bad_schedule(encoders, aggregator, two_views):
+    with pytest.raises(ValueError, match='schedule'):
+        _make_module(encoders, aggregator, two_views, schedule='linear')

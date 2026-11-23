@@ -26,7 +26,7 @@ import lightning as L
 import torch
 from einops import rearrange
 from torch import nn
-from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
+from torch.optim.lr_scheduler import CosineAnnealingLR, LambdaLR, LinearLR, SequentialLR
 
 from ..augmentations import Compose
 from ..losses import denoising_cat_loss, denoising_con_loss, validate_loss_weights
@@ -68,6 +68,13 @@ class PretrainModule(L.LightningModule):
         weight_decay: AdamW weight decay.
         warmup_frac:  Fraction of total steps used for linear LR warmup before
                       cosine annealing.
+        warmup_epochs: Warmup length in epochs (may be fractional); when set it
+                      replaces ``warmup_frac``.
+        schedule:     ``'cosine'`` (warmup, then cosine annealing to 0) or
+                      ``'wsd'`` (warmup-stable-decay: warmup, constant at the base
+                      lr, linear decay to 0 over the last ``decay_frac`` of the
+                      steps), as in :class:`~fm4tag.modules.FinetuneModule`.
+        decay_frac:   Fraction of total steps of the final linear decay (wsd).
         chunk_size:   Jets per intersample-attention chunk: each jet (and each
                       of its constituents) attends only within its chunk of
                       ``chunk_size`` consecutive jets.  ``None`` = the whole
@@ -96,6 +103,9 @@ class PretrainModule(L.LightningModule):
         lr: float = 1e-4,
         weight_decay: float = 1e-5,
         warmup_frac: float = 0.1,
+        warmup_epochs: float | None = None,
+        schedule: str = 'cosine',
+        decay_frac: float = 0.2,
         chunk_size: int | None = None,
     ) -> None:
         super().__init__()
@@ -150,6 +160,13 @@ class PretrainModule(L.LightningModule):
         self.lr = lr
         self.weight_decay = weight_decay
         self.warmup_frac = warmup_frac
+        self.warmup_epochs = warmup_epochs
+        if schedule not in ('cosine', 'wsd'):
+            raise ValueError(f"schedule must be 'cosine' or 'wsd', got {schedule!r}")
+        if not 0.0 < decay_frac < 1.0:
+            raise ValueError(f'decay_frac must be in (0, 1), got {decay_frac}')
+        self.schedule = schedule
+        self.decay_frac = decay_frac
         self.chunk_size = chunk_size
 
         # nn.Module args are excluded: their weights live in the checkpoint's
@@ -391,7 +408,35 @@ class PretrainModule(L.LightningModule):
         )
 
         total_steps = self.trainer.estimated_stepping_batches
-        warmup_steps = max(1, int(self.warmup_frac * total_steps))
+        max_epochs = max(1, self.trainer.max_epochs or 1)
+        if self.warmup_epochs is not None:
+            warmup_steps = max(1, round(self.warmup_epochs * total_steps / max_epochs))
+        else:
+            warmup_steps = max(1, int(self.warmup_frac * total_steps))
+
+        if self.schedule == 'wsd':
+            decay_steps = max(1, round(self.decay_frac * total_steps))
+            decay_start = total_steps - decay_steps
+            if warmup_steps > decay_start:
+                raise ValueError(
+                    f'wsd: the warmup ({warmup_steps} steps) ends after the decay '
+                    f'starts (step {decay_start} of {total_steps})'
+                )
+
+            def factor(step: int) -> float:
+                if step < warmup_steps:
+                    return 0.01 + 0.99 * step / warmup_steps
+                if step < decay_start:
+                    return 1.0
+                return max(0.0, (total_steps - step) / decay_steps)
+
+            return {
+                'optimizer': optimizer,
+                'lr_scheduler': {
+                    'scheduler': LambdaLR(optimizer, lr_lambda=factor),
+                    'interval': 'step',
+                },
+            }
 
         warmup_sched = LinearLR(
             optimizer, start_factor=0.01, end_factor=1.0, total_iters=warmup_steps
