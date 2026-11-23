@@ -12,12 +12,12 @@ Usage::
 
     # Minimal — point at a version directory:
     python scripts/plot_uniformity.py \\
-        slurm/pretraining/run_20260305_121539/outputs/model_0_colrow/version_0
+        experiments/2026-03_early-runs/outputs/pretraining/run_20260305_121539/outputs/model_0_colrow/version_0
 
     # Explicit config (useful when auto-discovery fails):
     python scripts/plot_uniformity.py \\
-        slurm/pretraining/run_20260305_121539/outputs/model_0_colrow/version_0 \\
-        --config slurm/pretraining/run_20260305_121539/outputs/2026-03-05/12-17-44/.hydra/config.yaml
+        experiments/2026-03_early-runs/outputs/pretraining/run_20260305_121539/outputs/model_0_colrow/version_0 \\
+        --config experiments/2026-03_early-runs/outputs/pretraining/run_20260305_121539/outputs/2026-03-05/12-17-44/.hydra/config.yaml
 
     # Custom output path and evaluation file:
     python scripts/plot_uniformity.py <version_dir> \\

@@ -26,7 +26,7 @@ an error.
 
 Usage::
 
-    python scripts/plot_arm_epochs.py --config scripts/configs/arm_epochs.yaml
+    python scripts/plot_arm_epochs.py --config experiments/2026-10_ssl-campaign/configs/arm_epochs.yaml
 """
 
 from __future__ import annotations

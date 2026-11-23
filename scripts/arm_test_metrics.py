@@ -10,8 +10,8 @@ best epoch (lowest ``val/head/loss_ce``):
 
 Two steps, so that the GPU part can be split over cards:
 
-  python scripts/arm_test_metrics.py --config scripts/configs/arm_test_metrics.yaml --infer --part 0/2
-  python scripts/arm_test_metrics.py --config scripts/configs/arm_test_metrics.yaml --metrics --workers 16
+  python scripts/arm_test_metrics.py --config experiments/2026-10_ssl-campaign/configs/arm_test_metrics.yaml --infer --part 0/2
+  python scripts/arm_test_metrics.py --config experiments/2026-10_ssl-campaign/configs/arm_test_metrics.yaml --metrics --workers 16
 
 ``--infer`` caches val and test class probabilities under <out_dir>/cache (roc_comparison's cache: keyed by
 checkpoint, file and precision).  ``--metrics`` reads only those caches and writes per_run.csv (one row per run,

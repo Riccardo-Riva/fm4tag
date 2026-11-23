@@ -2,7 +2,7 @@
 
 Each entry of the YAML config is one CONFIGURATION, backed by one or more
 training runs — the repetitions of the same configuration under different seeds
-that slurm/classify_param_scan.sh produces.  For every entry the script
+that experiments/2026-08_lambda-scan/slurm/classify_param_scan.sh produces.  For every entry the script
 
 1. loads the runs' own ``.hydra/config.yaml`` to recover the loss weights
    (``finetune.loss_weights.*``) and the augmentation strength ``lambda``,
@@ -25,7 +25,7 @@ of what is otherwise read from the run's own config.
 
 Usage::
 
-    python scripts/plot_val_curves.py --config scripts/configs/val_loss_ce_lambda_scan.yaml
+    python scripts/plot_val_curves.py --config experiments/2026-08_lambda-scan/configs/val_loss_ce_lambda_scan.yaml
     python scripts/plot_val_curves.py --config ... --output plots/my_scan
 
 ``--output`` overrides ``plot.out_dir`` from the config.

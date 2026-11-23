@@ -22,7 +22,7 @@ puts words on a figure.
 
 Usage::
 
-    python scripts/plot_pretrain_curves.py --config scripts/configs/pretrain_curves_final.yaml
+    python scripts/plot_pretrain_curves.py --config experiments/2026-10_ssl-campaign/configs/pretrain_curves_final.yaml
 """
 
 from __future__ import annotations

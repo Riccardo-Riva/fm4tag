@@ -2,7 +2,7 @@
 """Build the SSL campaign slides: plots from the run directories, then a pptx.
 
     uv run --no-sync --with python-pptx python scripts/ssl_campaign_slides.py \
-        --config scripts/configs/slides/ssl_campaign.yaml
+        --config experiments/2026-10_ssl-campaign/configs/slides/ssl_campaign.yaml
 
 Every word on the slides and in the plots comes from the YAML (slide texts,
 plot ``texts:``). Re-run after editing it or when runs finish: each plot
@@ -1298,7 +1298,7 @@ def make_plots(cfg: dict, plot_dir: Path) -> dict[str, Path | None]:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument(
-        '--config', default=str(REPO / 'scripts/configs/slides/ssl_campaign.yaml')
+        '--config', default=str(REPO / 'experiments/2026-10_ssl-campaign/configs/slides/ssl_campaign.yaml')
     )
     args = ap.parse_args()
     cfg = yaml.safe_load(Path(args.config).read_text())

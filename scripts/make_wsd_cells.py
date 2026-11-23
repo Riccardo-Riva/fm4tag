@@ -14,7 +14,7 @@ arm's previous lr to batch 12800 lands there), the fine-tuned arms with the pret
 Per-cell ``@est`` (seconds per epoch) and ``@mem`` (GiB of GPU memory, for shared cards: docs/gpu_packing.md) come
 from ``--measured`` (csv: arm,dropout,est,mem); without it the cells carry neither.
 
-    python scripts/make_wsd_cells.py --kind lr --out scripts/configs/campaign/W_lr.cells
+    python scripts/make_wsd_cells.py --kind lr --out experiments/2026-11_wsd-lr-search/configs/W_lr.cells
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ import argparse
 import csv
 from pathlib import Path
 
-CAMPAIGN = '/storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign'
+CAMPAIGN = '/storage3/DSIP/rriva/research/fm4tag/experiments/2026-10_ssl-campaign/outputs'  # where the P_full pretrainings live
 PRETRAINED = {  # no-dropout pretrainings of P_full.cells
     'p0': f'{CAMPAIGN}/P_full_20261023_085735/p0/seed_{{seed}}',
     'p1': f'{CAMPAIGN}/P_full_20261026_094445/p1/seed_{{seed}}',

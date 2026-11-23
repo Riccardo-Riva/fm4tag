@@ -29,9 +29,9 @@ one was picked, so each figure can be traced back to its training directory.
 Usage::
 
     python scripts/plot_ce_and_embedding.py --config \\
-        scripts/configs/val_loss_ce_seed_curves_cmap.yaml \\
-        scripts/configs/val_loss_ce_best_vs_lambda_no_dropout_min2.yaml \\
-        scripts/configs/ce_and_embedding_curves.yaml
+        experiments/2026-08_lambda-scan/configs/val_loss_ce_seed_curves_cmap.yaml \\
+        experiments/2026-08_lambda-scan/configs/val_loss_ce_best_vs_lambda_no_dropout_min2.yaml \\
+        experiments/2026-08_lambda-scan/configs/ce_and_embedding_curves.yaml
 
 ``--config`` takes several files and merges them in the order given, as ``plot_best_vs_lambda.py`` does: the base
 config defines the trainings, the overlay of that figure its ``min_seeds`` / ``hide_references``, and the last file

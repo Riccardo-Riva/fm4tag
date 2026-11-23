@@ -6,8 +6,8 @@ and ``@est`` (seconds per epoch on the slowest card) = the previous estimate div
 ratio (jets/s with dropout at the new size over jets/s without dropout at the old size), plus 10%.  The learning
 rates are NOT changed.  Exits non-zero, writing nothing, if an arm has no accepted batch size or a usable ratio.
 
-    python scripts/make_drop_cells.py --cells scripts/configs/campaign/D_drop.cells \
-        --sweep <sweep dir>/results.csv --out scripts/configs/campaign/D_drop_final.cells
+    python scripts/make_drop_cells.py --cells experiments/2026-11_dropout/configs/D_drop.cells \
+        --sweep <sweep dir>/results.csv --out experiments/2026-11_dropout/configs/D_drop_final.cells
 """
 
 from __future__ import annotations

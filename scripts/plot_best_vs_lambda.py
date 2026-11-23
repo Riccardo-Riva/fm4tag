@@ -62,7 +62,7 @@ differ and the pool stays defined in one place.
 
 Usage::
 
-    python scripts/plot_best_vs_lambda.py --config scripts/configs/val_loss_ce_seed_curves_cmap.yaml
+    python scripts/plot_best_vs_lambda.py --config experiments/2026-08_lambda-scan/configs/val_loss_ce_seed_curves_cmap.yaml
     python scripts/plot_best_vs_lambda.py --config BASE.yaml OVERLAY.yaml
     python scripts/plot_best_vs_lambda.py --config ... --min-seeds 3 --error sem
 """

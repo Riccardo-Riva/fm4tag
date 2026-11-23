@@ -1,0 +1,34 @@
+# Label-fraction scan, step 2 (after L_lr.cells and L_reg.cells): SC, FT <- P0 and FR <- P0 on 1%, 3%, 10% and 30%
+# of the labelled jets (the first N rows of the pre-shuffled train file, so the subsets are nested), 3 fresh seeds
+# each.  100% is the F_final runs.  Validation stays the full 1.86M jets, early stopping on val CE with patience 12.
+#
+#   fraction  rows       batch   steps/epoch  max_epochs  lr  SC / FT (pretrained parts lr / 10) / FR
+#   1%        186,000    4,096   45           150         8.4e-4 / 2.1e-4 / 8.4e-4
+#   3%        558,000    8,192   68           100         1.2e-3 / 3e-4   / 1.2e-3
+#   10%       1,860,000  28,672  64           100         1.1e-3 / 5.5e-4 / 2.2e-3
+#   30%       5,580,000  28,672  194          60          1.1e-3 / 5.5e-4 / 2.2e-3
+#
+# The batch fills the card only from 10% up: at 1% and 3% a full-card batch would leave 6 and 19 steps per epoch.
+# lr: the S3 prior 3e-4 * sqrt(B / 2048) times each method's L_lr winner at 3% (SC x2, FT x0.5, FR x2; the lr moved
+# the best val CE by <= 0.009 there).  One exception: SC stays at 1.1e-3 at 10% and 30%, where the batch is the
+# full-data one and SC at 2.2e-3 diverged in S3 (CE 1.287); FT (flat over 5.6e-4 to 2.2e-3) and FR (flat over 1e-3
+# to 4e-3 at B 94208) were safe there.  No extra regularisation: L_reg (weight decay 0.05, dropout 0.1, both)
+# moved the best val CE by <= 0.003 for every method, so the recipe stays the one of the 100% point.
+# Pretrained arms start from the P0 seed-42 checkpoint (P0's pretraining-seed effect was <= 0.001 in F_final).
+# Longest cells first.
+#
+#   ENCODERS=rowcol_concat_v0 CHUNK=512 SEEDS='4242 42424 424242' PACKS=4 MEM_PER_GPU_GB=22 \
+#   MAX_EPOCHS=100 EST_SECONDS_PER_EPOCH=240 WALLTIME=1-00:00:00 \
+#   CELLS=experiments/2026-10_ssl-campaign/configs/L_scan.cells bash slurm/ssl_pack.sh
+sc_lab30  arm=scratch encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=28672 datamodule.train_max_rows=5580000 trainer.log_every_n_steps=50 optimizer.lr=1.1e-3 @epochs=60 @est=480
+ft_p0_lab30  arm=finetune encoder_ckpt=@/storage3/DSIP/rriva/research/fm4tag/experiments/2026-10_ssl-campaign/outputs/P_full_20261023_085735/p0/seed_42 encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=28672 datamodule.train_max_rows=5580000 trainer.log_every_n_steps=50 optimizer.lr=5.5e-4 optimizer.backbone_lr=5.5e-5 @epochs=60 @est=480
+fr_p0_lab30  arm=frozen encoder_ckpt=@/storage3/DSIP/rriva/research/fm4tag/experiments/2026-10_ssl-campaign/outputs/P_full_20261023_085735/p0/seed_42 encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=28672 datamodule.train_max_rows=5580000 trainer.log_every_n_steps=50 optimizer.lr=2.2e-3 @epochs=60 @est=300
+sc_lab10  arm=scratch encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=28672 datamodule.train_max_rows=1860000 trainer.log_every_n_steps=20 optimizer.lr=1.1e-3
+ft_p0_lab10  arm=finetune encoder_ckpt=@/storage3/DSIP/rriva/research/fm4tag/experiments/2026-10_ssl-campaign/outputs/P_full_20261023_085735/p0/seed_42 encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=28672 datamodule.train_max_rows=1860000 trainer.log_every_n_steps=20 optimizer.lr=5.5e-4 optimizer.backbone_lr=5.5e-5
+fr_p0_lab10  arm=frozen encoder_ckpt=@/storage3/DSIP/rriva/research/fm4tag/experiments/2026-10_ssl-campaign/outputs/P_full_20261023_085735/p0/seed_42 encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=28672 datamodule.train_max_rows=1860000 trainer.log_every_n_steps=20 optimizer.lr=2.2e-3
+sc_lab3  arm=scratch encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=8192 datamodule.train_max_rows=558000 trainer.log_every_n_steps=20 optimizer.lr=1.2e-3 @est=180
+ft_p0_lab3  arm=finetune encoder_ckpt=@/storage3/DSIP/rriva/research/fm4tag/experiments/2026-10_ssl-campaign/outputs/P_full_20261023_085735/p0/seed_42 encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=8192 datamodule.train_max_rows=558000 trainer.log_every_n_steps=20 optimizer.lr=3e-4 optimizer.backbone_lr=3e-5 @est=180
+fr_p0_lab3  arm=frozen encoder_ckpt=@/storage3/DSIP/rriva/research/fm4tag/experiments/2026-10_ssl-campaign/outputs/P_full_20261023_085735/p0/seed_42 encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=8192 datamodule.train_max_rows=558000 trainer.log_every_n_steps=20 optimizer.lr=1.2e-3 @est=180
+sc_lab1  arm=scratch encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=4096 datamodule.train_max_rows=186000 trainer.log_every_n_steps=10 optimizer.lr=8.4e-4 @epochs=150 @est=150
+ft_p0_lab1  arm=finetune encoder_ckpt=@/storage3/DSIP/rriva/research/fm4tag/experiments/2026-10_ssl-campaign/outputs/P_full_20261023_085735/p0/seed_42 encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=4096 datamodule.train_max_rows=186000 trainer.log_every_n_steps=10 optimizer.lr=2.1e-4 optimizer.backbone_lr=2.1e-5 @epochs=150 @est=150
+fr_p0_lab1  arm=frozen encoder_ckpt=@/storage3/DSIP/rriva/research/fm4tag/experiments/2026-10_ssl-campaign/outputs/P_full_20261023_085735/p0/seed_42 encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=4096 datamodule.train_max_rows=186000 trainer.log_every_n_steps=10 optimizer.lr=8.4e-4 @epochs=150 @est=150

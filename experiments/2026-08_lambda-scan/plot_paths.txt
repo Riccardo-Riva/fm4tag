@@ -1,0 +1,131 @@
+DEFINITIVE plots (all fm4tag runs finished, 2026-09-30; ROC floors corrected to 1.0 x GN2 on 2026-10-01)
+
+Validation CE curves (xlim 0-100, star on each seed's best) and markers-only (square at each seed's best):
+/storage3/DSIP/rriva/research/fm4tag/experiments/2026-08_lambda-scan/plots/val_loss_ce/val_loss_ce_seed_curves.png
+/storage3/DSIP/rriva/research/fm4tag/experiments/2026-08_lambda-scan/plots/val_loss_ce/val_loss_ce_seed_curves_markers.png
+  same two plots with xlim 0-80:
+/storage3/DSIP/rriva/research/fm4tag/experiments/2026-08_lambda-scan/plots/val_loss_ce/xlim80/val_loss_ce_seed_curves.png
+/storage3/DSIP/rriva/research/fm4tag/experiments/2026-08_lambda-scan/plots/val_loss_ce/xlim80/val_loss_ce_seed_curves_markers.png
+  configs: experiments/2026-08_lambda-scan/configs/val_loss_ce_seed_curves.yaml, experiments/2026-08_lambda-scan/configs/val_loss_ce_seed_curves_xlim80.yaml
+
+Same CE plots with GRADIENT colours (lambda through a blue->teal->amber ramp over [0,1]; no-JC black, no-JC+dropout grey):
+/storage3/DSIP/rriva/research/fm4tag/experiments/2026-08_lambda-scan/plots/val_loss_ce/val_loss_ce_seed_curves_cmap.png
+/storage3/DSIP/rriva/research/fm4tag/experiments/2026-08_lambda-scan/plots/val_loss_ce/val_loss_ce_seed_curves_cmap_markers.png
+/storage3/DSIP/rriva/research/fm4tag/experiments/2026-08_lambda-scan/plots/val_loss_ce/xlim80/val_loss_ce_seed_curves_cmap.png
+/storage3/DSIP/rriva/research/fm4tag/experiments/2026-08_lambda-scan/plots/val_loss_ce/xlim80/val_loss_ce_seed_curves_cmap_markers.png
+  configs: experiments/2026-08_lambda-scan/configs/val_loss_ce_seed_curves_cmap.yaml, experiments/2026-08_lambda-scan/configs/val_loss_ce_seed_curves_xlim80_cmap.yaml
+
+Mean best val CE per lambda, ALL 16 lambdas (current version, 2026-10-01; mean +/- std over the seeds that did not get stuck;
+a lambda with one seed has no error bar; the 6 stuck runs are left out of scan AND baselines alike;
+no-JC and no-JC + dropout are drawn as points with error bars too, left of the scan behind a dotted divider;
+those two baselines are ALSO cut of outliers: a seed with best CE above 0.606 is left out (reference_outliers_above) ->
+no JC seed 42424242 (0.60613), no JC + dropout seed 42424 (0.60745); the lambda points are not cut. Baselines are then
+no JC 0.60345 +/- 0.00049 (n=4) and no JC + dropout 0.60162 +/- 0.00096 (n=6)):
+/storage3/DSIP/rriva/research/fm4tag/experiments/2026-08_lambda-scan/plots/val_loss_ce/val_loss_ce_best_vs_lambda_all.png
+/storage3/DSIP/rriva/research/fm4tag/experiments/2026-08_lambda-scan/plots/val_loss_ce/val_loss_ce_best_vs_lambda_all_summary.csv   <- numbers behind every point (mean, std, sem, per-seed values, n excluded)
+  script: .venv/bin/python scripts/plot_best_vs_lambda.py --config experiments/2026-08_lambda-scan/configs/val_loss_ce_seed_curves_cmap.yaml
+          settings AND every text of the figure (title, x/y label, legend, tick labels, footnotes):
+          best_vs_lambda: block of that config -> texts: ; names of the two baselines on the axis: reference_labels: ;
+          stuck runs: exclude_broken: ; baseline outlier cut: reference_outliers_above (null = off) ;
+          --min-seeds N, --error std|sem|minmax
+  stuck rule (audited on every run): val CE never <= 0.610 within 20 epochs -> lambda 0.4 (run_20260828_153214 seed 42),
+          lambda 0.7 (run_20260922_095140 seed 424), lambda 0.8 (run_20260915_133955 seed 424), no-JC seeds 424 / 42424 / 424242
+
+VARIANT of the plot above WITHOUT the "no JC + dropout" baseline and WITHOUT the lambdas that have a single usable seed
+(0.64, 0.7, 0.75, 0.8 -> named in its footnote); 12 lambdas + the no-JC baseline, same numbers, but its OWN texts (2026-10-11):
+y label "Best validation cross-entropy loss", x label "Noise parameter $\lambda$", no "(k stuck)" / "(k outlier)" lines under the
+ticks (the footnotes still name the left-out runs), no legend box in the top right:
+/storage3/DSIP/rriva/research/fm4tag/experiments/2026-08_lambda-scan/plots/val_loss_ce/val_loss_ce_best_vs_lambda_no_dropout_min2.png
+/storage3/DSIP/rriva/research/fm4tag/experiments/2026-08_lambda-scan/plots/val_loss_ce/val_loss_ce_best_vs_lambda_no_dropout_min2_summary.csv   <- still lists every configuration; shown_in_plot says which are drawn
+  command: .venv/bin/python scripts/plot_best_vs_lambda.py \
+               --config experiments/2026-08_lambda-scan/configs/val_loss_ce_seed_curves_cmap.yaml experiments/2026-08_lambda-scan/configs/val_loss_ce_best_vs_lambda_no_dropout_min2.yaml
+  the second file is an OVERLAY (only the keys that differ: filename, min_seeds, hide_references, texts); --config merges files in order,
+  so any best_vs_lambda: key can be overridden there for this plot only; a text set to null switches its element off (legend, k-stuck lines)
+
+  SEED CURVES of exactly the runs behind that plot (written by the same command: overlay key curves: true): per-seed validation CE
+  curves with a star at each seed's best value, 49 trainings (no stuck runs, no baseline outliers, no dropout baseline, no single-seed
+  lambdas 0.64 / 0.7 / 0.75 / 0.8), the same gradient colours; axes, size and legend title are the plot: block of the base config:
+/storage3/DSIP/rriva/research/fm4tag/experiments/2026-08_lambda-scan/plots/val_loss_ce/val_loss_ce_best_vs_lambda_no_dropout_min2_curves.png
+  (xlim 0-100 on purpose: the best epochs of the lambda 0.55 / 0.6 seeds are 95-98, an xlim-80 version would cut those stars off)
+
+  CATEGORICAL-COLOUR versions of those two (2026-10-12, asked for instead of the gradient): a totally different colour per lambda,
+  same runs, same texts.  The palette is the one of the earlier categorical plots (every lambda keeps its colour across them), pinned by
+  lambda VALUE in experiments/2026-08_lambda-scan/configs/val_loss_ce_best_vs_lambda_categorical_colours.yaml (a third overlay).  The gradient files stay:
+/storage3/DSIP/rriva/research/fm4tag/experiments/2026-08_lambda-scan/plots/val_loss_ce/val_loss_ce_best_vs_lambda_no_dropout_min2_categorical_curves.png     <- seed curves, stars
+/storage3/DSIP/rriva/research/fm4tag/experiments/2026-08_lambda-scan/plots/val_loss_ce/val_loss_ce_best_vs_lambda_no_dropout_min2_categorical.png            <- mean best CE
+/storage3/DSIP/rriva/research/fm4tag/experiments/2026-08_lambda-scan/plots/val_loss_ce/val_loss_ce_best_vs_lambda_no_dropout_min2_categorical_summary.csv
+  command: .venv/bin/python scripts/plot_best_vs_lambda.py --config experiments/2026-08_lambda-scan/configs/val_loss_ce_seed_curves_cmap.yaml \
+               experiments/2026-08_lambda-scan/configs/val_loss_ce_best_vs_lambda_no_dropout_min2.yaml experiments/2026-08_lambda-scan/configs/val_loss_ce_best_vs_lambda_categorical_colours.yaml
+
+  ROC COMPARISON of the best-CE seed of every point of that plot (2026-10-12): no JC + lambda 0.05 ... 0.65 (13 models) + GN2, the same
+  categorical colours (GN2 pink).  Each model at its own optimal (f_c, f_tau) at 80% b-efficiency [c-rejection maximised, light and tau
+  rejection >= 1.0 x GN2], taken from the 17-model run above (a model's optimum does not depend on the other models: no new search):
+/storage3/DSIP/rriva/research/fm4tag/experiments/2026-08_lambda-scan/plots/run_20261001_110047_lambda_scan_final_wp080_u100_tau100/categorical_no_dropout_min2/roc_no_dropout_min2.png   <- main figure
+  same folder: rej_vs_pt_u.png  rej_vs_pt_c.png  rej_vs_pt_tau.png  sig_eff_vs_pt.png  disc_signal.png  disc_<model>_f_c_..._f_tau_....png (14)
+               working_points.csv (rejections at 70/77/80/85%)  optimal_fractions.csv (the 13 rows)  roc_comparison_config.yaml (re-runnable)
+  FINAL render: CPU job 6345377 (log experiments/2026-08_lambda-scan/outputs/script_logs/roc_comparison/roc_categorical_no_dropout_min2_6345377.log), after the two changes below.  The
+  login-node shell has a 2 GiB memory cap and OOM-kills the pT-efficiency stage, so re-run on a compute node (sbatch, partition cpu-all, --mem=32G):
+  scripts/roc_comparison.py --config <that folder>/roc_comparison_config.yaml --device cpu
+  ROC CONVENTIONS since 2026-10-12 (defaults of scripts/roc_comparison.py): ratio panels top to bottom c, light, tau (plot.ratio_order overrides);
+  no "ATLAS" on any plot (ROC, discriminant and pT plots; the tag "Simulation Internal" is kept).  The older ROC runs listed above (the 17-model run,
+  its cmap/ re-render, the nominal and 0.95/0.90 runs) were rendered before that: light, c, tau order, and "ATLAS" on their pT / discriminant plots.
+  Fractions: each model at its own optimum (c-rej maximised at 80% WP, light and tau >= 1.0 x GN2); re-derived from the stored grids on 2026-10-12, all 13 match.
+  (a gradient-colour render of this subset was stopped and deleted: the gradient was rejected for the ROC and the curves)
+
+CE + EMBEDDING-QUALITY CURVES of the best cross-entropy-only run and the best contrastive (CL) run (2026-10-12): FOUR plots = 2 runs x 2 metrics.
+Each plot: training CE and validation CE per epoch on the LEFT axis (star at the best validation CE), the uniformity (resp. the effective rank) of
+the global jet embedding per epoch on the RIGHT axis (green, dashed).  "Global jet embedding" = the aggregator output z_jet, the single vector the
+classifier head reads and the jet-contrastive loss acts on (column val/aggregator/<metric> of metrics.csv).  It is logged by the EmbeddingMetrics
+callback on the VALIDATION split only (clean embeddings, <= 8192 jets), so the green curve is a validation curve.  jets_embedding and
+tracks_embedding are logged too: key embedding_curves.embedding.  "Best" = lowest best validation CE within the pool of the no_dropout_min2 plot
+(no stuck runs, no baseline outliers, no "no JC + dropout" baseline, only lambdas with >= 2 usable seeds); one training per kind:
+  ce_only : no JC, seed 4242424   (experiments/2026-08_lambda-scan/outputs/classify_param_scan/run_20260819_134452)  best val CE 0.60298 @ epoch 7   (23 epochs, early-stopped)
+  cl      : lambda 0.6, seed 42   (experiments/2026-08_lambda-scan/outputs/classify_param_scan/run_20260915_133955)  best val CE 0.59905 @ epoch 95  (100 epochs)
+  (the "no JC + dropout" baseline has a lower best seed, 42424242: 0.59977 @ epoch 35; it is left out as in the focus plot - to use it as the
+   cross-entropy-only run, hide the other baseline: best_vs_lambda.hide_references: ['no contrastive (JC 0.0)'] in an overlay)
+/storage3/DSIP/rriva/research/fm4tag/experiments/2026-08_lambda-scan/plots/ce_vs_embedding/ce_only_uniformity.png
+/storage3/DSIP/rriva/research/fm4tag/experiments/2026-08_lambda-scan/plots/ce_vs_embedding/ce_only_effective_rank.png
+/storage3/DSIP/rriva/research/fm4tag/experiments/2026-08_lambda-scan/plots/ce_vs_embedding/cl_uniformity.png
+/storage3/DSIP/rriva/research/fm4tag/experiments/2026-08_lambda-scan/plots/ce_vs_embedding/cl_effective_rank.png
+/storage3/DSIP/rriva/research/fm4tag/experiments/2026-08_lambda-scan/plots/ce_vs_embedding/run_selection.csv   <- every competing training (4 no-JC + 45 CL), ranked, the picked one + its directory
+  command: .venv/bin/python scripts/plot_ce_and_embedding.py --config experiments/2026-08_lambda-scan/configs/val_loss_ce_seed_curves_cmap.yaml \
+               experiments/2026-08_lambda-scan/configs/val_loss_ce_best_vs_lambda_no_dropout_min2.yaml experiments/2026-08_lambda-scan/configs/ce_and_embedding_curves.yaml
+  the third file is an OVERLAY holding the embedding_curves: block: out_dir, filename, embedding, metrics, colours, linestyles, legend, axis limits and EVERY
+  text (texts: title per kind of run, axis labels, legend entries; missing / mistyped key = error, null title = no title, best: null = star without legend entry)
+  the two RIGHT axes are autoscaled per plot, so they differ: uniformity -2.43 ... -1.18 (ce_only) vs -3.91 ... -3.85 (cl); effective rank 80.6 ... 106.4 vs 115.5 ... 126.3;
+  fix both with embedding_curves.ylim_right: {uniformity: [lo, hi], effective_rank: [lo, hi]} (and ylim_left / xlim) to compare the two runs on one scale
+  the picked pair is representative: over ALL pool trainings the uniformity at the best epoch is -3.94 ... -3.89 for every CL run and -2.06 ... -1.29 for the 4 no-JC seeds
+
+REDUCED ROC (2026-10-13): no JC (cross-entropy only), GN2 only-JT, and the best / second best / worst model by c-rejection at the 80% WP
+(lambda 0.55: 10.580, 0.65: 10.566, 0.05: 9.770; each at its own optimal f_c, f_tau), with a dotted, 50%-transparent vertical line at b-efficiency 0.8
+(plot.wp_line, opt-in in scripts/roc_comparison.py; wp_line_color / wp_line_alpha).  CPU job 6360699, same folder layout as the 13-model subset:
+/storage3/DSIP/rriva/research/fm4tag/experiments/2026-08_lambda-scan/plots/run_20261001_110047_lambda_scan_final_wp080_u100_tau100/categorical_no_dropout_min2/ce_only_gn2_best_worst/roc_ce_only_gn2_best_second_worst.png
+
+EARLIER version (only lambdas with >= 3 seeds, hard-coded texts, no-JC baseline with all 8 seeds, i.e. including its 3 stuck ones):
+/storage3/DSIP/rriva/research/fm4tag/experiments/2026-08_lambda-scan/plots/val_loss_ce/val_loss_ce_best_vs_lambda.png
+/storage3/DSIP/rriva/research/fm4tag/experiments/2026-08_lambda-scan/plots/val_loss_ce/val_loss_ce_best_vs_lambda_summary.csv
+
+ROC vs GN2 only-JT: best-CE model per lambda (+ no-JC baseline), each with its own optimised (f_c, f_tau)
+at 80% b-efficiency; c-rejection maximised s.t. light >= 1.0 x GN2 and tau >= 1.0 x GN2   [job 6137214]:
+/storage3/DSIP/rriva/research/fm4tag/experiments/2026-08_lambda-scan/plots/run_20261001_110047_lambda_scan_final_wp080_u100_tau100/
+  roc.png                        <- main deliverable (categorical colours; re-rendered 2026-10-01 after the panel-gap fix)
+  cmap/roc_lambda_cmap.png       <- same plot, GRADIENT colours: lambda through a blue->teal->amber ramp over [0,1];
+                                    no-JC black, GN2 red (cmap/ also holds the matching companion plots + its roc_comparison_config.yaml)
+  optimal_fractions.csv          <- chosen (f_c, f_tau) + c/u/tau rejection per model
+  working_points.csv             <- rejections at 70/77/80/85% b-efficiency
+  roc_comparison_config.yaml     <- generated config, ready to re-run
+  disc_signal.png                <- b-jet discriminant, all models
+  disc_<lambda>_f_c_<..>_f_tau_<..>.png   <- discriminant per model (+ disc_gn2_only_jt_*.png, disc_no_jc_*.png)
+  rej_vs_pt_u.png  rej_vs_pt_c.png  rej_vs_pt_tau.png  sig_eff_vs_pt.png
+  command: scripts/fraction_constrained_search.py --config experiments/2026-08_lambda-scan/configs/fraction_constrained_lambda_scan_final.yaml
+           --floor-u 1.0 --floor-tau 1.0 --working-point 0.8 --grid-dir <run_20260930_152803 dir below> --device cpu
+
+Same 17 models at GN2's nominal f_c=0.2, f_tau=0.01 (independent of the floors):
+/storage3/DSIP/rriva/research/fm4tag/experiments/2026-08_lambda-scan/plots/run_20260930_152803_lambda_scan_final_wp080/nominal/roc.png
+
+SUPERSEDED (floors 0.95 x GN2 light / 0.90 x GN2 tau, chosen by me without asking; kept only because it holds the cached
+(f_c, f_tau) grids <lambda>_grid_wp0.8.csv and prediction caches that the 1.0/1.0 run reuses):
+/storage3/DSIP/rriva/research/fm4tag/experiments/2026-08_lambda-scan/plots/run_20260930_152803_lambda_scan_final_wp080/
+(its roc.png and companion plots still have the OLD layout with the gap; only nominal/ above was re-rendered)
+
+configs: experiments/2026-08_lambda-scan/configs/fraction_constrained_lambda_scan_final.yaml, experiments/2026-08_lambda-scan/configs/roc_comparison_lambda_scan_final_nominal.yaml

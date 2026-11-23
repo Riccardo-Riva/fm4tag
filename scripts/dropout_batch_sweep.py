@@ -11,7 +11,7 @@ CUDA_VISIBLE_DEVICES slurm set; never a fixed 0 and 1, which can be another job'
 
 Run inside a 2-GPU slurm job (slurm/dropout_batch_sweep.sh)::
 
-    python scripts/dropout_batch_sweep.py --cells scripts/configs/campaign/D_drop.cells --out <dir>
+    python scripts/dropout_batch_sweep.py --cells experiments/2026-11_dropout/configs/D_drop.cells --out <dir>
 
 ``--cell-names`` lists the cells to sweep (default: the six downstream arms of D_drop.cells), dealt round robin
 to the two cards, so put the longest first; the cells need ``datamodule.batch_size=`` and ``chunk_size=`` as

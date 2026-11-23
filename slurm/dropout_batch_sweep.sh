@@ -16,7 +16,7 @@
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=80G
 #SBATCH --time=04:00:00
-#SBATCH --output=/storage3/DSIP/rriva/research/fm4tag/slurm/ssl_campaign/D_drop_sweep_%j.out
+#SBATCH --output=/storage3/DSIP/rriva/research/fm4tag/slurm/logs/dropout_batch_sweep_%j.out   # default; pass --output=<experiment>/outputs/<tag>_sweep_%j.out
 
 REPO=/storage3/DSIP/rriva/research/fm4tag
 cd "$REPO" || exit 1
@@ -33,8 +33,11 @@ fi
 DATA=/storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_152051
 cat $DATA/train/output/pp_output_train.h5 $DATA/val/output/pp_output_val.h5 > /dev/null
 export ENCODERS=rowcol_concat_v0 CHUNK=512
-SWEEP_CELLS=${SWEEP_CELLS:-scripts/configs/campaign/D_drop.cells}
+SWEEP_CELLS=${SWEEP_CELLS:-experiments/2026-11_dropout/configs/D_drop.cells}
 SWEEP_TAG=${SWEEP_TAG:-D_drop}
+# results go to the outputs/ of the experiment whose configs/ holds the cells file
+EXPERIMENT=${EXPERIMENT:-$(echo "$SWEEP_CELLS" | sed -n 's#^\(.*/\)\?experiments/\([^/]*\)/configs/.*#\2#p')}
+[[ -n "$EXPERIMENT" ]] || { echo "SWEEP_CELLS is not under experiments/<campaign>/configs/: set EXPERIMENT" >&2; exit 1; }
 NAMES_ARG=()
 if [[ -n "${SWEEP_NAMES:-}" ]]; then
     read -r -a NAMES <<< "$SWEEP_NAMES"
@@ -42,4 +45,4 @@ if [[ -n "${SWEEP_NAMES:-}" ]]; then
 fi
 read -r -a MORE_ARGS <<< "${SWEEP_ARGS:-}"
 .venv/bin/python scripts/dropout_batch_sweep.py --cells "$SWEEP_CELLS" "${NAMES_ARG[@]}" "${MORE_ARGS[@]}" \
-    --out "$REPO/slurm/ssl_campaign/${SWEEP_TAG}_sweep_${SLURM_JOB_ID}"
+    --out "$REPO/experiments/${EXPERIMENT}/outputs/${SWEEP_TAG}_sweep_${SLURM_JOB_ID}"

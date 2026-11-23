@@ -34,7 +34,7 @@ Outputs, under --output:
 Usage::
 
     python scripts/fraction_two_stage_search.py \\
-        --config scripts/configs/fraction_two_stage_search_lambda_scan.yaml \\
+        --config experiments/2026-08_lambda-scan/configs/fraction_two_stage_search_lambda_scan.yaml \\
         --workers 64
 """
 

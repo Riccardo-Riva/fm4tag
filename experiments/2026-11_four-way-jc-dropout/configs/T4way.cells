@@ -1,0 +1,28 @@
+# Four-way test (rriva, 2026-11-23): is the gain of the jet-contrastive term (JC) seen in the lambda scan a contrastive
+# effect, or the regularisation that dropout also gives?  2 x 2 design, from scratch:
+#   t1_ce          CE only                       (every dropout 0, head included)
+#   t2_ce_jc       CE + JC                       (JC weight 0.3, lambda 0.4, T 0.1: campaign_ssl defaults)
+#   t3_ce_drop     CE + dropout 0.2              (encoder column/row attention + FF, aggregator attention + FF, head)
+#   t4_ce_jc_drop  CE + JC + dropout 0.2
+# Protocol v1 (docs/repo_inspection_2026-11-23.md, sections 12-13), the same for all four cells:
+#   batch 12800; WSD 80 epochs = warmup 4 epochs (5 %), constant, linear decay over the last 20 % (epochs 64-80);
+#   no early stopping, best-val-CE checkpoint; lr 1e-3 (no pretrained parts, so no backbone lr); gradient clip 1.0;
+#   CLASS-WEIGHTED CE (use_class_weights=true: flavour_label weights b 1.5, c 1.5, light 1.0, tau 4.0 from the
+#   class_dict, as GN2 -> val CE comparable with the salt GN2 runs on the same data, run_20261106_092332).
+#   Seeds 4242 42424 424242 4242424 42424242 424242424 (6, rriva 2026-11-23), the same in every cell (paired);
+#   42 stays out (lr-search seed).
+# @mem = measured peak at batch 12800 + CUDA context (W_measure_sweep_7126988); @est = s/epoch: CE cells alone x 2.5
+# (two share an L40S card, measured slowdown 2.35, W_share_measure_7153578), JC cells alone x 1.15 x 2.2 (may land
+# on an A40).
+#
+#   full cards (JC cells), L40S + A40:
+#     MAX_EPOCHS=80 SEEDS='4242 42424 424242 4242424 42424242 424242424' WALLTIME=7-00:00:00 EST_SECONDS_PER_EPOCH=6000 \
+#     STAGE=T4way_full CELL_FILTER='_jc' PACKS=6 MEM_PER_GPU_GB=24 CELLS=experiments/2026-11_four-way-jc-dropout/configs/T4way.cells bash slurm/ssl_pack.sh
+#   two per card (CE cells), L40S:
+#     MAX_EPOCHS=80 SEEDS='4242 42424 424242 4242424 42424242 424242424' WALLTIME=7-00:00:00 EST_SECONDS_PER_EPOCH=6000 \
+#     STAGE=T4way_shared CELL_FILTER='^t[13]_' SLOTS_PER_GPU=2 GPU_BUDGET_GIB=40 GPU_NODE=gpu-L40S-open PACKS=3 \
+#     MEM_PER_GPU_GB=48 CELLS=experiments/2026-11_four-way-jc-dropout/configs/T4way.cells bash slurm/ssl_pack.sh
+t4_ce_jc_drop  arm=scratch encoders=rowcol_concat_v0 chunk_size=512 datamodule.batch_size=12800 finetune.schedule=wsd finetune.warmup_epochs=4 finetune.decay_frac=0.2 ~callbacks.early_stopping ~callbacks_finetune.early_stopping optimizer.lr=1e-3 use_class_weights=true +trainer.gradient_clip_val=1.0 finetune.loss_weights.jet_contrastive=0.3 encoders.global_encoder.layers.0.attn_dropout=0.2 encoders.global_encoder.layers.0.ff_dropout=0.2 encoders.constituents.tracks.layers.0.attn_dropout=0.2 encoders.constituents.tracks.layers.0.ff_dropout=0.2 aggregator.attn_dropout=0.2 aggregator.ff_dropout=0.2 head.mlp_dropout=0.2 @est=5980 @mem=39
+t2_ce_jc  arm=scratch encoders=rowcol_concat_v0 chunk_size=512 datamodule.batch_size=12800 finetune.schedule=wsd finetune.warmup_epochs=4 finetune.decay_frac=0.2 ~callbacks.early_stopping ~callbacks_finetune.early_stopping optimizer.lr=1e-3 use_class_weights=true +trainer.gradient_clip_val=1.0 finetune.loss_weights.jet_contrastive=0.3 head.mlp_dropout=0.0 @est=4190 @mem=36
+t3_ce_drop  arm=scratch encoders=rowcol_concat_v0 chunk_size=512 datamodule.batch_size=12800 finetune.schedule=wsd finetune.warmup_epochs=4 finetune.decay_frac=0.2 ~callbacks.early_stopping ~callbacks_finetune.early_stopping optimizer.lr=1e-3 use_class_weights=true +trainer.gradient_clip_val=1.0 encoders.global_encoder.layers.0.attn_dropout=0.2 encoders.global_encoder.layers.0.ff_dropout=0.2 encoders.constituents.tracks.layers.0.attn_dropout=0.2 encoders.constituents.tracks.layers.0.ff_dropout=0.2 aggregator.attn_dropout=0.2 aggregator.ff_dropout=0.2 head.mlp_dropout=0.2 @est=2720 @mem=20
+t1_ce  arm=scratch encoders=rowcol_concat_v0 chunk_size=512 datamodule.batch_size=12800 finetune.schedule=wsd finetune.warmup_epochs=4 finetune.decay_frac=0.2 ~callbacks.early_stopping ~callbacks_finetune.early_stopping optimizer.lr=1e-3 use_class_weights=true +trainer.gradient_clip_val=1.0 head.mlp_dropout=0.0 @est=2060 @mem=20

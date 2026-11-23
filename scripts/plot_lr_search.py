@@ -13,7 +13,7 @@ Reads every ``<stage>/<cell>/seed_<seed>`` run of the stages in the config (cell
 
 All wording is in the config's ``texts``.
 
-    MPLBACKEND=Agg .venv/bin/python scripts/plot_lr_search.py --config scripts/configs/wsd_lr_search.yaml
+    MPLBACKEND=Agg .venv/bin/python scripts/plot_lr_search.py --config experiments/2026-11_wsd-lr-search/configs/wsd_lr_search.yaml
 """
 
 from __future__ import annotations

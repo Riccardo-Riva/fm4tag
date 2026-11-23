@@ -22,7 +22,7 @@
 #   ${VAR}        filled from the environment (unset = error)
 #
 # Usage:
-#   CELLS=scripts/configs/campaign/S2.cells SEEDS=42 PACKS=4 \
+#   CELLS=experiments/<campaign>/configs/S2.cells SEEDS=42 PACKS=4 \
 #     MAX_EPOCHS=10 EST_SECONDS_PER_EPOCH=6000 bash slurm/ssl_pack.sh
 #   DRY_RUN=1 ...                 write everything, submit nothing
 #   CELL_FILTER=<regex> ...       only the cells whose name matches (e.g. the
@@ -37,7 +37,10 @@
 #                                 add packs to an existing stage (e.g. after a
 #                                 node failure: stale claims are released)
 #
-# Layout: slurm/ssl_campaign/<stage>_<TS>/{tasks.tsv, pack.env, pack_job.sh,
+# Every experiment has its own folder experiments/<campaign>/ (README.md, configs/, slurm/, outputs/, plots/):
+# the stage goes to experiments/<campaign>/outputs/, the campaign being the one whose configs/ holds CELLS
+# (or EXPERIMENT=<campaign> when the cells file lives elsewhere).
+# Layout: experiments/<campaign>/outputs/<stage>_<TS>/{tasks.tsv, pack.env, pack_job.sh,
 #   pack_<job>.out, pack_<job>_w<i>.log, .queue/, <cell>/seed_<s>/...} — every
 #   seed dir has the usual run_info.yaml / .hydra / metrics.csv layout.
 # ══════════════════════════════════════════════════════════════════════════════
@@ -120,6 +123,14 @@ fi
 # ── A new stage ───────────────────────────────────────────────────────────────
 CELLS=${CELLS:?set CELLS=<cell file>}
 STAGE=${STAGE:-$(basename "${CELLS}" .cells)}
+# the experiment folder: from the cells file's location (experiments/<campaign>/configs/...) or EXPERIMENT
+CELLS_ABS=$(cd "$(dirname "${CELLS}")" && pwd)/$(basename "${CELLS}")
+if [[ -z "${EXPERIMENT:-}" && "${CELLS_ABS}" == "${REPO}/experiments/"*/configs/* ]]; then
+    EXPERIMENT=${CELLS_ABS#"${REPO}/experiments/"}
+    EXPERIMENT=${EXPERIMENT%%/*}
+fi
+[[ -n "${EXPERIMENT:-}" ]] || { echo "ERROR: CELLS is not under experiments/<campaign>/configs/ — set EXPERIMENT=<campaign>" >&2; exit 1; }
+[[ -d "${REPO}/experiments/${EXPERIMENT}" ]] || { echo "ERROR: no folder experiments/${EXPERIMENT} (create it with its README.md first)" >&2; exit 1; }
 MAX_EPOCHS=${MAX_EPOCHS:?set MAX_EPOCHS (default for cells without @epochs)}
 EST_SECONDS_PER_EPOCH=${EST_SECONDS_PER_EPOCH:?set EST_SECONDS_PER_EPOCH (default for cells without @est)}
 read -r -a SEEDS <<< "${SEEDS:-42}"
@@ -137,7 +148,7 @@ done
 mapfile -t CELL_LINES < <(grep -vE '^\s*(#|$)' "${CELLS}" | envsubst)
 
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-STAGE_DIR=${REPO}/slurm/ssl_campaign/${STAGE}_${TIMESTAMP}
+STAGE_DIR=${REPO}/experiments/${EXPERIMENT}/outputs/${STAGE}_${TIMESTAMP}
 WANDB_GROUP=${WANDB_GROUP:-ssl_${STAGE}_${TIMESTAMP}}
 mkdir -p "${STAGE_DIR}/.queue"
 cp "${CELLS}" "${STAGE_DIR}/cells"

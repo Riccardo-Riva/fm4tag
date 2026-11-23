@@ -8,7 +8,7 @@ and the share of the step spent in the main components.  Points without a
 report (OOM, crash) are listed with the last line of their log.  Writes
 ``<dir>/table.csv``.
 
-    scripts/profile_table.py slurm/profiling/s0_<TS>
+    scripts/profile_table.py experiments/2026-07_kernel-profiling/outputs/s0_<TS>
 """
 
 from __future__ import annotations

@@ -37,7 +37,7 @@ point grid affordable on CPU.
 
 Usage::
 
-    python scripts/rejection_summary.py --config scripts/configs/rejection_summary_phase0.yaml
+    python scripts/rejection_summary.py --config experiments/2026-08_lambda-scan/configs/rejection_summary_phase0.yaml
     python scripts/rejection_summary.py --config ... --output plots/my_summary
 """
 

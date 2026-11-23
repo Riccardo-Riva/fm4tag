@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """Compose one SSL-campaign cell and print the data files its training reads.
 
-Used by slurm/ssl_campaign.sh at submit time: a typo in a cell's overrides
+Used by experiments/2026-10_ssl-campaign/slurm/ssl_campaign.sh at submit time: a typo in a cell's overrides
 fails here (non-zero exit) before anything is submitted, and the printed files
 are read once sequentially at job start to warm the node's page cache (random
 cold reads from NFS were the loader's bottleneck: ~6k vs ~50k jets/s/worker).

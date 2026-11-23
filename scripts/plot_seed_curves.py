@@ -20,7 +20,7 @@ rather than duplicated.
 
 Usage::
 
-    python scripts/plot_seed_curves.py --config scripts/configs/val_loss_ce_seed_curves.yaml
+    python scripts/plot_seed_curves.py --config experiments/2026-08_lambda-scan/configs/val_loss_ce_seed_curves.yaml
     python scripts/plot_seed_curves.py --config ... --style markers --output plots/x
 """
 

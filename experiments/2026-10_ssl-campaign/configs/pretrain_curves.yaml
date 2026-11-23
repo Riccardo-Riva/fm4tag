@@ -1,0 +1,82 @@
+# Training / validation loss and the effective rank of the embeddings, epoch by epoch, for the pilot pretrainings
+# and P2 (scripts/plot_pretrain_curves.py; the final P0 and P1 are in pretrain_curves_final.yaml).  One figure per
+# run:
+#
+#   sbatch slurm/plot_job.sh scripts/plot_pretrain_curves.py:experiments/2026-10_ssl-campaign/configs/pretrain_curves.yaml
+#
+#   left axis   the training objective (epoch mean of train/loss) and the validation objective (val/loss): the sum
+#               of the run's contrastive terms, so its scale differs between P0 (2 terms), P1 (3) and P2 (1)
+#   right axis  val/<embedding>/effective_rank of each trained embedding (EmbeddingMetrics: clean embeddings of up
+#               to 8192 validation jets; there is no training-split value)
+#
+# Runs: the S2 recipes with QK-norm: the S2_qk pilot (10 epochs, seed 42) and the full pretrainings (P_full, 30
+# epochs, 2 seeds), all at lr 1e-3.
+
+pretrain_curves:
+  out_dir: experiments/2026-10_ssl-campaign/plots/pretrain_curves
+  runs:                              # key -> run directory (the key only names the file and picks the title)
+    p0_qk: /storage3/DSIP/rriva/research/fm4tag/experiments/2026-10_ssl-campaign/outputs/S2_qk_20261022_113820/qk_p0/seed_42
+    p1_qk: /storage3/DSIP/rriva/research/fm4tag/experiments/2026-10_ssl-campaign/outputs/S2_qk_20261022_113820/qk_p1/seed_42
+    p2_qk: /storage3/DSIP/rriva/research/fm4tag/experiments/2026-10_ssl-campaign/outputs/S2_qk_20261022_113820/qk_p2/seed_42
+    p0_full_s42: /storage3/DSIP/rriva/research/fm4tag/experiments/2026-10_ssl-campaign/outputs/P_full_20261023_085735/p0/seed_42
+    p0_full_s424: /storage3/DSIP/rriva/research/fm4tag/experiments/2026-10_ssl-campaign/outputs/P_full_20261023_085735/p0/seed_424
+    p2_full_s42: /storage3/DSIP/rriva/research/fm4tag/experiments/2026-10_ssl-campaign/outputs/P_full_20261023_085735/p2/seed_42
+    p2_full_s424: /storage3/DSIP/rriva/research/fm4tag/experiments/2026-10_ssl-campaign/outputs/P_full_20261023_085735/p2/seed_424
+
+  figures:                           # kind -> its file ({key} = a key of `runs`) and any style override
+    effective_rank: {filename: '{key}_loss_and_effective_rank.png'}
+
+  loss_metrics: {train: train/loss_epoch, val: val/loss}
+  embedding_metric: 'val/{embedding}/{metric}'
+  epoch_offset: 1                    # Lightning counts epochs from 0; 1 = the first epoch is epoch 1
+
+  # Embeddings, as logged:
+  #   tracks_embedding  projection of each track
+  #   jets_embedding    projection of the global jet features
+  #   aggregator        the global jet embedding; trained only with JC (P1, P2): P0 never trains the aggregator, so
+  #                     its metrics there describe random weights and are not drawn (`trained_if`)
+  embeddings: [tracks_embedding, jets_embedding, aggregator]
+  trained_if: {aggregator: jet_contrastive}
+  loss_weight: {tracks_embedding: contrastive, jets_embedding: contrastive, aggregator: jet_contrastive}
+  embedding_dim:                     # config keys whose sum is each embedding's size ({dim} in the texts)
+    tracks_embedding: [encoders.constituents.tracks.proj_out]
+    jets_embedding: [encoders.global_encoder.proj_out]
+    aggregator: [encoders.global_encoder.proj_out, encoders.constituents.tracks.proj_out]
+
+  figsize: [8.0, 5.0]
+  linewidth: 1.6
+  marker: o                          # on every epoch point; null = lines only
+  markersize: 4
+  colors:
+    train: '#1f77b4'
+    val: '#ff7f0e'
+    tracks_embedding: '#2ca02c'
+    jets_embedding: '#9467bd'
+    aggregator: '#8c564b'
+  linestyles: {train: '-', val: '-', right: '--'}
+  ink: '#333333'
+  # ylim_left: [5.4, 7.2]
+  # ylim_right: [0, 260]
+  legend: {loc: upper center, anchor: [0.5, -0.15], ncol: 3, fontsize: 9, frame: false}
+
+  # ---- ALL the wording of the figures lives here --------------------------------------------------------------
+  texts:
+    run:                             # {run} in the titles
+      p0_qk: 'P0 with QK-norm: contrastive on the feature embeddings (T 0.1, λ 0.4, seed 42)'
+      p1_qk: 'P1 with QK-norm: P0 + JC on the global jet embedding (T 0.1, λ 0.4, seed 42)'
+      p2_qk: 'P2 with QK-norm: JC on the global jet embedding only (T 0.1, λ 0.4, seed 42)'
+      p0_full_s42: 'P0 (contrastive on the feature embeddings), 30 epochs, seed 42'
+      p0_full_s424: 'P0 (contrastive on the feature embeddings), 30 epochs, seed 424'
+      p2_full_s42: 'P2 (JC on the global jet embedding only), 30 epochs, seed 42'
+      p2_full_s424: 'P2 (JC on the global jet embedding only), 30 epochs, seed 424'
+    xlabel: 'Epoch'
+    effective_rank:
+      title: '{run}'                 # '' = no title
+      ylabel_left: 'Contrastive loss (sum of the terms)'
+      ylabel_right: 'Effective rank (validation)'
+      train: 'Training loss'
+      val: 'Validation loss'
+      embedding:                     # legend entries of the right-axis curves; {dim} = the embedding's size
+        tracks_embedding: 'Effective rank: track embeddings'
+        jets_embedding: 'Effective rank: jet-feature embedding'
+        aggregator: 'Effective rank: global jet embedding'

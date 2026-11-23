@@ -64,7 +64,7 @@ sections, checkpoint knobs, logging conventions, HPO, gotchas).
   (col / row / rowcol backbones).
 - [docs/param_scan_guide.md](docs/param_scan_guide.md) — running seed-repeated
   hyperparameter scans on Slurm and plotting the results.
-- [docs/ssl_campaign.md](docs/ssl_campaign.md) — the SSL campaign: does contrastive
+- [experiments/2026-10_ssl-campaign/notes/ssl_campaign.md](experiments/2026-10_ssl-campaign/notes/ssl_campaign.md) — the SSL campaign: does contrastive
   pretraining of the SAINT-like encoders help? Tests, setup, stages, plots.
 - [tests/README.md](tests/README.md) — running the DDP test suite and what
   each test guards against.

@@ -24,7 +24,7 @@ adds the grid sweep and its outputs:
 
 Usage::
 
-    python scripts/fraction_grid_search.py --config scripts/configs/fraction_grid_search_best_ce.yaml
+    python scripts/fraction_grid_search.py --config experiments/2026-08_lambda-scan/configs/fraction_grid_search_best_ce.yaml
     python scripts/fraction_grid_search.py --config ... --output plots/my_grid
     python scripts/fraction_grid_search.py --config ... --recompute       # ignore cached predictions
     python scripts/fraction_grid_search.py --config ... --max-jets 50000  # quick partial run

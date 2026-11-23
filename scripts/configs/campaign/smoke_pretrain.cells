@@ -1,5 +1,0 @@
-# End-to-end smoke test of the campaign chain — tiny budgets, not results.
-#   WANDB_MODE=offline SEEDS=42 MAX_EPOCHS=2 EST_SECONDS_PER_EPOCH=600 WALLTIME=01:30:00 \
-#   GPU_FREE_MIB_REQUIRED=20000 CELLS=scripts/configs/campaign/smoke_pretrain.cells bash slurm/ssl_campaign.sh
-p0  arm=pretrain +trainer.limit_train_batches=40 +trainer.limit_val_batches=8 chunk_size=256 datamodule.batch_size=2048
-p1  arm=pretrain pretrain.loss_weights.jet_contrastive=1.0 +trainer.limit_train_batches=40 +trainer.limit_val_batches=8 chunk_size=256 datamodule.batch_size=2048

@@ -6,7 +6,7 @@
 # one after the other; a failing one does not stop the others, and the job fails if any did.  The log lists each
 # command, its output and the failed ones at the end.
 #
-#   sbatch slurm/plot_job.sh scripts/plot_pretrain_curves.py:scripts/configs/pretrain_curves_final.yaml [...]
+#   sbatch slurm/plot_job.sh scripts/plot_pretrain_curves.py:experiments/2026-10_ssl-campaign/configs/pretrain_curves_final.yaml [...]
 #
 #SBATCH --job-name=fm4tag-plots
 #SBATCH --partition=cpu-all
@@ -14,7 +14,7 @@
 #SBATCH --cpus-per-task=2
 #SBATCH --mem=8G
 #SBATCH --time=01:00:00
-#SBATCH --output=/storage3/DSIP/rriva/research/fm4tag/slurm/plot_logs/plot_job_%j.log
+#SBATCH --output=/storage3/DSIP/rriva/research/fm4tag/slurm/logs/plot_job_%j.log   # default; pass --output=<experiment>/outputs/logs/... for a campaign
 
 set -uo pipefail
 

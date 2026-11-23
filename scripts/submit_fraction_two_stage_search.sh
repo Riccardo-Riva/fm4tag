@@ -8,8 +8,8 @@
 #   scripts/submit_fraction_two_stage_search.sh <config.yaml> [cpus] [extra args...]
 #
 # Examples:
-#   scripts/submit_fraction_two_stage_search.sh scripts/configs/fraction_two_stage_search_lambda_scan.yaml
-#   scripts/submit_fraction_two_stage_search.sh scripts/configs/my_search.yaml 36 --recompute
+#   scripts/submit_fraction_two_stage_search.sh experiments/2026-08_lambda-scan/configs/fraction_two_stage_search_lambda_scan.yaml
+#   scripts/submit_fraction_two_stage_search.sh experiments/<campaign>/configs/my_search.yaml 36 --recompute
 #
 # Outputs go to slurm/plots/run_<timestamp>; logs go to
 # slurm/fraction_two_stage_search/fraction_two_stage_search_<jobid>.log.
@@ -24,9 +24,13 @@ CPUS="${1:-32}"
 EXTRA_ARGS="$*"
 
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-OUT_DIR=$REPO/scripts/plots/run_$TIMESTAMP
+# outputs go to the plots/ of the experiment whose configs/ holds CONFIG (or EXPERIMENT=<campaign>)
+source "$REPO/slurm/experiment_of.sh"
+EXP=$(experiment_of "$CONFIG")
+[[ -n "$EXP" && -d "$REPO/experiments/$EXP" ]] || { echo "config is not under experiments/<campaign>/: set EXPERIMENT=<campaign>" >&2; exit 1; }
+OUT_DIR=$REPO/experiments/$EXP/plots/run_$TIMESTAMP
 
-LOG_DIR=$REPO/scripts/logs/fraction_two_stage_search
+LOG_DIR=$REPO/experiments/2026-08_lambda-scan/outputs/script_logs/fraction_two_stage_search
 mkdir -p "$LOG_DIR"
 
 echo "Output directory: $OUT_DIR (cpus=$CPUS)"

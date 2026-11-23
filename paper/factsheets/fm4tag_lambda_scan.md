@@ -7,9 +7,9 @@ Scratch scripts and recomputed tables: `/tmp/claude-1138/-storage3-DSIP-rriva-re
 
 ## 1. Setup of the final ("definitive") pool [files]
 
-Pool definition: `/storage3/DSIP/rriva/research/fm4tag/scripts/configs/val_loss_ce_seed_curves_cmap.yaml` (committed a14c0e7, 2026-10-12;
+Pool definition: `/storage3/DSIP/rriva/research/fm4tag/experiments/2026-08_lambda-scan/configs/val_loss_ce_seed_curves_cmap.yaml` (committed a14c0e7, 2026-10-12;
 header "DEFINITIVE pool, regenerated after every fm4tag run finished (2026-09-30)"). 67 trainings, all `status: completed` in run_info.yaml.
-Run dirs under `/storage3/DSIP/rriva/research/fm4tag/slurm/classify_param_scan/`.
+Run dirs under `/storage3/DSIP/rriva/research/fm4tag/experiments/2026-08_lambda-scan/outputs/classify_param_scan/`.
 
 Common to all 67 (checked in each `.hydra/config.yaml`):
 - Encoders `rowcol_v0`: global (jet) encoder dim 16, proj_out 32; track encoder dim 16, proj_out 128; rowcol layer depth 6, col_heads 2,
@@ -55,7 +55,7 @@ Exclusions (as defined by the author in the config):
 
 ## 2. Validation results (metric = per-seed minimum over epochs of val/head/loss_ce, unweighted CE on the 5M-jet val set) [files]
 
-Recomputed from every metrics.csv; matches `/storage3/DSIP/rriva/research/fm4tag/plots/val_loss_ce/val_loss_ce_best_vs_lambda_no_dropout_min2_summary.csv` to all printed digits.
+Recomputed from every metrics.csv; matches `/storage3/DSIP/rriva/research/fm4tag/experiments/2026-08_lambda-scan/plots/val_loss_ce/val_loss_ce_best_vs_lambda_no_dropout_min2_summary.csv` to all printed digits.
 
 | config | regime(s) | n used (stuck/outlier removed) | mean best val CE +- std | min | best epochs | val-train gap at last epoch |
 |---|---|---|---|---|---|---|
@@ -99,7 +99,7 @@ Recomputed from every metrics.csv; matches `/storage3/DSIP/rriva/research/fm4tag
   (weights b 1.5, c 1.5, u 1.0, tau 4.0) -> its val_loss 0.59814 is NOT comparable to fm4tag's unweighted val CE.
   Eval file `.../ckpts/epoch=015-val_loss=0.59814__test_pp_output_test.h5` on the same test h5.
 - Selection: one model per lambda = the seed with the lowest best val CE, at its pinned best-CE checkpoint
-  (`/storage3/DSIP/rriva/research/fm4tag/scripts/configs/fraction_constrained_lambda_scan_final.yaml`, committed 3ab272f).
+  (`/storage3/DSIP/rriva/research/fm4tag/experiments/2026-08_lambda-scan/configs/fraction_constrained_lambda_scan_final.yaml`, committed 3ab272f).
 - Cuts 20 < pT < 250 GeV, |eta| < 2.5: 4,998,732 test jets (b 1,290,091; c 1,289,789; u 1,934,992; tau 483,860).
 - D_b = log[p_b / (f_c p_c + f_tau p_tau + (1 - f_c - f_tau) p_u)]. Final metric: c-rejection at 80% b-efficiency, maximised over
   (f_c, f_tau) on a grid f_c in [0, 0.598], f_tau in [0, 0.148], step 0.002 (22,500 points) subject to u-rej >= 1.0 x GN2 (171.117) and
@@ -137,7 +137,7 @@ Recomputed from every metrics.csv; matches `/storage3/DSIP/rriva/research/fm4tag
   GN2 light floor (e.g. lambda 0.2 u-rej 280.2 < 284.5).
 - Phase 0 (2026-08-18, single seeds, WP 0.77, coarse grid, test set): per_token no-JC lr 3e-4 15.25 vs GN2 15.10;
   JC 0.3/1.0/3.0 at lambda 0.1: 15.02/14.95/14.63; concat (jc 1.0) best 14.65 @lambda 0.25; concat lambda 0.75 / 0.9 diverged
-  (c-rej 1.99 / 2.43; best val CE 1.131 / 1.052). (`/storage3/DSIP/rriva/research/fm4tag/scripts/plots/rejection_summary_phase0/summary.csv`)
+  (c-rej 1.99 / 2.43; best val CE 1.131 / 1.052). (`/storage3/DSIP/rriva/research/fm4tag/experiments/2026-08_lambda-scan/plots/rejection_summary_phase0/summary.csv`)
 
 ## 4. Embedding quality [files]
 
@@ -156,29 +156,29 @@ uniformity -3.878, rank dip to 115.5) is real data.
 
 ## 5. Permutation importance [files] (old architecture)
 
-`/storage3/DSIP/rriva/research/fm4tag/scripts/plots/permutation_importance_20260820_081655/` on the OLD jc=1.0 lambda scan
+`/storage3/DSIP/rriva/research/fm4tag/experiments/2026-08_lambda-scan/plots/permutation_importance_20260820_081655/` on the OLD jc=1.0 lambda scan
 (run_20260811_105149: concat row mode, num_inds 128/256, ff_mult 2, single seed 42), lambda 0.15-0.5, 200k val jets, 5 repeats,
 metric val CE, pooled over valid tracks, paired shuffles. Ranking stable (Spearman vs lambda 0.15 >= 0.977); dphi > deta > d0 ~
 lifetimeSignedD0Significance > qOverP, z0; hit-pattern group dCE 0.019-0.032. Profile flattens with lambda: dphi share 0.330 -> 0.181,
 measurement-uncertainty group dCE 0.071 -> 0.228, momentum group 0.047 -> 0.196 (lambda 0.15 -> 0.5); impact-parameter group ~0.78-0.87;
 jet pT 0.13-0.29, jet eta ~0. Never repeated on the final per_token jc=0.3 ladder.
 
-## 6. Paper-ready figures (all exist; commands in /storage3/DSIP/rriva/research/fm4tag/plot_paths.txt)
+## 6. Paper-ready figures (all exist; commands in /storage3/DSIP/rriva/research/fm4tag/experiments/2026-08_lambda-scan/plot_paths.txt)
 
-Base config B = scripts/configs/val_loss_ce_seed_curves_cmap.yaml; overlay O1 = val_loss_ce_best_vs_lambda_no_dropout_min2.yaml;
+Base config B = experiments/2026-08_lambda-scan/configs/val_loss_ce_seed_curves_cmap.yaml; overlay O1 = val_loss_ce_best_vs_lambda_no_dropout_min2.yaml;
 O2 = val_loss_ce_best_vs_lambda_categorical_colours.yaml; O3 = ce_and_embedding_curves.yaml (all in scripts/configs/).
-- Mean best val CE vs lambda (focus plot, categorical): /storage3/DSIP/rriva/research/fm4tag/plots/val_loss_ce/val_loss_ce_best_vs_lambda_no_dropout_min2_categorical.png (B+O1+O2; plot_best_vs_lambda.py) + _summary.csv
-- Same, gradient colours: /storage3/DSIP/rriva/research/fm4tag/plots/val_loss_ce/val_loss_ce_best_vs_lambda_no_dropout_min2.png (B+O1)
-- All 16 lambdas + both baselines: /storage3/DSIP/rriva/research/fm4tag/plots/val_loss_ce/val_loss_ce_best_vs_lambda_all.png (B)
-- Per-seed val CE curves with stars, focus pool (49 runs): /storage3/DSIP/rriva/research/fm4tag/plots/val_loss_ce/val_loss_ce_best_vs_lambda_no_dropout_min2_categorical_curves.png (B+O1+O2); gradient: ..._no_dropout_min2_curves.png
-- Full-pool curves / markers: /storage3/DSIP/rriva/research/fm4tag/plots/val_loss_ce/val_loss_ce_seed_curves_cmap.png and _cmap_markers.png (plot_seed_curves.py, B); categorical val_loss_ce_seed_curves.png (val_loss_ce_seed_curves.yaml); xlim80/ variants
-- ROC, 13 models + GN2 (categorical, c/light/tau panels, own optimal fractions): /storage3/DSIP/rriva/research/fm4tag/scripts/plots/run_20261001_110047_lambda_scan_final_wp080_u100_tau100/categorical_no_dropout_min2/roc_no_dropout_min2.png (its roc_comparison_config.yaml)
-- ROC reduced, latest (no JC black, GN2 grey, lambda 0.6 blue, 0.55 green, 0.05 red; WP line 0.8; 600 dpi; no "Simulation Internal"; 2026-11-10): /storage3/DSIP/rriva/research/fm4tag/scripts/plots/run_20261001_110047_lambda_scan_final_wp080_u100_tau100/categorical_no_dropout_min2/ce_only_gn2_best_worst_valce_600dpi/roc_ce_only_gn2_best_second_worst_valce_colours_600dpi.png
+- Mean best val CE vs lambda (focus plot, categorical): /storage3/DSIP/rriva/research/fm4tag/experiments/2026-08_lambda-scan/plots/val_loss_ce/val_loss_ce_best_vs_lambda_no_dropout_min2_categorical.png (B+O1+O2; plot_best_vs_lambda.py) + _summary.csv
+- Same, gradient colours: /storage3/DSIP/rriva/research/fm4tag/experiments/2026-08_lambda-scan/plots/val_loss_ce/val_loss_ce_best_vs_lambda_no_dropout_min2.png (B+O1)
+- All 16 lambdas + both baselines: /storage3/DSIP/rriva/research/fm4tag/experiments/2026-08_lambda-scan/plots/val_loss_ce/val_loss_ce_best_vs_lambda_all.png (B)
+- Per-seed val CE curves with stars, focus pool (49 runs): /storage3/DSIP/rriva/research/fm4tag/experiments/2026-08_lambda-scan/plots/val_loss_ce/val_loss_ce_best_vs_lambda_no_dropout_min2_categorical_curves.png (B+O1+O2); gradient: ..._no_dropout_min2_curves.png
+- Full-pool curves / markers: /storage3/DSIP/rriva/research/fm4tag/experiments/2026-08_lambda-scan/plots/val_loss_ce/val_loss_ce_seed_curves_cmap.png and _cmap_markers.png (plot_seed_curves.py, B); categorical val_loss_ce_seed_curves.png (val_loss_ce_seed_curves.yaml); xlim80/ variants
+- ROC, 13 models + GN2 (categorical, c/light/tau panels, own optimal fractions): /storage3/DSIP/rriva/research/fm4tag/experiments/2026-08_lambda-scan/plots/run_20261001_110047_lambda_scan_final_wp080_u100_tau100/categorical_no_dropout_min2/roc_no_dropout_min2.png (its roc_comparison_config.yaml)
+- ROC reduced, latest (no JC black, GN2 grey, lambda 0.6 blue, 0.55 green, 0.05 red; WP line 0.8; 600 dpi; no "Simulation Internal"; 2026-11-10): /storage3/DSIP/rriva/research/fm4tag/experiments/2026-08_lambda-scan/plots/run_20261001_110047_lambda_scan_final_wp080_u100_tau100/categorical_no_dropout_min2/ce_only_gn2_best_worst_valce_600dpi/roc_ce_only_gn2_best_second_worst_valce_colours_600dpi.png
 - ROC 17 models, optimal fractions (older layout): .../run_20261001_110047_lambda_scan_final_wp080_u100_tau100/roc.png (+ optimal_fractions.csv, working_points.csv)
-- ROC 17 models at nominal fractions: /storage3/DSIP/rriva/research/fm4tag/scripts/plots/run_20260930_152803_lambda_scan_final_wp080/nominal/roc.png (+ working_points.csv)
-- CE + embedding curves: /storage3/DSIP/rriva/research/fm4tag/plots/ce_vs_embedding/{ce_only,cl}_{uniformity,effective_rank}.png (B+O1+O3; plot_ce_and_embedding.py) + run_selection.csv
-- Permutation importance (old arch): /storage3/DSIP/rriva/research/fm4tag/scripts/plots/permutation_importance_20260820_081655/{profile,heatmap,drift}.png
-- Phase 0: /storage3/DSIP/rriva/research/fm4tag/scripts/plots/rejection_summary_phase0/{crej_vs_jc,crej_vs_lambda}.png
+- ROC 17 models at nominal fractions: /storage3/DSIP/rriva/research/fm4tag/experiments/2026-08_lambda-scan/plots/run_20260930_152803_lambda_scan_final_wp080/nominal/roc.png (+ working_points.csv)
+- CE + embedding curves: /storage3/DSIP/rriva/research/fm4tag/experiments/2026-08_lambda-scan/plots/ce_vs_embedding/{ce_only,cl}_{uniformity,effective_rank}.png (B+O1+O3; plot_ce_and_embedding.py) + run_selection.csv
+- Permutation importance (old arch): /storage3/DSIP/rriva/research/fm4tag/experiments/2026-08_lambda-scan/plots/permutation_importance_20260820_081655/{profile,heatmap,drift}.png
+- Phase 0: /storage3/DSIP/rriva/research/fm4tag/experiments/2026-08_lambda-scan/plots/rejection_summary_phase0/{crej_vs_jc,crej_vs_lambda}.png
 
 ## 7. Inconsistencies / referee risks
 1. Lambda is confounded with batch regime (A/B/C: gradient batch 2048 vs 4096, row-attention context 1024 vs 2048) and with

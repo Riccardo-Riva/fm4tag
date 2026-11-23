@@ -5,15 +5,15 @@
 #   scripts/submit_permutation_importance.sh <config.yaml> [extra args...]
 #
 # Examples:
-#   scripts/submit_permutation_importance.sh scripts/configs/permutation_importance_lambda_scan.yaml
-#   scripts/submit_permutation_importance.sh scripts/configs/... --max-jets 20000 --repeats 2
+#   scripts/submit_permutation_importance.sh experiments/2026-08_lambda-scan/configs/permutation_importance_lambda_scan.yaml
+#   scripts/submit_permutation_importance.sh experiments/<campaign>/configs/... --max-jets 20000 --repeats 2
 #
 # Cost scales as  n_models x n_jets x (1 + n_variants x repeats)  forward
 # passes; the default config is 7 models x 200k jets x (1 + 25 x 5) = 176 M
 # jet-forwards.  Trim with --max-jets / --repeats if the walltime bites.
 #
-# Results go to scripts/plots/permutation_importance_<timestamp>/ (passed via
-# --output); logs to scripts/logs/permutation_importance/.
+# Results go to experiments/<campaign>/plots/permutation_importance_<timestamp>/ (passed via
+# --output); logs to experiments/2026-08_lambda-scan/outputs/script_logs/permutation_importance/.
 
 set -euo pipefail
 
@@ -23,9 +23,13 @@ shift
 EXTRA_ARGS="$*"
 
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-OUT_DIR=$REPO/scripts/plots/permutation_importance_$TIMESTAMP
+# outputs go to the plots/ of the experiment whose configs/ holds CONFIG (or EXPERIMENT=<campaign>)
+source "$REPO/slurm/experiment_of.sh"
+EXP=$(experiment_of "$CONFIG")
+[[ -n "$EXP" && -d "$REPO/experiments/$EXP" ]] || { echo "config is not under experiments/<campaign>/: set EXPERIMENT=<campaign>" >&2; exit 1; }
+OUT_DIR=$REPO/experiments/$EXP/plots/permutation_importance_$TIMESTAMP
 
-LOG_DIR=$REPO/scripts/logs/permutation_importance
+LOG_DIR=$REPO/experiments/2026-08_lambda-scan/outputs/script_logs/permutation_importance
 mkdir -p "$LOG_DIR"
 
 echo "Output directory: $OUT_DIR"

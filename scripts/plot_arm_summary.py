@@ -8,7 +8,7 @@ comes from ``arm_summary.texts``; a missing key is an error.
 
 Usage::
 
-    python scripts/plot_arm_summary.py --config scripts/configs/arm_summary.yaml
+    python scripts/plot_arm_summary.py --config experiments/2026-10_ssl-campaign/configs/arm_summary.yaml
 """
 
 from __future__ import annotations

@@ -10,7 +10,7 @@ with ``relative_to: <arm>`` divides every rejection of a panel by the mean rejec
 
 Usage::
 
-    python scripts/plot_test_rejections.py --config scripts/configs/test_rejections.yaml
+    python scripts/plot_test_rejections.py --config experiments/2026-10_ssl-campaign/configs/test_rejections.yaml
 """
 
 from __future__ import annotations

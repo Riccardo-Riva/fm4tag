@@ -1,0 +1,56 @@
+# S3 — learning rate of each downstream arm (rriva, 2026-10-26). Three learning
+# rates a factor 2 apart around the sqrt-B prior of S1, lr(B) = 3e-4 * sqrt(B / 2048)
+# (Adam: the gradient noise falls as 1/sqrt(B), so the step that keeps the same
+# signal-to-noise grows as sqrt(B)). One seed (42), on the seed-42 pretrainings
+# (P_full, QK-norm, 30 epochs, last.ckpt); campaign defaults: 40-epoch cosine,
+# early stopping on val CE (patience 12), QK-norm. JC weight 0.3, lambda 0.4.
+# FT also with the pretrained parts at lr / 10 (backbone_lr). P2 has no
+# downstream arm for now (rriva, 2026-10-26).
+#
+# Batch per arm fills ~92% of the 45 GiB card (rriva: fill the card, frozen arms
+# included), scaled from the memory measured on the first S3 launch
+# (S3_lr_20261026_095940_ABORTED_smallbatch) and the S2_qk probes; the batch
+# only has to be a multiple of chunk_size (512):
+#   SC / FT      35.3 GiB at 24576 -> 28672   lr centre 1.12e-3
+#   + JC         34.6 GiB at 12288 -> 14336   lr centre 7.9e-4
+#   frozen       14.2 GiB at 32768 -> 94208   lr centre 2.0e-3  (~200 steps/epoch)
+#   frozen + JC  53760 from S0's frozen / frozen + JC memory ratio (not measured)
+# Host RAM: the frozen arm at 94208 was killed at 22 GB per GPU (data-loader
+# prefetch of 12 batches of ~0.4 GB each): its cells and the P1 arms run with
+# MEM_PER_GPU_GB=40.
+# FR <- P0 at 94208 then went NaN in its first epoch (S3_lr_20261027_093035_ABORTED_varlen):
+# flash varlen's backward overflowed its 32-bit-indexed dq buffer at >62k aggregator
+# sequences; fixed in 3a22662 (launches sliced under 2**31 elements), then rerun.
+# S3 result (2026-10-27): FT <- P0 is better with the pretrained parts at lr / 10
+# (0.630 vs 0.644), so FT <- P1 + JC uses backbone_lr = lr / 10.
+# Epoch on an A40: SC ~20 min, + JC ~2x, frozen ~9 min.
+#
+# Now (P0 is done), longest cells first:
+#   ENCODERS=rowcol_concat_v0 CHUNK=512 SEEDS=42 PACKS=4 MEM_PER_GPU_GB=22 \
+#   MAX_EPOCHS=40 EST_SECONDS_PER_EPOCH=1250 WALLTIME=2-00:00:00 \
+#   CELL_FILTER='^(sc|scjc|ft_p0|fr_p0)_' CELLS=experiments/2026-10_ssl-campaign/configs/S3_lr.cells bash slurm/ssl_pack.sh
+# The P1 arms only once the P1 pretraining (P_full_20261026_094445) has completed
+# or with DEPENDENCY=afterany:<its pack>: a cell on a pretraining that is not
+# completed is skipped as failed. FT + JC takes the backbone_lr that wins FT <- P0.
+#   ... CELL_FILTER='_p1_' ...
+scjc_lr4e-4  arm=scratch finetune.loss_weights.jet_contrastive=0.3 encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=14336 optimizer.lr=4e-4 @est=2500
+scjc_lr8e-4  arm=scratch finetune.loss_weights.jet_contrastive=0.3 encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=14336 optimizer.lr=8e-4 @est=2500
+scjc_lr1.6e-3  arm=scratch finetune.loss_weights.jet_contrastive=0.3 encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=14336 optimizer.lr=1.6e-3 @est=2500
+sc_lr5.6e-4  arm=scratch encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=28672 optimizer.lr=5.6e-4
+sc_lr1.1e-3  arm=scratch encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=28672 optimizer.lr=1.1e-3
+sc_lr2.2e-3  arm=scratch encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=28672 optimizer.lr=2.2e-3
+ft_p0_lr5.6e-4  arm=finetune encoder_ckpt=@/storage3/DSIP/rriva/research/fm4tag/experiments/2026-10_ssl-campaign/outputs/P_full_20261023_085735/p0/seed_42 encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=28672 optimizer.lr=5.6e-4
+ft_p0_lr1.1e-3  arm=finetune encoder_ckpt=@/storage3/DSIP/rriva/research/fm4tag/experiments/2026-10_ssl-campaign/outputs/P_full_20261023_085735/p0/seed_42 encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=28672 optimizer.lr=1.1e-3
+ft_p0_lr2.2e-3  arm=finetune encoder_ckpt=@/storage3/DSIP/rriva/research/fm4tag/experiments/2026-10_ssl-campaign/outputs/P_full_20261023_085735/p0/seed_42 encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=28672 optimizer.lr=2.2e-3
+ft_p0_lr5.6e-4_bb10  arm=finetune encoder_ckpt=@/storage3/DSIP/rriva/research/fm4tag/experiments/2026-10_ssl-campaign/outputs/P_full_20261023_085735/p0/seed_42 encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=28672 optimizer.lr=5.6e-4 optimizer.backbone_lr=5.6e-5
+ft_p0_lr1.1e-3_bb10  arm=finetune encoder_ckpt=@/storage3/DSIP/rriva/research/fm4tag/experiments/2026-10_ssl-campaign/outputs/P_full_20261023_085735/p0/seed_42 encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=28672 optimizer.lr=1.1e-3 optimizer.backbone_lr=1.1e-4
+ft_p0_lr2.2e-3_bb10  arm=finetune encoder_ckpt=@/storage3/DSIP/rriva/research/fm4tag/experiments/2026-10_ssl-campaign/outputs/P_full_20261023_085735/p0/seed_42 encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=28672 optimizer.lr=2.2e-3 optimizer.backbone_lr=2.2e-4
+fr_p0_lr1e-3  arm=frozen encoder_ckpt=@/storage3/DSIP/rriva/research/fm4tag/experiments/2026-10_ssl-campaign/outputs/P_full_20261023_085735/p0/seed_42 encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=94208 optimizer.lr=1e-3 @est=650
+fr_p0_lr2e-3  arm=frozen encoder_ckpt=@/storage3/DSIP/rriva/research/fm4tag/experiments/2026-10_ssl-campaign/outputs/P_full_20261023_085735/p0/seed_42 encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=94208 optimizer.lr=2e-3 @est=650
+fr_p0_lr4e-3  arm=frozen encoder_ckpt=@/storage3/DSIP/rriva/research/fm4tag/experiments/2026-10_ssl-campaign/outputs/P_full_20261023_085735/p0/seed_42 encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=94208 optimizer.lr=4e-3 @est=650
+ftjc_p1_lr4e-4  arm=finetune encoder_ckpt=@/storage3/DSIP/rriva/research/fm4tag/experiments/2026-10_ssl-campaign/outputs/P_full_20261026_094445/p1/seed_42 finetune.loss_weights.jet_contrastive=0.3 encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=14336 optimizer.lr=4e-4 optimizer.backbone_lr=4e-5 @est=2500
+ftjc_p1_lr8e-4  arm=finetune encoder_ckpt=@/storage3/DSIP/rriva/research/fm4tag/experiments/2026-10_ssl-campaign/outputs/P_full_20261026_094445/p1/seed_42 finetune.loss_weights.jet_contrastive=0.3 encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=14336 optimizer.lr=8e-4 optimizer.backbone_lr=8e-5 @est=2500
+ftjc_p1_lr1.6e-3  arm=finetune encoder_ckpt=@/storage3/DSIP/rriva/research/fm4tag/experiments/2026-10_ssl-campaign/outputs/P_full_20261026_094445/p1/seed_42 finetune.loss_weights.jet_contrastive=0.3 encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=14336 optimizer.lr=1.6e-3 optimizer.backbone_lr=1.6e-4 @est=2500
+frjc_p1_lr7.5e-4  arm=frozen encoder_ckpt=@/storage3/DSIP/rriva/research/fm4tag/experiments/2026-10_ssl-campaign/outputs/P_full_20261026_094445/p1/seed_42 finetune.loss_weights.jet_contrastive=0.3 encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=53760 optimizer.lr=7.5e-4 @est=900
+frjc_p1_lr1.5e-3  arm=frozen encoder_ckpt=@/storage3/DSIP/rriva/research/fm4tag/experiments/2026-10_ssl-campaign/outputs/P_full_20261026_094445/p1/seed_42 finetune.loss_weights.jet_contrastive=0.3 encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=53760 optimizer.lr=1.5e-3 @est=900
+frjc_p1_lr3e-3  arm=frozen encoder_ckpt=@/storage3/DSIP/rriva/research/fm4tag/experiments/2026-10_ssl-campaign/outputs/P_full_20261026_094445/p1/seed_42 finetune.loss_weights.jet_contrastive=0.3 encoders=${ENCODERS} chunk_size=${CHUNK} datamodule.batch_size=53760 optimizer.lr=3e-3 @est=900

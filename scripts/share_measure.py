@@ -9,7 +9,7 @@ assuming every co-tenant slows down like the measured cell of the same kind.
 
 nvidia-smi is sampled every 10 s into ``<out>/nvidia_smi.csv`` (memory used per card, utilisation).
 
-Run inside a 2-GPU slurm job (slurm/share_measure.sh); the two cards run their scenario lists in parallel.
+Run inside a 2-GPU slurm job (experiments/2026-11_wsd-lr-search/slurm/share_measure.sh); the two cards run their scenario lists in parallel.
 """
 
 from __future__ import annotations

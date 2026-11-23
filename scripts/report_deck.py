@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 """Every plot of the SSL report in one pptx: one or two plots per slide, with the settings of the models they show.
 
-    .venv/bin/python scripts/report_deck.py --config scripts/configs/slides/report.yaml
-    (on a CPU node: sbatch slurm/plot_job.sh scripts/report_deck.py:scripts/configs/slides/report.yaml)
+    .venv/bin/python scripts/report_deck.py --config experiments/2026-10_ssl-campaign/configs/slides/report.yaml
+    (on a CPU node: sbatch slurm/plot_job.sh scripts/report_deck.py:experiments/2026-10_ssl-campaign/configs/slides/report.yaml)
 
 The slides come from ``slides`` in the YAML: a title, section dividers, tables of the models' settings, and plot
 slides of one or two plots.  A plot slide lists the models its plots show (``models``: keys of ``models``, each a

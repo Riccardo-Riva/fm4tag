@@ -18,7 +18,7 @@ plus ``run_selection.csv``.  Every word on the figures comes from ``method_scan.
 
 Usage::
 
-    python scripts/plot_method_scan.py --config scripts/configs/method_scan_lr.yaml
+    python scripts/plot_method_scan.py --config experiments/2026-10_ssl-campaign/configs/method_scan_lr.yaml
 """
 
 from __future__ import annotations

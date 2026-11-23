@@ -5,8 +5,8 @@
 #   scripts/submit_roc_comparison.sh <config.yaml> [extra roc_comparison.py args...]
 #
 # Examples:
-#   scripts/submit_roc_comparison.sh scripts/configs/roc_comparison_run_20260708_045439.yaml
-#   scripts/submit_roc_comparison.sh scripts/configs/my_comparison.yaml --recompute
+#   scripts/submit_roc_comparison.sh experiments/2026-08_lambda-scan/configs/roc_comparison_run_20260708_045439.yaml
+#   scripts/submit_roc_comparison.sh experiments/<campaign>/configs/my_comparison.yaml --recompute
 #
 # Plots go to slurm/plots/run_<timestamp> (passed to roc_comparison.py via
 # --output); logs go to slurm/roc_comparison/roc_comparison_<jobid>.log.
@@ -21,9 +21,13 @@ shift
 EXTRA_ARGS="$*"
 
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-OUT_DIR=$REPO/scripts/plots/run_$TIMESTAMP
+# outputs go to the plots/ of the experiment whose configs/ holds CONFIG (or EXPERIMENT=<campaign>)
+source "$REPO/slurm/experiment_of.sh"
+EXP=$(experiment_of "$CONFIG")
+[[ -n "$EXP" && -d "$REPO/experiments/$EXP" ]] || { echo "config is not under experiments/<campaign>/: set EXPERIMENT=<campaign>" >&2; exit 1; }
+OUT_DIR=$REPO/experiments/$EXP/plots/run_$TIMESTAMP
 
-LOG_DIR=$REPO/scripts/logs/roc_comparison
+LOG_DIR=$REPO/experiments/2026-08_lambda-scan/outputs/script_logs/roc_comparison
 mkdir -p "$LOG_DIR"
 
 echo "Plot output directory: $OUT_DIR"

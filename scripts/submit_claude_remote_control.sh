@@ -22,7 +22,7 @@ TIME_LIMIT="${1:-3-00:00:00}"
 CPUS="${2:-4}"
 MEM="${3:-8G}"
 
-LOG_DIR=$REPO/scripts/logs/claude_remote
+LOG_DIR=$REPO/experiments/2026-08_lambda-scan/outputs/script_logs/claude_remote
 mkdir -p "$LOG_DIR"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 

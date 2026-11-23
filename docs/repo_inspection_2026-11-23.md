@@ -127,7 +127,7 @@ Design and decision logs: `chunk/docs/ssl_campaign.md` (tracked) and the header 
    edge of the grid (SC + dropout at 3e-3 and 6e-3, FR←P0 at 3e-3).
 2. Test evaluation of the GN2 runs, as a same-data reference (section 5).
 3. Downstream from the dropout-pretrained checkpoints (`P_drop`), not launched.
-4. Duplicate check of the training file (criticality 3).
+4. ~~Duplicate check of the training file~~: already done on 2026-10-28 (criticality 3).
 5. A controlled JC test (section 8).
 6. Rebuild the deck and paper numbers from the finals.
 
@@ -202,8 +202,12 @@ Severity: H = can change a conclusion, M = weakens a claim, L = hygiene.
 
    Many plots and the deck mix these protocols. The WSD redo fixes this for the downstream runs only.
 3. **H — unexplained overfitting.** Without dropout, from scratch / FT←P0 / FR←P0 peak at epochs 5–7 and then val CE
-   rises to 0.78–0.97, even for frozen encoders on 18.6M jets. Duplicated or resampled jets in the training file were
-   suspected and never checked; if present, validation and test could be affected too.
+   rises to 0.78–0.97, even for frozen encoders on 18.6M jets. *Corrected 2026-11-23:* the duplicate check **was** done
+   on 2026-10-28 (job 6670528, `experiments/2026-10_ssl-campaign/diagnostics/dup_check.py`, log in
+   `diagnostics/outputs/dup/`). In the 18.6M dataset, train / val / test / pretrain share **no** jet; about 2 % of the
+   training rows are resampled copies (τ: 1.24 rows per distinct jet). So duplicates do not explain the overfitting,
+   which stays unexplained. The λ-scan dataset (`112022`) shares about 4 % of its jets with every split of `152051`,
+   so models trained on one must not be tested on the other.
 4. **M/H — evaluation.**
    - GN2v01 was trained on other data, so "beats GN2" is not like-for-like (the same-data GN2 now exists, section 5.2).
    - Fractions optimised per run make gaps look larger (FT←P0 + dropout: 1.25 × SC optimised vs 1.15 × at nominal
@@ -520,3 +524,28 @@ cleanup before submitting.
 - **Stages:** `T4way_full_20261123_164524` (t2, t4; jobs 7385094-97, full cards, L40S or A40) and
   `T4way_shared_20261123_164528` (t1, t3; jobs 7385098-99, two per L40S card).
 - **Expected:** CE cells about 2-2.5 days, JC cells 1.5-5.5 days depending on the card type.
+
+
+**2026-11-23 (evening), experiments reorganised into `experiments/<campaign>/`** (owner's request):
+- **Layout:** every experiment has its own folder with `README.md` (question, data, model, training methods, stages,
+  results, related experiments), `configs/` (cells and analysis configs), `slurm/` (its own launchers), `notes/` /
+  `diagnostics/` where present, and the git-ignored `outputs/` and `plots/`.
+- **The 8 folders:** `2026-03_early-runs`, `2026-07_ce-jc-grids`, `2026-07_kernel-profiling`, `2026-08_lambda-scan`,
+  `2026-10_ssl-campaign`, `2026-11_dropout`, `2026-11_wsd-lr-search`, `2026-11_four-way-jc-dropout`. Plus `_template/`
+  and the index `experiments/README.md` (which replaces `docs/experiments/README.md`).
+- **How it was done:** `scripts/maintenance/restructure_experiments_2026-11-23.py` moved 131 tracked files (git mv)
+  and 201 ignored folders and files (renames on the same filesystem), then rewrote the paths in 184 tracked files.
+  1004 path mentions were checked; every concrete path exists except three old plotting-script defaults that already
+  pointed at a missing folder.
+- **Launchers:**
+  - `slurm/ssl_pack.sh` and `slurm/dropout_batch_sweep.sh` put new stages and sweeps into the `outputs/` of the
+    experiment whose `configs/` holds the cells file (or `EXPERIMENT=`). The config-driven `scripts/submit_*.sh` put
+    their results into that experiment's `plots/`. All three use `slurm/experiment_of.sh`.
+  - Campaign-specific launchers moved into their experiment's `slurm/`. Generic tools (`arm_roc_job.sh`,
+    `arm_test_metrics_job.sh`, `cpu_pytest.sh`, `gpu_pytest.sh`, `gpu_health.sh`) are now tracked in `slurm/`, with a
+    default log folder `slurm/logs/`.
+- **Old paths:** `slurm/ssl_campaign/<stage>` are symlinks to the moved stage folders, and `fm4tag-chunk` is a
+  symlink to the repo. Old run records (`encoder_ckpt` in `.hydra/config.yaml`) keep resolving.
+- **Four-way test:** the first submission (jobs 7385094–99) was cancelled before it started. It is relaunched from
+  `experiments/2026-11_four-way-jc-dropout/` with 6 seeds per cell, and head dropout 0 in the no-dropout cells is
+  confirmed.

@@ -3,8 +3,8 @@
 Usage::
 
     python scripts/plot_losses.py \\
-        --file slurm/pretraining/run_20260305_121539/outputs/model_0_colrow/version_0/metrics.csv \\
-        --outdir plots/losses
+        --file experiments/2026-03_early-runs/outputs/pretraining/run_20260305_121539/outputs/model_0_colrow/version_0/metrics.csv \\
+        --outdir experiments/2026-08_lambda-scan/plots/losses
 """
 
 from __future__ import annotations

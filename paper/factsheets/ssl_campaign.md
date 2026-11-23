@@ -23,7 +23,7 @@ Conventions used below
   "Nominal" = f_c 0.2, f_τ 0.01 (GN2v01's). "Optimised" = per run, grid search on **validation** (step 0.002, f_c ∈ [0,0.15),
   f_τ ∈ [0,0.12)) maximising c-rejection at **80%** b-eff subject to light- and τ-rejection ≥ GN2v01's at 80%; if no
   point satisfies both, the point maximising min(u_rej/floor_u, τ_rej/floor_τ) is taken and the run is flagged
-  infeasible. Rejections then quoted on **test at 77%** b-eff. [F] `scripts/configs/arm_test_metrics.yaml`, `scripts/arm_test_metrics.py:125-150`.
+  infeasible. Rejections then quoted on **test at 77%** b-eff. [F] `experiments/2026-10_ssl-campaign/configs/arm_test_metrics.yaml`, `scripts/arm_test_metrics.py:125-150`.
 - GN2v01 = ATLAS production tagger scores stored as columns in the test file (not trained on our 18.6M jets: yardstick
   only). The salt GN2 retrained on dataset 112022 is NOT usable here (its train set overlaps this test set). [F] campaign_ssl.yaml comment; [M]
 
@@ -43,7 +43,7 @@ flavour counts per split [F] `*/output/base_train.yaml`:
 - Composition in every split: b 25.8%, c 25.8%, light 38.7%, τ 9.7%. CE at the class priors = 1.29 (= the "collapsed" value 1.287-1.289). [F]/[I]
 - The pretraining split is "unlabelled" only in the loss: its flavour mix was set by truth-label resampling. [F]/[I]
 - Train split has ~2% duplicates from countup (18.24M distinct jets); no overlap between splits; ~43% of every 152051 split is in the
-  old 112022 train set (λ-scan pillar data) → old checkpoints cannot be evaluated here. [M] (slurm/smoke/dup_check.py)
+  old 112022 train set (λ-scan pillar data) → old checkpoints cannot be evaluated here. [M] (experiments/2026-10_ssl-campaign/diagnostics/dup_check.py)
 - Normalisation from the train split for all phases (`norm_dict_path: ${base_path}/train/...`). [F] P0 config.
 - Inputs: jets pt_btagJes, eta_btagJes (2 features); tracks 10 continuous + 9 categorical hit-count features. [F] config.
 
@@ -180,7 +180,7 @@ adding downstream JC hurts given P1 (FT +0.0130, FR +0.0075; batch/lr also diffe
 Pretraining-seed effect: FT←P0 s42 0.6316 vs s424 0.6308; FR←P1 s42 0.6335 vs s424 0.6387; FR+JC←P1 0.6415 vs 0.6456 [F].
 Test CE equals best val CE within 5e-4 in every arm [F per_arm.csv].
 
-### 5.2 Test rejections at 77% b-eff [F] `/storage3/DSIP/rriva/research/fm4tag/plots/arm_comparison/test_metrics/per_run.csv`
+### 5.2 Test rejections at 77% b-eff [F] `/storage3/DSIP/rriva/research/fm4tag/experiments/2026-10_ssl-campaign/plots/arm_comparison/test_metrics/per_run.csv`
 
 Mean ± std over 4 runs.
 
@@ -241,7 +241,7 @@ SC 0.7188/0.7156/0.7154/0.7173; FT 0.7649/0.7646/0.7628/0.7626; FR 0.7801/0.7798
 Earlier 10% single-seed side test (S3_lowlabel): SC 0.6952, FT←P0 (lr 2.2e-3) 0.7346, FT←P0 (5.6e-4) 0.7265, FR←P0 0.7463. [F]
 NOT done: P1 at reduced labels (the only winning pretraining).
 
-### 5.5 Dropout study (dropout 0.2, 80-epoch cosine) [F] D_drop + `plots/dropout/test_metrics/per_run.csv`
+### 5.5 Dropout study (dropout 0.2, 80-epoch cosine) [F] D_drop + `experiments/2026-11_dropout/plots/dropout/test_metrics/per_run.csv`
 
 | Case | no-drop val CE | drop val CE | drop best epochs | opt. c/light/τ rel. to SC (drop) | feasible (drop) |
 |---|---|---|---|---|---|
@@ -308,7 +308,7 @@ P1 probes peak late (ep 9-14) [F].
 - First full 30-epoch pretrainings (no QK-norm, lr 1e-3, clip 1.0; stage P_full_20261021_*): P0 s42 collapsed (val loss 5.81 → 11.14,
   track eff. rank 2.8, max pre-clip grad-norm window 7.4e5), P0 s424 broke (val 5.74 → 7.45, grad max 1.9e8), P1 s42 spiked (6.00 → 6.16,
   grad max 1.0e6); P1 s424 OOM-failed at epoch 7 [F metrics/run_info]. All 4 stopped 2026-10-22.
-- Diagnosis (`slurm/smoke/attn_logits.py`, spike_repro): attention-logit growth in the TRACK encoder's row (intersample) attention,
+- Diagnosis (`experiments/2026-10_ssl-campaign/diagnostics/attn_logits.py`, spike_repro): attention-logit growth in the TRACK encoder's row (intersample) attention,
   blocks 0-1: max scaled logit q·k/√d 1e5-1e7, normalised entropy → 0 (one-hot over the 512-jet chunk), ‖W_qkv‖ 24 (ep1) → 95 (ep4) → 197
   (P1 ep7) → 324 (S2 P0 winner ep9); bf16 rounding (~1e4-1e5 on such logits) flips the argmax → gradient spikes; S1 from-scratch models
   healthy (logit ~20, ‖W_qkv‖ ~20) → pretraining-specific; LR only slows it. [C 7194]
@@ -328,7 +328,7 @@ Other engineering facts usable in a methods/appendix section [M]: flash varlen b
 ## 6. Compute (from run_info elapsed) [F]
 Pretraining 30 ep: P0 43.4 h (A40), P1 34.2 h (L40S), P2 42.7 h (A40), per seed. Downstream finals (no dropout): SC 4.8-5.4 h, SC+JC
 10-17 h, FT←P0 3.9-6.1 h (ES), FR←P0 2.1-3.4 h, FT←P1 13.5-15.8 h, FR←P1 5.5-7.5 h, FT←P1+JC 17.7 h, FR←P1+JC 7.9-11.5 h. Dropout runs 6-42 h.
-Planned "cost per arm" table (docs/ssl_campaign.md §5.7) never produced.
+Planned "cost per arm" table (experiments/2026-10_ssl-campaign/notes/ssl_campaign.md §5.7) never produced.
 
 ## 7. Still running / planned (as of 2026-11-17)
 
@@ -363,24 +363,24 @@ Planned "cost per arm" table (docs/ssl_campaign.md §5.7) never produced.
 ## 8. Plots
 
 Paper-ready candidates (wording in YAML `texts:`, no "ATLAS", consistent style; I viewed the first three):
-- `/storage3/DSIP/rriva/research/fm4tag/plots/arm_comparison/summary/best_val_ce_per_method.png` — best val CE, 8 methods, 3 groups (viewed: clean).
-- `/storage3/DSIP/rriva/research/fm4tag/plots/arm_comparison/test_metrics/test_rejections_optimal_wp77.png` (+ `_gn2`, `nominal_wp77`, `optimal_wp70`, `optimal_wp85`) — test c/light/τ rejections, 8 methods (viewed: clean, footnote correct).
-- `/storage3/DSIP/rriva/research/fm4tag/plots/label_scan/learning_curve/best_val_ce_vs_labelled_jets.png` — label scan (viewed: clean; P0 only).
-- `/storage3/DSIP/rriva/research/fm4tag/plots/pretrain_curves/final/p{0,1}_s{42,424}_{loss_terms,loss_and_effective_rank,loss_and_uniformity}.png` — pretraining curves (12 PNG).
-- `/storage3/DSIP/rriva/research/fm4tag/plots/p0_vs_p1/summary/best_val_ce_p0_vs_p1.png`, `/storage3/DSIP/rriva/research/fm4tag/plots/p0_vs_p1/test_rejections/relative_optimal_wp77.png`.
-- `/storage3/DSIP/rriva/research/fm4tag/plots/arm_comparison/epochs_scjc/ce_train_val.png` (+ `effective_rank.png`, `uniformity.png`) — SC+JC collapse illustration.
-- `/storage3/DSIP/rriva/research/fm4tag/plots/arm_comparison/epochs/ce_train_val_zoom.png`, `.../epochs_p1/ce_train_val_zoom.png` — per-epoch CE (overfitting / FT←P1 still improving).
+- `/storage3/DSIP/rriva/research/fm4tag/experiments/2026-10_ssl-campaign/plots/arm_comparison/summary/best_val_ce_per_method.png` — best val CE, 8 methods, 3 groups (viewed: clean).
+- `/storage3/DSIP/rriva/research/fm4tag/experiments/2026-10_ssl-campaign/plots/arm_comparison/test_metrics/test_rejections_optimal_wp77.png` (+ `_gn2`, `nominal_wp77`, `optimal_wp70`, `optimal_wp85`) — test c/light/τ rejections, 8 methods (viewed: clean, footnote correct).
+- `/storage3/DSIP/rriva/research/fm4tag/experiments/2026-10_ssl-campaign/plots/label_scan/learning_curve/best_val_ce_vs_labelled_jets.png` — label scan (viewed: clean; P0 only).
+- `/storage3/DSIP/rriva/research/fm4tag/experiments/2026-10_ssl-campaign/plots/pretrain_curves/final/p{0,1}_s{42,424}_{loss_terms,loss_and_effective_rank,loss_and_uniformity}.png` — pretraining curves (12 PNG).
+- `/storage3/DSIP/rriva/research/fm4tag/experiments/2026-10_ssl-campaign/plots/p0_vs_p1/summary/best_val_ce_p0_vs_p1.png`, `/storage3/DSIP/rriva/research/fm4tag/experiments/2026-10_ssl-campaign/plots/p0_vs_p1/test_rejections/relative_optimal_wp77.png`.
+- `/storage3/DSIP/rriva/research/fm4tag/experiments/2026-10_ssl-campaign/plots/arm_comparison/epochs_scjc/ce_train_val.png` (+ `effective_rank.png`, `uniformity.png`) — SC+JC collapse illustration.
+- `/storage3/DSIP/rriva/research/fm4tag/experiments/2026-10_ssl-campaign/plots/arm_comparison/epochs/ce_train_val_zoom.png`, `.../epochs_p1/ce_train_val_zoom.png` — per-epoch CE (overfitting / FT←P1 still improving).
 Provisional / not paper-ready:
-- Everything under `/storage3/DSIP/rriva/research/fm4tag/plots/dropout/` — confounded, to be superseded by the WSD redo.
+- Everything under `/storage3/DSIP/rriva/research/fm4tag/experiments/2026-11_dropout/plots/dropout/` — confounded, to be superseded by the WSD redo.
 - All of the above method-comparison plots will be superseded if the WSD redo becomes the paper's result.
 - ROC curves `plots/arm_comparison{,_p1}/roc_test_{nominal,optimal}{,_noref}/roc.png` and rej_vs_pt — one seed per method (choice of seed
   noted in report.yaml); for a paper use multi-seed bands or the summary plots.
-- `/storage3/DSIP/rriva/research/fm4tag/plots/pretrain_curves/*.png` (top level, 11-06; QK pilots, P2) — superseded by `final/`.
-- `plots/label_scan/{lr_check,reg_check}/*` — single-seed checks, appendix at most; label-scan `ce_per_epoch.png` y-range to 2.6.
-- Missing figures: S2 T×λ probe grid (only a table / the old deck `docs/slides/ssl_campaign/ssl_campaign.pdf`), QK-norm logit growth,
+- `/storage3/DSIP/rriva/research/fm4tag/experiments/2026-10_ssl-campaign/plots/pretrain_curves/*.png` (top level, 11-06; QK pilots, P2) — superseded by `final/`.
+- `experiments/2026-10_ssl-campaign/plots/label_scan/{lr_check,reg_check}/*` — single-seed checks, appendix at most; label-scan `ce_per_epoch.png` y-range to 2.6.
+- Missing figures: S2 T×λ probe grid (only a table / the old deck `experiments/2026-10_ssl-campaign/slides/ssl_campaign/ssl_campaign.pdf`), QK-norm logit growth,
   embedding-quality comparison across downstream methods as a single summary.
-Slide decks with all plots: `/storage3/DSIP/rriva/research/fm4tag/docs/slides/report/ssl_campaign_plots.pptx` (78 slides, has the
-"eight training methods" settings table), `/storage3/DSIP/rriva/research/fm4tag/docs/slides/ssl_campaign/ssl_campaign.pptx` (older).
+Slide decks with all plots: `/storage3/DSIP/rriva/research/fm4tag/experiments/2026-10_ssl-campaign/slides/report/ssl_campaign_plots.pptx` (78 slides, has the
+"eight training methods" settings table), `/storage3/DSIP/rriva/research/fm4tag/experiments/2026-10_ssl-campaign/slides/ssl_campaign/ssl_campaign.pptx` (older).
 
 ## 9. Inconsistencies / referee targets
 

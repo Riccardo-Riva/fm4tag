@@ -1,0 +1,51 @@
+# Learning-rate check at 3% of the labels (L_lr.cells), per training method (scripts/plot_method_scan.py):
+#
+#   MPLBACKEND=Agg .venv/bin/python scripts/plot_method_scan.py --config experiments/2026-10_ssl-campaign/configs/method_scan_lr.yaml
+#
+# Runs: every completed run under `stages`, put in an arm by its own .hydra config (as in arm_epochs.yaml); x =
+# its optimizer.lr (the head lr; fine-tuning trains its pretrained parts at lr / 10).
+
+method_scan:
+  out_dir: experiments/2026-10_ssl-campaign/plots/label_scan/lr_check
+  filenames: {best_vs_x: best_val_ce_vs_lr.png, curves: ce_per_epoch.png}
+  stages:
+    - /storage3/DSIP/rriva/research/fm4tag/experiments/2026-10_ssl-campaign/outputs/L_lr_20261104_163831
+  extra_runs: []
+  x_key: optimizer.lr
+  x_null: null                       # x when the key is null (not possible for lr)
+  x_scale: log
+  val_metric: val/head/loss_ce
+  train_metric: train/head/loss_ce_epoch
+  epoch_offset: 1                    # Lightning counts epochs from 0; 1 = the first epoch is epoch 1
+
+  arms:
+    sc: {encoder: scratch, pretraining: null, jet_contrastive: 0.0, colour: '#2a78d6'}
+    ft_p0: {encoder: finetune, pretraining: p0, jet_contrastive: 0.0, colour: '#eb6834'}
+    fr_p0: {encoder: frozen, pretraining: p0, jet_contrastive: 0.0, colour: '#1baf7a'}
+
+  best_figsize: [6.5, 4.5]
+  curves_figsize: [14.0, 4.4]
+  # ylim_best: [0.66, 0.74]
+  # ylim_curves: [0.5, 0.9]
+  legend_loc: best
+  ink: '#333333'
+  best_marker: {marker: '*', size: 11, edge: '#222222', edge_width: 0.9}   # on each run's lowest validation CE; null = none
+  # The legend of each panel sits below it, so it never covers a curve.
+  curves_legend: {loc: upper center, anchor: [0.5, -0.2], ncol: 2, fontsize: 8}
+  curves_zoom: {filename: ce_per_epoch_zoom.png, ylim: [0.69, 0.95]}   # the curves figure at this y range; null = none
+
+  # ---- ALL the wording of the figures lives here --------------------------------------------------------------
+  texts:
+    arm: {sc: 'From scratch', ft_p0: 'Fine-tuned (P0)', fr_p0: 'Frozen encoders (P0)'}
+    title_best: 'Learning-rate check at 3% of the labels (558k jets), seed 42'   # '' = no title
+    xlabel: 'Learning rate'
+    ylabel_best: 'Best validation cross-entropy'
+    run: 'One run'
+    title_curves: 'Cross-entropy per epoch at 3% of the labels, one run per learning rate'
+    xlabel_curves: 'Epoch'
+    ylabel_curves: 'Cross-entropy'
+    x_value: 'lr {x:.1e}'            # legend entry per x value; {x} = the value
+    val: 'Validation'
+    train: 'Training (epoch mean)'
+    best: 'Lowest validation CE of each run'   # legend of the stars
+    title_curves_zoom: 'Cross-entropy per epoch at 3% of the labels, one run per learning rate (zoom)'

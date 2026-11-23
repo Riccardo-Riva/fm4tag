@@ -5,8 +5,8 @@
 #   scripts/submit_fraction_grid_search.sh <config.yaml> [extra fraction_grid_search.py args...]
 #
 # Examples:
-#   scripts/submit_fraction_grid_search.sh scripts/configs/fraction_grid_search_best_ce.yaml
-#   scripts/submit_fraction_grid_search.sh scripts/configs/my_grid.yaml --recompute
+#   scripts/submit_fraction_grid_search.sh experiments/2026-08_lambda-scan/configs/fraction_grid_search_best_ce.yaml
+#   scripts/submit_fraction_grid_search.sh experiments/<campaign>/configs/my_grid.yaml --recompute
 #
 # Outputs go to slurm/plots/run_<timestamp> (passed to fraction_grid_search.py
 # via --output); logs go to slurm/fraction_grid_search/fraction_grid_search_<jobid>.log.
@@ -22,9 +22,13 @@ shift
 EXTRA_ARGS="$*"
 
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-OUT_DIR=$REPO/scripts/plots/run_$TIMESTAMP
+# outputs go to the plots/ of the experiment whose configs/ holds CONFIG (or EXPERIMENT=<campaign>)
+source "$REPO/slurm/experiment_of.sh"
+EXP=$(experiment_of "$CONFIG")
+[[ -n "$EXP" && -d "$REPO/experiments/$EXP" ]] || { echo "config is not under experiments/<campaign>/: set EXPERIMENT=<campaign>" >&2; exit 1; }
+OUT_DIR=$REPO/experiments/$EXP/plots/run_$TIMESTAMP
 
-LOG_DIR=$REPO/scripts/logs/fraction_grid_search
+LOG_DIR=$REPO/experiments/2026-08_lambda-scan/outputs/script_logs/fraction_grid_search
 mkdir -p "$LOG_DIR"
 
 echo "Output directory: $OUT_DIR"

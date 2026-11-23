@@ -48,7 +48,7 @@ Outputs, under ``--output``:
 
 Usage::
 
-    python scripts/permutation_importance.py --config scripts/configs/permutation_importance_lambda_scan.yaml
+    python scripts/permutation_importance.py --config experiments/2026-08_lambda-scan/configs/permutation_importance_lambda_scan.yaml
     python scripts/permutation_importance.py --config ... --max-jets 20000 --repeats 2   # smoke test
     python scripts/permutation_importance.py --config ... --output plots/my_run
 """

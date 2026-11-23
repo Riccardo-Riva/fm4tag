@@ -1,0 +1,73 @@
+# Best validation CE of every case without and with dropout 0.2 on every layer (scripts/plot_arm_summary.py):
+#
+#   MPLBACKEND=Agg .venv/bin/python scripts/plot_arm_summary.py --config experiments/2026-11_dropout/configs/dropout_summary_zoom.yaml
+#
+# Cases without dropout: F_final, F_p1_nojc, F_scjc_stab (as arm_summary.yaml); with dropout: D_drop (24 runs, 80 epochs).
+# The arms are told apart by their campaign cell (`cells`).  P1 with CE only AND dropout was not run: its slot is empty.
+
+arm_summary:
+  out_dir: experiments/2026-11_dropout/plots/dropout/summary
+  filename: best_val_ce_dropout_zoom.png
+  stages:
+    - /storage3/DSIP/rriva/research/fm4tag/experiments/2026-10_ssl-campaign/outputs/F_final_20261028_235640
+    - /storage3/DSIP/rriva/research/fm4tag/experiments/2026-10_ssl-campaign/outputs/F_final_20261028_235642
+    - /storage3/DSIP/rriva/research/fm4tag/experiments/2026-10_ssl-campaign/outputs/F_p1_nojc_20261109_175801
+    - /storage3/DSIP/rriva/research/fm4tag/experiments/2026-10_ssl-campaign/outputs/F_scjc_stab_20261109_175800
+    - /storage3/DSIP/rriva/research/fm4tag/experiments/2026-11_dropout/outputs/D_drop_20261113_215456
+    - /storage3/DSIP/rriva/research/fm4tag/experiments/2026-11_dropout/outputs/D_drop_20261113_215501
+  runs_per_arm: 4
+  epoch_offset: 1
+  ce: {val_metric: val/head/loss_ce}
+
+  arms:
+    sc: {encoder: scratch, pretraining: null, jet_contrastive: 0.0, cells: [sc], method: scratch, group: p0}
+    ft_p0: {encoder: finetune, pretraining: p0, jet_contrastive: 0.0, cells: [ft_p0s42, ft_p0s424], method: finetune, group: p0}
+    fr_p0: {encoder: frozen, pretraining: p0, jet_contrastive: 0.0, cells: [fr_p0s42, fr_p0s424], method: frozen, group: p0}
+    sc_d: {encoder: scratch, pretraining: null, jet_contrastive: 0.0, cells: [sc_d02], method: scratch, group: p0_d}
+    ft_p0_d: {encoder: finetune, pretraining: p0, jet_contrastive: 0.0, cells: [ft_p0s42_d02, ft_p0s424_d02], method: finetune, group: p0_d}
+    fr_p0_d: {encoder: frozen, pretraining: p0, jet_contrastive: 0.0, cells: [fr_p0s42_d02, fr_p0s424_d02], method: frozen, group: p0_d}
+    ft_p1: {encoder: finetune, pretraining: p1, jet_contrastive: 0.0, cells: [ft_p1s42, ft_p1s424], method: finetune, group: p1}
+    fr_p1: {encoder: frozen, pretraining: p1, jet_contrastive: 0.0, cells: [fr_p1s42, fr_p1s424], method: frozen, group: p1}
+    scjc: {encoder: scratch, pretraining: null, jet_contrastive: 0.3, cells: [scjc_clip1], method: scratch, group: p1jc}
+    ftjc_p1: {encoder: finetune, pretraining: p1, jet_contrastive: 0.3, cells: [ftjc_p1s42, ftjc_p1s424], method: finetune, group: p1jc}
+    frjc_p1: {encoder: frozen, pretraining: p1, jet_contrastive: 0.3, cells: [frjc_p1s42, frjc_p1s424], method: frozen, group: p1jc}
+    scjc_d: {encoder: scratch, pretraining: null, jet_contrastive: 0.3, cells: [scjc_clip1_d02], method: scratch, group: p1jc_d}
+    ftjc_p1_d: {encoder: finetune, pretraining: p1, jet_contrastive: 0.3, cells: [ftjc_p1s42_d02, ftjc_p1s424_d02], method: finetune, group: p1jc_d}
+    frjc_p1_d: {encoder: frozen, pretraining: p1, jet_contrastive: 0.3, cells: [frjc_p1s42_d02, frjc_p1s424_d02], method: frozen, group: p1jc_d}
+  methods: [scratch, finetune, frozen]     # x order
+  groups:                                  # marker shape = pretraining / loss, open = dropout 0.2
+    p0: {offset: -0.32, marker: o, filled: true}
+    p0_d: {offset: -0.16, marker: o, filled: false}
+    p1: {offset: 0.0, marker: D, filled: true}
+    p1jc: {offset: 0.16, marker: s, filled: true}
+    p1jc_d: {offset: 0.32, marker: s, filled: false}
+  jitter: 0.02                             # x spacing of the single runs of one arm
+  mean_offset: 0.0
+  colours: {scratch: '#2a78d6', finetune: '#eb6834', frozen: '#1baf7a'}
+  ink: '#333333'
+  figsize: [10.0, 5.6]
+  ylim: [0.605, 0.675]
+  legend_loc: upper center
+  legend_ncol: 2
+  exclude: []
+
+  # ---- ALL the wording of the figure lives here --------------------------------------------------------------
+  texts:
+    title: 'Best validation cross-entropy, without and with dropout 0.2 (zoom)'
+    ylabel: 'Best validation cross-entropy'
+    method: {scratch: 'From scratch', finetune: 'Fine-tuned', frozen: 'Frozen encoders'}
+    group:
+      p0: 'P0 pretraining, CE only'
+      p0_d: 'P0 pretraining, CE only, dropout 0.2'
+      p1: 'P1 pretraining, CE only'
+      p1jc: 'P1 pretraining, CE + JC'
+      p1jc_d: 'P1 pretraining, CE + JC, dropout 0.2'
+    run: 'One run'
+    mean: 'Mean ± std of the 4 runs'
+    excluded: '+{n} collapsed'
+    footnote: |-
+      P0 / P1: pretraining of the fine-tuned and frozen methods (2 pretraining seeds x 2 training seeds); from scratch has none
+      (its P1 + JC case is from scratch + JC, gradient norm clipped at 1.0; no from-scratch case exists for 'P1, CE only').
+      Dropout 0.2: attention and feed-forward dropout in every encoder and aggregator layer and in the head (frozen encoders: aggregator and head only),
+      80 epochs (otherwise 40), batch size 10% smaller for four cells, learning rates unchanged.  P1 with CE only and dropout was not run.
+      Zoom: the cases with JC and dropout (best CE 0.71 to 0.80) are above the plotted range.

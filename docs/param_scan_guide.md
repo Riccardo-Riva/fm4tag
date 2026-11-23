@@ -1,12 +1,12 @@
 # Parameter scans with seed repetitions
 
-How to run [`slurm/classify_param_scan.sh`](../slurm/classify_param_scan.sh) and
+How to run [`experiments/2026-08_lambda-scan/slurm/classify_param_scan.sh`](../experiments/2026-08_lambda-scan/slurm/classify_param_scan.sh) and
 plot its results with [`scripts/plot_val_curves.py`](../scripts/plot_val_curves.py)
 (script) or [`notebooks/val_loss_curves.ipynb`](../notebooks/val_loss_curves.ipynb)
 (interactive).
 
 This is the seed-repeated sibling of
-[`slurm/classify_from_scratch.sh`](../slurm/classify_from_scratch.sh): same
+[`experiments/2026-07_ce-jc-grids/slurm/classify_from_scratch.sh`](../experiments/2026-07_ce-jc-grids/slurm/classify_from_scratch.sh): same
 experiment (`phase=finetune`, `encoder_ckpt=null` — backbone + aggregator +
 head all train jointly from random init), but instead of one job per
 hyper-parameter combination, one job per combination trains **several seeds
@@ -89,11 +89,11 @@ checkpoints to wandb on a big sweep.
 
 ```bash
 cd /storage3/DSIP/rriva/research/fm4tag
-DRY_RUN=1 bash slurm/classify_param_scan.sh    # write job scripts, submit nothing — inspect first
-bash slurm/classify_param_scan.sh              # submit for real
+DRY_RUN=1 bash experiments/2026-08_lambda-scan/slurm/classify_param_scan.sh    # write job scripts, submit nothing — inspect first
+bash experiments/2026-08_lambda-scan/slurm/classify_param_scan.sh              # submit for real
 ```
 
-This creates `slurm/classify_param_scan/run_<TIMESTAMP>/`:
+This creates `experiments/2026-08_lambda-scan/outputs/classify_param_scan/run_<TIMESTAMP>/`:
 
 ```
 run_<TS>/
@@ -116,10 +116,10 @@ directly in a plotting config.
 
 ```bash
 # progress across the whole sweep
-grep -H '^status:' slurm/classify_param_scan/run_<TS>/*/seed_*/run_info.yaml
+grep -H '^status:' experiments/2026-08_lambda-scan/outputs/classify_param_scan/run_<TS>/*/seed_*/run_info.yaml
 
 # a specific cell's own log (budget decisions, per-seed timing)
-tail -f slurm/classify_param_scan/run_<TS>/<cell_name>/job_out.txt
+tail -f experiments/2026-08_lambda-scan/outputs/classify_param_scan/run_<TS>/<cell_name>/job_out.txt
 ```
 
 `run_info.yaml` per seed:
@@ -191,13 +191,13 @@ loosen it deliberately if you want to inspect truncated runs.
 
 ```bash
 # one-shot PNG + summary CSV
-python scripts/plot_val_curves.py --config scripts/configs/val_loss_lambda_seed_scan.yaml
+python scripts/plot_val_curves.py --config experiments/2026-08_lambda-scan/configs/val_loss_lambda_seed_scan.yaml
 
 # override the output directory
 python scripts/plot_val_curves.py --config ... --output plots/my_scan
 ```
 
-[`scripts/configs/val_loss_lambda_seed_scan.yaml`](../scripts/configs/val_loss_lambda_seed_scan.yaml)
+[`experiments/2026-08_lambda-scan/configs/val_loss_lambda_seed_scan.yaml`](../experiments/2026-08_lambda-scan/configs/val_loss_lambda_seed_scan.yaml)
 is a ready template for `classify_param_scan.sh`'s default λ scan — set
 `paths.root` to your `run_<TS>` directory and drop any cell whose seeds
 haven't landed yet (an entry with zero completed seeds is an error, not an

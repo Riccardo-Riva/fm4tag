@@ -1,7 +1,7 @@
 """ROC comparison of trained fm4tag classifiers (+ optional reference taggers).
 
 Given a YAML config listing training-run directories (as produced by the
-``slurm/classify_from_scratch`` pipeline), this script
+``experiments/2026-07_ce-jc-grids/outputs/classify_from_scratch`` pipeline), this script
 
 1. resolves each run's best checkpoint — the saved epoch with the best
    monitored metric in ``metrics.csv`` (monitor/mode are read from the run's
@@ -37,7 +37,7 @@ f_u = 0.79, and a DL1d-style tagger without a tau output gets f_u = 1 - f_c.
 
 Usage::
 
-    python scripts/roc_comparison.py --config scripts/configs/roc_comparison.yaml
+    python scripts/roc_comparison.py --config experiments/<campaign>/configs/roc_comparison.yaml
     python scripts/roc_comparison.py --config ... --output plots/my_comparison
     python scripts/roc_comparison.py --config ... --recompute       # ignore cached predictions
     python scripts/roc_comparison.py --config ... --max-jets 50000  # quick partial run

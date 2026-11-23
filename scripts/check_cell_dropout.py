@@ -8,12 +8,12 @@ non-zero if any dropout differs from ``--expected`` (or there is none).
 Usage::
 
     ENCODERS=rowcol_concat_v0 CHUNK=512 python scripts/check_cell_dropout.py \
-        --cells scripts/configs/campaign/D_drop.cells --expected 0.2
+        --cells experiments/2026-11_dropout/configs/D_drop.cells --expected 0.2
 
 and for the pretrainings (no head)::
 
     ENCODERS=rowcol_concat_v0 CHUNK=512 python scripts/check_cell_dropout.py \
-        --cells scripts/configs/campaign/P_drop.cells --expected 0.1 --skip head
+        --cells experiments/2026-11_dropout/configs/P_drop.cells --expected 0.1 --skip head
 """
 
 from __future__ import annotations

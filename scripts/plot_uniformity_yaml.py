@@ -12,8 +12,8 @@ Four plots are saved:
 Usage::
 
     python scripts/plot_uniformity_yaml.py \\
-        --file slurm/pretraining/run_20260305_121539/outputs/model_0_colrow/version_0/uniformity_evolution.yaml \\
-        --outdir plots/uniformity
+        --file experiments/2026-03_early-runs/outputs/pretraining/run_20260305_121539/outputs/model_0_colrow/version_0/uniformity_evolution.yaml \\
+        --outdir experiments/2026-08_lambda-scan/plots/uniformity
 """
 
 from __future__ import annotations
