@@ -485,3 +485,30 @@ of the plan before acting.
 - Class-weighted CE in fm4tag.
 - Tests on 1 GPU each, several per card when the memory allows.
 - The four-way test design is in section 12, waiting for the owner's OK on the flagged points.
+
+**2026-11-23, owner's answers on the flagged points:** lr **1e-3** for all four tests (backbone at lr / 10 whenever a
+run has pretrained parts; the four from-scratch tests have none); gradient clipping 1.0 in all four; dropout 0.2;
+cleanup before submitting.
+
+**2026-11-23, cleanup done** (commits `589cef0` … `2444670` on `main`, nothing pushed):
+1. The uncommitted `roc_comparison.py` change was set aside, `main` fast-forwarded to `feat/chunked-ia` (126 commits),
+   and the change re-applied (clean automatic merge, lint and 21 related tests pass) and committed.
+2. Committed: this report, `docs/ssl_campaign_report.md`, `docs/ssl_tests_plan.pptx` (+ preview), `paper/`,
+   `plot_paths.txt`. `docs/slides/` (31 MB of generated decks) moved here but ignored.
+3. Results moved from `fm4tag-chunk` (and the S0 profiles from `fm4tag-chunk-s0`) to the **same relative paths** in
+   this worktree: `slurm/ssl_campaign` (101 GB), `plots/<7 campaign dirs>`, `slurm/{arm_roc,plot_logs,smoke}`,
+   `slurm/profiling/*`. All moves were renames on the same filesystem. The 7 absolute cache symlinks in `plots/` were
+   re-pointed. In 44 tracked files the path prefix `fm4tag-chunk(-s0)` was replaced by `fm4tag`; all 170 distinct paths
+   were checked to exist. A launcher dry run from `main` composes the cells and finds the pretraining checkpoints.
+   *This keeps the existing layout instead of the `results/<campaign>/` regrouping proposed in section 9.* That
+   regrouping would have required changing every launcher and all 311 paths. The index
+   `docs/experiments/README.md` gives the same "what is in which folder" view.
+4. Tags created: `archive/<branch>` for every deleted branch, `archive/s0-snapshot`, `exp/lambda-scan-final`
+   (`d858d71`), `exp/ssl-wsd-lr-search` (`f713105`).
+5. Worktrees `fm4tag-old`, `fm4tag-chunk-s0`, `fm4tag-chunk` removed (only caches and the duplicate `.venv` were left
+   in them). Local branches deleted: the 9 merged ones and `feat/chunked-ia`. Kept: `categorical-jet-features`,
+   `refactor/deep-dive`, both stashes.
+6. `/storage3/DSIP/rriva/research/fm4tag-chunk` is now a **symlink to `fm4tag`**, so the old paths recorded inside run
+   folders (`.hydra/config.yaml` with `encoder_ckpt`, caches, wandb) still resolve.
+7. Not done (needs the owner): pushing `main` (130 commits ahead of `origin/main`) and deleting the 6 stale branches on
+   `origin`.
