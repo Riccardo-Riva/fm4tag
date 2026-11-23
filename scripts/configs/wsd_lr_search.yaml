@@ -1,0 +1,60 @@
+# Learning-rate search of the WSD redo (scripts/plot_lr_search.py): 66 runs of W_lr.cells, 40 epochs, seed 42.
+#
+#   MPLBACKEND=Agg .venv/bin/python scripts/plot_lr_search.py --config scripts/configs/wsd_lr_search.yaml
+
+lr_search:
+  stages:
+    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/W_lr_full_20261117_154033
+    - /storage3/DSIP/rriva/research/fm4tag-chunk/slurm/ssl_campaign/W_lr_shared_20261117_154042
+  seed: 42
+  metric: val/head/loss_ce
+  out_dir: /storage3/DSIP/rriva/research/fm4tag-chunk/plots/wsd_lr_search
+  lr_values: {'38': 3.75e-4, '75': 7.5e-4, '150': 1.5e-3}   # cell-name tag -> learning rate
+  epochs: 40
+  decay_frac: 0.2                          # the WSD decay = the last 20% of the epochs (shaded)
+  reference_arm: sc                        # dotted line: its best run without dropout
+  arms:                                    # panel order (row by row)
+    sc: {method: scratch}
+    ft_p0: {method: finetune}
+    ft_p1: {method: finetune}
+    fr_p0: {method: frozen}
+    scjc: {method: scratch}
+    ftjc_p1: {method: finetune}
+    fr_p1: {method: frozen}
+    frjc_p1: {method: frozen}
+  colours: {scratch: '#2a78d6', finetune: '#eb6834', frozen: '#1baf7a'}
+  ink: '#333333'
+  ncol: 4
+  figsize: [16.0, 7.5]
+  curves_ylim_span: 0.20                   # curves figure: y from (best - 0.01) to (best + span), per panel
+
+  # ---- ALL the wording of the figures lives here ----
+  texts:
+    scan_title: 'Learning-rate search (WSD, 40 epochs, batch 12800, seed 42): best validation cross-entropy per learning rate'
+    curves_title: 'Validation cross-entropy per epoch at the chosen learning rate of each case'
+    scan_ylabel: 'Best validation CE'
+    curves_ylabel: 'Validation CE'
+    lr_label: 'Learning rate (head and aggregator)'
+    lr_tick: '{lr:.3g}'
+    epoch_label: 'Epoch'
+    arm:
+      sc: 'From scratch, CE'
+      ft_p0: 'Fine-tuned from P0, CE'
+      ft_p1: 'Fine-tuned from P1, CE'
+      fr_p0: 'Frozen P0 encoders, CE'
+      scjc: 'From scratch, CE + JC'
+      ftjc_p1: 'Fine-tuned from P1, CE + JC'
+      fr_p1: 'Frozen P1 encoders, CE'
+      frjc_p1: 'Frozen P1 encoders, CE + JC'
+    no_dropout: 'No dropout'
+    dropout: 'Dropout 0.2'
+    bb10: 'Pretrained parts at lr / 10'
+    bb30: 'Pretrained parts at lr / 30'
+    reference: 'Best from scratch, no dropout ({ref:.4f})'
+    best_marker: 'Best epoch'
+    decay_band: 'WSD decay (last 20%)'
+    scan_footnote: |-
+      One run per point (seed 42, on the seed-42 pretrainings). Warmup 1.6 epochs, constant learning rate, linear decay to 0 over the last 20% of the epochs; no early stopping.
+      Dropout 0.2 in every encoder and aggregator layer and in the head (frozen encoders: aggregator and head only). Fine-tuned: the pretrained parts are held at 0 for 2 epochs.
+    curves_footnote: |-
+      Chosen learning rate = the lowest best validation CE of the case over the three learning rates (and the two backbone ratios of the fine-tuned cases).
