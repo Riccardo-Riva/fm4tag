@@ -549,3 +549,12 @@ cleanup before submitting.
 - **Four-way test:** the first submission (jobs 7385094–99) was cancelled before it started. It is relaunched from
   `experiments/2026-11_four-way-jc-dropout/` with 6 seeds per cell, and head dropout 0 in the no-dropout cells is
   confirmed.
+
+**2026-11-23, owner's decisions on the pretrained arms:**
+- Fine-tuned and frozen runs of protocol v1 use **one pretraining seed per pretraining type**: the one with the lowest
+  pretraining validation loss, chosen before any downstream result. That is seed 42 for both P0 (5.4420 vs 5.5054)
+  and P1 (5.6664 vs 5.7292). It runs with 6 training seeds.
+- Results with frozen encoders are therefore conditional on that pretraining, since the pretraining seed dominates
+  their spread.
+- Downstream keeps loading the **last** pretraining checkpoint (epoch 30). For P0 and P1 it is at most 0.0015 from the
+  best pretraining validation loss. It would matter only for the early-stopped dropout pretraining P0 seed 42.
