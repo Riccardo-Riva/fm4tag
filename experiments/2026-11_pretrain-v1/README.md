@@ -1,7 +1,6 @@
 # P0 and P1 pretrainings with the protocol-v1 settings (2026-11-23 →)
 
-**Status:** planned. The measurement of memory and speed at batch 12800 is queued (job 7387249). Launch waits for the
-owner's OK on seeds and GPU slots.
+**Status:** running: seed 42 (stage `P_v1_s42_*`, L40S cards). Seed 424 follows when a GPU-job slot frees.
 
 ## Question
 Pretrain P0 and P1 again with the same settings as the downstream protocol v1 (batch 12800, WSD, 80 epochs, no early
@@ -41,11 +40,12 @@ no early stopping (P_full had it, but it never triggered).
 ## Stages and configs
 | Stage | What |
 |---|---|
-| `P_v1_measure_sweep_<job>` | peak GPU memory and s/step of p0_v1 and p1_v1 at batch 12800 (`slurm/dropout_batch_sweep.sh`, 1-epoch tests) |
-| `P_v1_<ts>` | the pretrainings (`configs/P_v1.cells`; launch command in its header) |
+| `P_v1_s42_<ts>`, `P_v1_s424_<ts>` | the pretrainings, one stage per seed (`configs/P_v1.cells`; launch command in its header) |
 
-One pretraining per GPU: at batch 12800 a P0 needs about 34 GiB and a P1 about 42 GiB of the 44.4 GiB card (to be
-confirmed by the measurement). So two cannot share a card.
+One pretraining per GPU: at batch 12800 a P0 needs about 34 GiB and a P1 about 42 GiB of the 44.4 GiB card (scaled
+from the P_full peaks at 12288: 32.3 and 40.8 GiB), so two cannot share a card. A 2-GPU job runs one P0 and one P1.
+L40S only: 80 epochs of P1 take about 95 h there, but about 148 h on an A40, too close to the 167 h a 7-day job can
+use. A truncated WSD run never reaches its decay.
 
 ## Results
 Pending.

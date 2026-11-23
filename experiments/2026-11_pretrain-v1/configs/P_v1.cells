@@ -4,9 +4,13 @@
 #   p0_v1 = per-object contrastive on the track and jet-feature embeddings
 #   p1_v1 = p0 + jet contrastive (weight 1.0, T 0.1) on the aggregator output (aggregator trained, loaded downstream)
 # Seeds: see the launch command (the downstream then uses the seed with the lowest pretraining val loss).
-# One pretraining per card: at batch 12800 a P0 needs ~34 GiB and a P1 ~42 GiB (measured, see README).
-#
-#   MAX_EPOCHS=80 SEEDS='42 424' WALLTIME=7-00:00:00 EST_SECONDS_PER_EPOCH=6600 \
-#   STAGE=P_v1 PACKS=2 MEM_PER_GPU_GB=24 CELLS=experiments/2026-11_pretrain-v1/configs/P_v1.cells bash slurm/ssl_pack.sh
-p1_v1  arm=pretrain encoders=rowcol_concat_v0 chunk_size=512 datamodule.batch_size=12800 optimizer.lr=1e-3 pretrain.loss_weights.jet_contrastive=1.0 pretrain.jet_contrastive_loss.temperature=0.1 pretrain.schedule=wsd pretrain.warmup_epochs=4 pretrain.decay_frac=0.2 ~callbacks.early_stopping
-p0_v1  arm=pretrain encoders=rowcol_concat_v0 chunk_size=512 datamodule.batch_size=12800 optimizer.lr=1e-3 pretrain.schedule=wsd pretrain.warmup_epochs=4 pretrain.decay_frac=0.2 ~callbacks.early_stopping
+# One pretraining per card: at batch 12800 a P0 needs ~34 GiB and a P1 ~42 GiB (P_full peaks at 12288: 32.3 / 40.8 GiB),
+# so a 2-GPU job runs one P0 and one P1.  L40S only: 80 epochs of P1 take ~95 h there but ~148 h on an A40 (too close
+# to the 167 h a 7-day job can use; a truncated WSD run never reaches its decay).  @est = s/epoch on an L40S from the
+# P_full runs (P1 4110 s, P0 5207 s on an A40 / 1.56) x 12800/12288 x 1.1.
+# One stage per seed (owner, 2026-11-23: one job now, the next when a GPU-job slot frees):
+#   MAX_EPOCHS=80 SEEDS=42 WALLTIME=7-00:00:00 EST_SECONDS_PER_EPOCH=5000 GPU_NODE=gpu-L40S-open \
+#   STAGE=P_v1_s42 PACKS=1 MEM_PER_GPU_GB=24 CELLS=experiments/2026-11_pretrain-v1/configs/P_v1.cells bash slurm/ssl_pack.sh
+#   (later the same with SEEDS=424 STAGE=P_v1_s424)
+p1_v1  arm=pretrain encoders=rowcol_concat_v0 chunk_size=512 datamodule.batch_size=12800 optimizer.lr=1e-3 pretrain.loss_weights.jet_contrastive=1.0 pretrain.jet_contrastive_loss.temperature=0.1 pretrain.schedule=wsd pretrain.warmup_epochs=4 pretrain.decay_frac=0.2 ~callbacks.early_stopping @est=4710
+p0_v1  arm=pretrain encoders=rowcol_concat_v0 chunk_size=512 datamodule.batch_size=12800 optimizer.lr=1e-3 pretrain.schedule=wsd pretrain.warmup_epochs=4 pretrain.decay_frac=0.2 ~callbacks.early_stopping @est=3830
