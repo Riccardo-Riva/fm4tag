@@ -512,3 +512,11 @@ cleanup before submitting.
    folders (`.hydra/config.yaml` with `encoder_ckpt`, caches, wandb) still resolve.
 7. Not done (needs the owner): pushing `main` (130 commits ahead of `origin/main`) and deleting the 6 stale branches on
    `origin`.
+
+**2026-11-23, four-way test submitted** (`scripts/configs/campaign/T4way.cells`):
+- **Checks before submitting:** every cell composes with the agreed settings; dropout is 0.2 everywhere in t3/t4 and
+  0 everywhere in t1/t2 (head included); class weights [1.5, 1.5, 1.0, 4.0]; 2 new tests that the weights enter the
+  CE; 292 tests pass.
+- **Stages:** `T4way_full_20261123_164524` (t2, t4; jobs 7385094-97, full cards, L40S or A40) and
+  `T4way_shared_20261123_164528` (t1, t3; jobs 7385098-99, two per L40S card).
+- **Expected:** CE cells about 2-2.5 days, JC cells 1.5-5.5 days depending on the card type.

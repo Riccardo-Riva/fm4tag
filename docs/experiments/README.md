@@ -16,6 +16,7 @@ branches. History and criticalities: `docs/repo_inspection_2026-11-23.md`.
 | λ (noise) scan, "beat GN2" | 2026-08-18 → 10-12 | does CE + JC at noise level λ beat no-JC and GN2? (52M jets, `251112_112022`) | `exp/lambda-scan-final` | `slurm/classify_param_scan/run_<ts>/`; plots `scripts/plots/lambda_seed_bestval_*`, `scripts/plots/run_<ts>_*`, `plots/{val_loss_ce,losses,uniformity,ce_vs_embedding*}` | `paper/factsheets/fm4tag_lambda_scan.md`, `plot_paths.txt` |
 | Kernel profiling | 2026-07 → 10 | attention kernel speed / memory, S0 benchmark | various | `slurm/profiling/` (`s0_*` = S0 benchmark, tag `archive/s0-snapshot`) | memory note on kernel economics |
 | SSL campaign | 2026-10-16 → 11-23 | does contrastive pretraining (P0/P1/P2) help scratch / fine-tuned / frozen training? (18.6M jets, `251112_152051`) | `exp/ssl-wsd-lr-search` | `slurm/ssl_campaign/<STAGE>_<ts>/<cell>/seed_<s>/`; plots `plots/{arm_comparison,arm_comparison_p1,p0_vs_p1,label_scan,pretrain_curves,dropout,wsd_lr_search}`; inference logs `slurm/arm_roc/` | `docs/ssl_campaign.md`, header of each `scripts/configs/campaign/<STAGE>.cells`, `paper/factsheets/ssl_campaign.md` |
+| Four-way test (protocol v1) | 2026-11-23 → | is the JC gain contrastive or regularisation? CE / CE+JC / CE+dropout / CE+JC+dropout, from scratch, class-weighted CE | `main` after `dc1277c` | `slurm/ssl_campaign/T4way_full_<ts>/` (JC cells), `T4way_shared_<ts>/` (CE cells) | `scripts/configs/campaign/T4way.cells`, inspection report § 12 |
 | GN2 on the same 18.6M slice | 2026-11-06 | same-data GN2 reference (salt, CE only, 8 seeds) | salt-ririva `6e43f64` | `/storage3/DSIP/rriva/research/salt-ririva/slurm/scratch_lambda_scan/output/run_20261106_092332/` (not copied) | inspection report § 5.2 |
 
 ## SSL-campaign stages (`slurm/ssl_campaign/`)
@@ -37,6 +38,7 @@ The stage name is the first part of each folder name; the cells file of the same
 | `P_drop_*` | P0/P1/P2 pretrained again with dropout 0.1 (`CHANGES.txt` = manual interventions) |
 | `W_measure_*`, `W_share_measure_*` | memory / speed at batch 12800, alone and sharing a card |
 | `W_lr_full_*`, `W_lr_shared_*` | WSD learning-rate search, 66 runs, batch 12800 |
+| `T4way_full_*`, `T4way_shared_*` | four-way test CE / CE+JC / CE+dropout / CE+JC+dropout (protocol v1, class-weighted CE) |
 
 Each stage folder holds `sweep_info.txt` (git hash, cells, seeds), `tasks.tsv`, `pack_*.out`, and per run
 `run_info.yaml`, `.hydra/config.yaml`, `metrics.csv` and checkpoints.
