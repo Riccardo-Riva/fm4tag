@@ -205,7 +205,9 @@ def meta_from_hydra(run_dir: Path, entry: dict) -> dict:
     from omegaconf import OmegaConf
 
     cfg = rc.find_run_config(run_dir)
-    layer = cfg.encoders.constituents[cfg.constituent_objects[0]].layers[0]
+    # the encoder block is 'encoders' in run configs before 2026-11-25
+    enc = cfg.encoder if 'encoder' in cfg else cfg.encoders
+    layer = enc.constituents[cfg.constituent_objects[0]].layers[0]
     jc = float(OmegaConf.select(cfg, 'finetune.loss_weights.jet_contrastive') or 0.0)
 
     lam = cfg.get('lambda')

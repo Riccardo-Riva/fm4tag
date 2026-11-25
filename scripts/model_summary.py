@@ -33,7 +33,12 @@ from hydra import compose, initialize_config_dir
 from hydra.utils import instantiate as hydra_instantiate
 from lightning.pytorch.utilities.model_summary import ModelSummary
 
-from fm4tag.utils.model_builders import build_aggregator, build_encoders, build_head
+from fm4tag.utils.model_builders import (
+    build_aggregator,
+    build_encoders,
+    build_head,
+    encoder_cfg,
+)
 
 CONFIG_DIR = str(Path(__file__).resolve().parents[1] / 'src' / 'fm4tag' / 'configs')
 
@@ -94,7 +99,7 @@ def _print_geometry(cfg, encoders: torch.nn.ModuleDict) -> None:
     """
     print('\nEncoder geometry')
     print(f'  {"object":<12} {"N tokens":>9} {"dim":>5}   layers')
-    constituents = cfg.encoders.get('constituents', {})
+    constituents = encoder_cfg(cfg).get('constituents', {})
     for obj_name, enc in encoders.items():
         if hasattr(enc, 'num_categories'):  # constituent Encoder
             n_tokens = enc.num_categories + enc.num_continuous
@@ -105,7 +110,7 @@ def _print_geometry(cfg, encoders: torch.nn.ModuleDict) -> None:
         node = (
             constituents[obj_name]
             if obj_name in constituents
-            else cfg.encoders.global_encoder
+            else encoder_cfg(cfg).global_encoder
         )
         parts = []
         for lc in node.get('layers', []):

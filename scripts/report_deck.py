@@ -314,7 +314,9 @@ def run_fields(run_dir: Path, texts: dict, cache: dict) -> dict:
     def sel(key, default=None):
         return OmegaConf.select(cfg, key, default=default)
 
-    trk = cfg.encoders.constituents[cfg.constituent_objects[0]]
+    # the encoder block is 'encoders' in run configs before 2026-11-25
+    enc = cfg.encoder if 'encoder' in cfg else cfg.encoders
+    trk = enc.constituents[cfg.constituent_objects[0]]
     layer = trk.layers[0]
     clip = sel('trainer.gradient_clip_val')
     f = {

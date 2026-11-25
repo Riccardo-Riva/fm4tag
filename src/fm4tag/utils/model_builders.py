@@ -5,25 +5,35 @@ from omegaconf import DictConfig
 from hydra.utils import instantiate as hydra_instantiate
 
 
+def encoder_cfg(cfg: DictConfig) -> DictConfig:
+    """The encoder block of a run config: ``cfg.encoder``.
+
+    Run configs written before 2026-11-25 call it ``encoders`` (the config group
+    was renamed); they are read too, so old checkpoints still rebuild.
+    """
+    return cfg.encoder if 'encoder' in cfg else cfg.encoders
+
+
 def build_encoders(cfg: DictConfig) -> torch.nn.ModuleDict:
     """Build one encoder per object (global + all constituents).
 
-    Reads architecture from ``cfg.encoders``; each encoder's class is selected
-    by its ``_target_`` key:
+    Reads architecture from ``cfg.encoder`` (see :func:`encoder_cfg`); each
+    encoder's class is selected by its ``_target_`` key:
 
-    * ``cfg.encoders.global_encoder`` → e.g. :class:`~fm4tag.models.GlobalEncoder`
+    * ``cfg.encoder.global_encoder`` → e.g. :class:`~fm4tag.models.GlobalEncoder`
       or :class:`~fm4tag.models.GlobalTransformerEncoder`, with ``num_features``
       injected from the global object's variable definitions at runtime
-    * ``cfg.encoders.constituents.<name>`` → e.g. :class:`~fm4tag.models.Encoder`
+    * ``cfg.encoder.constituents.<name>`` → e.g. :class:`~fm4tag.models.Encoder`
       (one per constituent type, with ``categories`` and ``num_continuous``
       injected from the variable definitions at runtime)
     """
     encoders: dict[str, torch.nn.Module] = {}
+    enc_cfg = encoder_cfg(cfg)
 
     global_name = cfg.global_object
     n_global = len(cfg.variables[global_name].inputs)
     encoders[global_name] = hydra_instantiate(
-        cfg.encoders.global_encoder, num_features=n_global
+        enc_cfg.global_encoder, num_features=n_global
     )
 
     for obj_name in cfg.constituent_objects:
@@ -31,7 +41,7 @@ def build_encoders(cfg: DictConfig) -> torch.nn.ModuleDict:
         categories = [len(classes) for classes in obj_vars.cat_classes.values()]
         num_continuous = len(obj_vars.continuous)
         encoders[obj_name] = hydra_instantiate(
-            cfg.encoders.constituents[obj_name],
+            enc_cfg.constituents[obj_name],
             categories=categories,
             num_continuous=num_continuous,
         )
