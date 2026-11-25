@@ -155,6 +155,14 @@ place, so `chunk/.venv` can be deleted with nothing lost.
   - No test evaluation file was found for these runs.
 - **Next:** evaluate them on the test set and add them as a reference arm in `arm_test_metrics` (test rejections,
   and an unweighted CE). This is the like-for-like GN2 baseline that GN2v01 (trained on other data) cannot be.
+- **Update 2026-11-25:**
+  - **Comparable with protocol v1.** The four-way runs (`use_class_weights=true`) compute the same validation loss as
+    this GN2. Same validation file (`251112_152051/val`). Same weights in the same order (flavour_label b 1.5, c 1.5,
+    light 1.0, τ 4.0, from the dataset's `class_dict.yaml`). Same averaging (torch cross entropy with
+    `weight`, mean reduction). This GN2 has only the jet-classification task, so salt's `val/loss` equals
+    `val/jets_classification_loss`.
+  - **Test evaluation exists** (salt commit `ea8692a`, 2026-11-24): `slurm/scratch_lambda_scan/output/
+    run_20261106_092332/plots/roc_ce_only.png` and `roc_ce_only_working_points.csv` in `salt-ririva`.
 
 ### 5.3 Class-weighted cross-entropy — never used in fm4tag (checked 2026-11-23)
 - **The option:** fm4tag has had `use_class_weights` (per-class CE weights from `class_dict.yaml`) since 2026-07-06,
@@ -558,3 +566,11 @@ cleanup before submitting.
   their spread.
 - Downstream keeps loading the **last** pretraining checkpoint (epoch 30). For P0 and P1 it is at most 0.0015 from the
   best pretraining validation loss. It would matter only for the early-stopped dropout pretraining P0 seed 42.
+
+**2026-11-25, four-way test against the GN2 same-data run (status at about epoch 25–63 of 80):**
+- No four-way run is below GN2's best validation loss (0.6137–0.6154 over 8 seeds) yet. The best so far is 0.6216 (CE
+  + dropout), then 0.6238–0.6300 (CE + JC).
+- CE + JC peaks at epochs 8–10 and then overfits: training CE keeps falling and validation CE rises, so its best is
+  behind it. It peaks at the constant lr, so the decay at epochs 64–80 comes too late to help it. CE alone will
+  probably behave the same way. CE + dropout is still improving and has not reached the decay. CE + JC + dropout is
+  broken (validation accuracy flat since epoch 0).
