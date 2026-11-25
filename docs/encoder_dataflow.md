@@ -76,7 +76,7 @@ x_categ (B, F_cat) int        x_cont (B, F_con) float
 
 ## [2] Transformer backbone — the swappable part
 
-Selected by the `type` of the layer (`encoders=col_v0 | row_v0 | rowcol_v0`).
+Selected by the `type` of the layer (`encoder=col_v0 | row_v0 | rowcol_v0`).
 All three take and return `(B, N, dim)` and stack `depth` identical steps.
 
 Two attention axes are in play:
@@ -163,7 +163,7 @@ mixing from there.
 - `row_mode: concat` — SAINT's intersample attention: the grid is flattened to
   one row vector `(B, N·dim)` and the whole row step (norm + attention +
   feed-forward) runs at width `row_dim = N·dim`, so it mixes feature tokens.
-  Parameters scale as `row_dim²` — see `encoders/rowcol_concat_v0.yaml`.
+  Parameters scale as `row_dim²` — see `encoder/rowcol_concat_v0.yaml`.
 
 ### Jet chunks (`chunk_size`)
 

@@ -642,3 +642,50 @@ SAINT-like model of 2.7–3 M parameters: model B with fewer encoder layers, sam
 | SAINT-small: depth 1, 4 row heads | 0.86 M | 1.98 M | 2.90 M |
 | SAINT-small: depth 1, as model B | 1.02 M | 1.98 M | 3.06 M |
 | SAINT-small: depth 2, 4 row heads, `ff_mult=1`, aggregator depth 5 | 1.03 M | 1.65 M | 2.75 M |
+
+**2026-11-25, P_v1 cancelled.** The owner cancelled the P_v1 s42 pretraining (job 7387250, model B, protocol v1), 1 h 40
+min after its start: with the move to a smaller model, a 4-day pretraining of model B is not the next step. Its two claims
+(`p0_v1`, `p1_v1`) stay in `experiments/2026-11_pretrain-v1/outputs/P_v1_s42_20261123_222330/.queue/`; no other worker
+serves that stage. Whether and how long to pretrain a small model is open (40 M jets, fewer epochs; P0 pretrains only the
+encoders, P1 the aggregator too).
+
+## 15. Config layout refactor (decided and done, 2026-11-25)
+
+**Problem (owner).** `campaign_ssl.yaml` included `default.yaml` and overwrote ~15 of its values, and the `arm/` files
+overwrote both again, so one value (e.g. `trainer.max_epochs` of a pretraining: 50 → 40 → 30 → the pack's command line)
+had to be followed through three files. `default.yaml` itself still held pre-campaign values (dataset 112022, batch 1024,
+`rowcol_v0`), and `rowcol_concat_test.yaml` was a stale 425-line copy of it.
+
+**Owner's decisions.** As in the embedding2tagging repo: one base config per model, no base including another, and
+non-monolithic bases made of config groups. `default.yaml` stays (it becomes model B's base); training settings
+(`pretrain`, `finetune`, `optimizer`, `trainer`) stay in the base, not in groups; one `callbacks/` group with `default`,
+`default_monitors` and `smoke`; the `encoders` group and key renamed to `encoder` (also `loggers` → `logger`, the
+`logger/` group).
+
+**Result** (`src/fm4tag/configs/`, see [docs/usage.md](usage.md#configs)):
+
+| file / group | content |
+|---|---|
+| `default.yaml` | model B base (the former `campaign_ssl` values) |
+| `saint_reduced.yaml` | small-model base; still model B's values apart from `encoder: rowcol_concat_v1_small` (a copy of v0 for now) — the owner sets the sizes |
+| `data/split_152051` | files, objects, variables, the dataset half of `datamodule` |
+| `arm/` | phase, checkpoint, freezing, unfreeze epoch, backbone lr; pretraining also clips gradients |
+| `encoder/`, `aggregator/transformer`, `head/mlp`, `views/cutmix_mixup` | the model parts and the augmentation views |
+| `callbacks/default`, `default_monitors`, `smoke` | without / with memory + grad-norm + row-attention monitors; smoke = memory + last.ckpt only |
+| `logger/csv_wandb`, `csv`; `hpo/tpe` | loggers; the Optuna block |
+
+Rules, enforced by `tests/test_config_layout.py`: a base only selects group options; a group option includes nothing;
+every key is written in exactly one file (so nothing is overwritten except on the command line / in a cells file); every
+base composes with every arm and builds.
+
+**Equivalence check.** Every line of every cells file (89) plus the 5 plain arms was composed with `campaign_ssl` before
+and `default` after (`encoders`/`loggers` overrides translated). All compose; the only differences are in keys the run
+does not read: the pretrain block in fine-tuning runs (now the P0 values), the fine-tune-only keys and
+`optimizer.backbone_lr` in pretraining and scratch runs (null; no pretrained part), `require_encoder_ckpt: false` where
+it was absent, and `trainer.max_epochs` 40 instead of 30 for a bare `arm=pretrain` (the pack always sets it).
+Tests: 333 passed (non-DDP), 11 DDP passed.
+
+**What changes for launching.** `slurm/ssl_pack.sh` takes `CONFIG=<base>` (default `default`). Overrides use
+`encoder.…` / `logger.…`; the cells files of past stages (written with `encoders=…`) are records and do not compose any
+more as they are. The stages launched before the refactor have `CONFIG=campaign_ssl` in their `pack.env`: re-running a
+task of one of them needs that line changed to `default` and its cells' `encoders` tokens renamed.

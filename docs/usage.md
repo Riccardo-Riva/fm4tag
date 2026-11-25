@@ -46,40 +46,51 @@ Three YAML side-files (paths set in the config):
 
 ## Configs
 
-One YAML drives everything (see
-[default.yaml](../src/fm4tag/configs/default.yaml)).  The encoder architecture is a
-swappable Hydra config group under
-[configs/encoders/](../src/fm4tag/configs/encoders/) — select it with
-`encoders=rowcol_v0` (choices: `rowcol_v0` | `col_v0` | `row_v0`).
-The important sections:
+One **base config per model** in [configs/](../src/fm4tag/configs/):
+[default.yaml](../src/fm4tag/configs/default.yaml) (model B; used when no
+`--config-name` is given) and
+[saint_reduced.yaml](../src/fm4tag/configs/saint_reduced.yaml).  A base selects
+one option of each config group and holds the training settings; it never
+includes another base, and every key is written in exactly one file (a group
+option or the base — enforced by `tests/test_config_layout.py`), so a value
+changes only on the command line or in a cells file.  A new model is a new base
+file; a new variant of a part is a new option file in its group.
 
-| Section | What it sets |
-|---|---|
-| `phase` / `action` | `pretrain`\|`finetune` × `fit`\|`test`\|`predict` |
-| `variables`, `*_dataset_path` | data definition and file locations |
-| `datamodule` | batch size, workers, paths (interpolated from above) |
-| `encoders` | swappable arch group (`encoders=rowcol_v0`\|`col_v0`\|`row_v0`); one encoder per object |
-| `aggregator`, `head` | shared jet aggregator; classifier head (finetune) |
-| `views` | augmentation pipelines (list of `Compose`); shared by both phases |
-| `pretrain` / `finetune` | the two LightningModules incl. `loss_weights` |
-| `optimizer`, `trainer`, `callbacks`, `loggers` | Lightning plumbing |
-| `hpo` | Optuna search (see below) |
+| Group | Options | Sets |
+|---|---|---|
+| `data/` | `split_152051` | files, objects, `variables`, the dataset half of `datamodule` |
+| `arm/` | `pretrain` `scratch` `finetune` `frozen` | `phase`, `encoder_ckpt`, freezing / unfreeze epoch, `optimizer.backbone_lr` (+ gradient clipping for pretraining) |
+| `encoder/` | `rowcol_concat_v0` (model B) `rowcol_concat_v1_small` `rowcol_v0` `col_v0` `row_v0` | `encoder`: one encoder per object |
+| `aggregator/` | `transformer` | `aggregator` |
+| `head/` | `mlp` | `head` (finetune only) |
+| `views/` | `cutmix_mixup` | `lambda`, `views` (augmentation pipelines, both phases) |
+| `callbacks/` | `default` `default_monitors` `smoke` | `callbacks`, `callbacks_finetune` |
+| `logger/` | `csv_wandb` `csv` | `logger` |
+| `hpo/` | `tpe` | `hpo` (read by `fm4tag-hpo` only) |
+
+In the base: run control (`seed`, `experiment_name`, `output_dir`, ...),
+`chunk_size` and `row_qk_norm`, how the data is read (`datamodule.batch_size`,
+workers, ...), the `pretrain` / `finetune` modules (loss weights, schedule),
+`optimizer`, `trainer`.  Run configs written before 2026-11-25 call the encoder
+block `encoders` (`build_encoders` still reads it, so old checkpoints rebuild)
+and the logger block `loggers`.
 
 Anything can be overridden on the command line with Hydra dot-notation.
 
 ## Running
 
 ```bash
-# Pretrain  (default.yaml is the default config, so --config-name is optional;
-#            swap the encoder architecture with encoders=col_v0 | row_v0)
-fm4tag phase=pretrain action=fit
+# Pretrain (P0; P1 adds pretrain.loss_weights.jet_contrastive=1.0).  default.yaml
+# (model B) is the default base; another model: --config-name=saint_reduced.
+# Swap a part with its group, e.g. encoder=col_v0.
+fm4tag arm=pretrain
 
-# Finetune from a pretraining checkpoint (encoders + aggregator weights)
-fm4tag phase=finetune action=fit \
+# Finetune from a pretraining checkpoint (FT; arm=frozen keeps the encoders frozen)
+fm4tag arm=finetune \
     encoder_ckpt=outputs/fm4tag-pretrain-test/version_0/checkpoints/epoch010-step5000.ckpt
 
-# Finetune from scratch
-fm4tag phase=finetune action=fit
+# Train from scratch (SC)
+fm4tag arm=scratch
 
 # Resume an interrupted fit / evaluate / predict
 fm4tag ... action=fit    ckpt_path=/path/to/last.ckpt
@@ -98,9 +109,9 @@ Checkpoint knobs:
   schedule. `0` trains everything from step 0 (from-scratch); `>= max_epochs`
   keeps them frozen. DDP-safe (all params are in the optimiser from step 0).
 
-From a notebook — use Hydra's `compose` API so the `encoders` config group is
-resolved (a plain `OmegaConf.load` does **not** process the `defaults:` list, so
-`cfg.encoders` would be missing):
+From a notebook — use Hydra's `compose` API so the config groups are resolved
+(a plain `OmegaConf.load` does **not** process the `defaults:` list, so
+`cfg.encoder` and the other group blocks would be missing):
 
 ```python
 from hydra import compose, initialize_config_dir
@@ -108,7 +119,7 @@ from fm4tag.runner import run
 
 with initialize_config_dir(version_base=None,
                            config_dir='/abs/path/to/src/fm4tag/configs'):
-    cfg = compose(config_name='default', overrides=['encoders=rowcol_v0'])
+    cfg = compose(config_name='default', overrides=['arm=pretrain', 'encoder=rowcol_v0'])
 trainer = run(cfg, phase='pretrain', action='fit')
 ```
 

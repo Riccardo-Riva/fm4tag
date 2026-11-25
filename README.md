@@ -20,9 +20,12 @@ tracks  ──► Encoder (col/row/rowcol) ─┤─► TransformerAggregator �
   trained from scratch.
 
 Everything — data, architecture, augmentations, optimiser, Lightning trainer,
-Optuna HPO — is driven by one Hydra config
-([`default.yaml`](src/fm4tag/configs/default.yaml)), overridable on the
-command line.
+Optuna HPO — is driven by Hydra configs: one base config per model
+([`default.yaml`](src/fm4tag/configs/default.yaml) = model B,
+[`saint_reduced.yaml`](src/fm4tag/configs/saint_reduced.yaml)) built from the
+config groups in [`configs/`](src/fm4tag/configs) (data, arm, encoder,
+aggregator, head, views, callbacks, logger, hpo), overridable on the command
+line.
 
 ## Quick start
 
@@ -31,10 +34,11 @@ uv sync                          # creates .venv from pyproject.toml / uv.lock
 source .venv/bin/activate
 pytest -m "not ddp" -q           # quick check (DDP tests: pytest tests/ddp)
 
-fm4tag phase=pretrain action=fit                       # pretrain
-fm4tag phase=finetune action=fit \
+fm4tag arm=pretrain                                     # pretrain (model B)
+fm4tag arm=finetune \
     encoder_ckpt=outputs/.../checkpoints/best.ckpt      # finetune from a checkpoint
-fm4tag phase=finetune action=fit                        # finetune from scratch
+fm4tag arm=scratch                                      # train from scratch
+fm4tag --config-name=saint_reduced arm=scratch          # another model
 
 fm4tag-eval --config-name=my_config ckpt_path=outputs/.../best.ckpt   # representation quality
 fm4tag-hpo hpo.n_trials=50                                            # Optuna sweep
