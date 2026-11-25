@@ -1,0 +1,12 @@
+# Jet aggregator (shared by pretrain + finetune): per constituent type, a
+# transformer over each jet's valid constituents (attention within the jet
+# only), then a masked mean-pool; the pooled vectors are concatenated with the
+# global projection into the jet embedding z_jet.  global_dim and const_dims
+# are injected at runtime from the encoders.
+_target_:     fm4tag.models.TransformerAggregator
+depth:        6
+heads:        4
+dim_head:     64
+ff_mult:      4
+ff_dropout:   0.0
+attn_dropout: 0.0

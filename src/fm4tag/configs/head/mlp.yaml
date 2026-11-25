@@ -1,0 +1,5 @@
+# Classifier head (finetune only): z_jet -> mlp_hidden -> class logits.
+# jet_dim (= aggregator.out_dim) and y_dim are injected at runtime.
+_target_:    fm4tag.models.MultiStreamClassifierHead
+mlp_hidden:  256   # null → auto (max(jet_dim // 2, y_dim))
+mlp_dropout: 0.02

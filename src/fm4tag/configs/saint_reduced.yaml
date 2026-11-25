@@ -1,0 +1,180 @@
+# ════════════════════════════════════════════════════════════════════════════
+# fm4tag — SAINT reduced: model B's architecture with a smaller encoder
+# (encoder/rowcol_concat_v1_small.yaml), for a fair comparison with GN2 (2.2 M).
+#
+# STILL MODEL B'S VALUES apart from the encoder choice: the encoder sizes, and
+# the batch size / lr / chunk_size that depend on them, are yet to be set.
+#
+#   fm4tag --config-name=saint_reduced arm=scratch
+#   fm4tag --config-name=saint_reduced arm=pretrain [pretrain.loss_weights.jet_contrastive=1.0]
+#   fm4tag --config-name=saint_reduced arm=finetune encoder_ckpt=<ckpt>
+#
+# Layout: one base config per model (default.yaml, this file, ...); a base
+# never includes another base.  The pieces live in the config groups below;
+# every key is written in exactly one file (a group or this base), so nothing
+# is overwritten except on the command line / in a cells file.
+# ════════════════════════════════════════════════════════════════════════════
+
+defaults:
+  - data: split_152051             # files, objects, variables
+  - arm: scratch                   # what is trained from what (phase, checkpoint, freezing)
+  - encoder: rowcol_concat_v1_small   # per-object encoders (reduced)
+  - aggregator: transformer
+  - head: mlp
+  - views: cutmix_mixup            # augmentation views + lambda
+  - callbacks: default_monitors    # default | default_monitors | smoke
+  - logger: csv_wandb              # csv_wandb | csv
+  - hpo: tpe                       # read by fm4tag-hpo only
+  - _self_
+
+# ── Run control ─────────────────────────────────────────────────────────────
+action: fit        # fit | test | predict
+seed:   42
+experiment_name: saint_reduced
+output_dir: outputs
+float32_matmul_precision: high   # highest | high | medium
+ckpt_path: null    # Lightning checkpoint to resume fit / run test / predict
+
+# ── Intersample attention ───────────────────────────────────────────────────
+# Jets per intersample-attention chunk: each jet, and each of its tracks,
+# attends (row attention) only within its chunk of chunk_size consecutive jets
+# of the batch.  A MODEL hyper-parameter (the intersample context), also used
+# at inference.  null = the whole rank-local batch is one chunk.
+# S1: 128 and 512 give the same tagger; 512 gives pretraining 4x more negatives.
+chunk_size: 512
+
+# RMS-normalise the row attention's queries and keys per head (read by the row
+# layers of encoder/*.yaml).  Every arm (rriva, 2026-10-22): without it
+# contrastive pretraining grew the track row-attention logits to 1e5-1e7
+# (one-hot attention) and the 30-epoch runs blew up.
+row_qk_norm: true
+
+# ── DataModule: how the data is read (the dataset is in data/) ──────────────
+datamodule:
+  # Jets per rank and step: the largest multiple of 8*chunk_size under ~38 GiB
+  # (S0); this one fits SC/FT.  With chunk_size set the intersample context is
+  # the chunk, so batch_size is an optimisation knob only (gradient batch,
+  # VRAM).  Must be a multiple of chunk_size.
+  batch_size:      24576
+  num_workers:     10
+  prefetch_factor: 2
+  pin_memory:      true
+  # Workers re-open the 43 GB HDF5 on every restart; a cold first batch was
+  # measured at 107 s, paid per loader per epoch when this was false.
+  persistent_workers: true
+  # Contiguous row runs stitched into one batch.  The file is chunked + lzf
+  # compressed, so h5py cannot read a single row — it decompresses the whole
+  # enclosing chunk (~240 kB for a 76-byte jet row).  Reading spans instead of
+  # indices cut a batch from 485 MB decompressed to ~3 MB.
+  #   1  = one contiguous slice (cheapest read; batch composition frozen across
+  #        epochs, which the row attention can learn — avoid here)
+  #   >1 = stitched from that many random regions, redrawn every epoch
+  reads_per_batch: 8
+  seed:            ${seed}
+  # Train on the first N rows of the (pre-shuffled) training file only, e.g. a
+  # low-label regime; null = all of it.  Validation and test stay whole.
+  train_max_rows:  null
+
+# ── Pretraining module (phase: pretrain) ────────────────────────────────────
+# Instantiated with the runtime objects passed as overrides, _convert_='all'
+# (keeps omegaconf objects out of the checkpoints' hyper-parameters).
+# loss_weights are the multipliers of each component's loss, as-is (not
+# normalised); a weight of 0 disables that component — not computed, not
+# logged.  Every active component is logged as <split>/<component>/<metric>.
+pretrain:
+  _target_: fm4tag.modules.PretrainModule
+
+  global_object: ${global_object}
+  constituent_objects: ${constituent_objects}
+
+  # P0 recipe from S2 (rriva, 2026-10-21): contrastive on the per-object
+  # embeddings only; P1 sets jet_contrastive=1.0.
+  loss_weights:
+    contrastive:     1.0   # per-object embeddings (encoder projections)
+    denoising_cat:   0.0   # categorical reconstruction (constituents only)
+    denoising_con:   0.0   # continuous reconstruction
+    jet_contrastive: 0.0   # aggregator output
+
+  # T 0.1 with lambda 0.4: the best frozen-encoder probe in S2, 0.635 vs 0.656
+  # for frozen random encoders.
+  contrastive_loss:
+    _target_: fm4tag.losses.MultiViewSupConLoss
+    temperature:          0.1
+    loss_type:            out     # 'out' (L_out) or 'in' (L_in) from SupCon paper
+    include_pos_in_denom: true    # standard SupCon denominator (includes positives)
+    include_same_view_negatives: false
+
+  jet_contrastive_loss:
+    _target_: fm4tag.losses.MultiViewSupConLoss
+    temperature:          0.1
+    loss_type:            out
+    include_pos_in_denom: true
+    include_same_view_negatives: false
+
+  lr:           ${optimizer.lr}
+  weight_decay: ${optimizer.weight_decay}
+  warmup_frac:  0.02
+  warmup_epochs: null      # warmup length in epochs; when set it replaces warmup_frac
+  schedule:     cosine     # cosine | wsd (warmup, constant, linear decay over the last decay_frac)
+  decay_frac:   0.2
+  chunk_size:   ${chunk_size}
+
+# ── Fine-tuning module (phase: finetune) ────────────────────────────────────
+# Instantiated like the pretrain module (shared views).  The arm sets
+# freeze_encoders and unfreeze_at_epoch (arm/*.yaml).
+use_class_weights: false  # true → per-class CE weights for the global object's
+                          # label from class_dict_path (overrides class_weights)
+
+finetune:
+  _target_: fm4tag.modules.FinetuneModule
+
+  global_object: ${global_object}
+  constituent_objects: ${constituent_objects}
+
+  loss_weights:
+    cross_entropy:   1.0   # head classification output
+    jet_contrastive: 0.0   # aggregator output; the JC arms use 0.3 (λ-scan prior)
+
+  jet_contrastive_loss:
+    _target_: fm4tag.losses.MultiViewSupConLoss
+    temperature:          0.1
+    loss_type:            out
+    include_pos_in_denom: true
+    include_same_view_negatives: false
+
+  class_weights: null      # explicit per-class CE weights, e.g. [1.0, 2.3, 1.1, 0.9]
+
+  lr:           ${optimizer.lr}
+  backbone_lr:  ${optimizer.backbone_lr}
+  weight_decay: ${optimizer.weight_decay}
+  warmup_frac:  0.02
+  warmup_epochs: null      # warmup length in epochs; when set it replaces warmup_frac
+  # cosine = warmup, then cosine annealing to 0 over the rest of the run;
+  # wsd = warmup, stable at the base lr, linear decay to 0 over the last
+  # decay_frac of the steps (the pretrained parts warm up after their unfreeze).
+  schedule:     cosine
+  decay_frac:   0.2
+  chunk_size:   ${chunk_size}
+
+# ── Optimiser (AdamW) ───────────────────────────────────────────────────────
+# backbone_lr (the pretrained parts' lr) is set by the arm.
+optimizer:
+  lr:           3.0e-4     # tuned per arm (S3)
+  weight_decay: 5.962613854843877e-05
+
+# ── PyTorch Lightning Trainer ───────────────────────────────────────────────
+trainer:
+  # S1: the best epoch comes at 7-10, so the cosine has to decay within reach
+  # of it.  The slurm pack workers always set it per cell.
+  max_epochs:         40
+  accelerator:        gpu
+  devices:            1
+  precision:          "bf16-mixed"
+  log_every_n_steps:  100
+  # BatchSliceSampler shards batches across ranks itself (it yields row spans,
+  # which Lightning's injected DistributedSampler would replace with plain
+  # integer indices and silently undo the batched reads). Must stay false.
+  use_distributed_sampler: false
+
+profiler:
+  _target_: lightning.pytorch.profilers.SimpleProfiler

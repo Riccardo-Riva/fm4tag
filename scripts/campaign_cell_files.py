@@ -26,7 +26,7 @@ def main() -> None:
         for o in sys.argv[1:]
     ]
     with initialize_config_dir(config_dir=str(CONFIG_DIR), version_base=None):
-        cfg = compose(config_name='campaign_ssl', overrides=overrides)
+        cfg = compose(config_name='default', overrides=overrides)
     train = (
         cfg.pretrain_dataset_path if cfg.phase == 'pretrain' else cfg.train_dataset_path
     )

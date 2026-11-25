@@ -1,0 +1,17 @@
+# CSV (metrics.csv in the run folder, what the plots read) + W&B (live view).
+csv:
+  _target_: lightning.pytorch.loggers.CSVLogger
+  save_dir: ${output_dir}
+  name:     ${experiment_name}
+
+wandb:
+  _target_: lightning.pytorch.loggers.WandbLogger
+  save_dir: ${output_dir}
+  project:  fm4tag
+  entity:   ririva-cern
+  log_model: true
+  # Fallbacks for manual runs: the slurm pack workers set all three per run —
+  # group = the stage, job_type = the arm, name = <cell>_seed<seed>.
+  name:     ${experiment_name}
+  group:    ${phase}
+  job_type: ${phase}

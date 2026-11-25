@@ -2,8 +2,8 @@
 # Encoder architecture — RowCol (alternating col-then-row attention).
 #
 # Selected via the parent config's defaults list, e.g.
-#   defaults: [{encoders: rowcol_v0}, _self_]
-# or overridden on the CLI:  encoders=rowcol_v0
+#   defaults: [{encoder: rowcol_v0}, _self_]
+# or overridden on the CLI:  encoder=rowcol_v0
 #
 # Every `layers` entry lists ONLY the kwargs its block class accepts:
 #   type: rowcol → RowColTransformer(col_heads, row_heads, dim_head,

@@ -186,9 +186,9 @@ while true; do
         seed="${SEED}" \
         experiment_name="${CELL}" \
         output_dir="${RUN_DIR}" \
-        loggers.wandb.group="${WANDB_GROUP}" \
-        loggers.wandb.job_type="${ARM}" \
-        loggers.wandb.name="${CELL}_seed${SEED}" \
+        logger.wandb.group="${WANDB_GROUP}" \
+        logger.wandb.job_type="${ARM}" \
+        logger.wandb.name="${CELL}_seed${SEED}" \
         > "${RUN_DIR}/rank_0.out" 2> "${RUN_DIR}/rank_0.err"
     RC=$?
     RUN_SECONDS=$(( $(date +%s) - RUN_START ))

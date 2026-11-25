@@ -43,7 +43,7 @@ ARMS = {
     'fr_p0': ('frozen', 'p0', False),
 }
 COMMON = (
-    'encoders=rowcol_concat_v0 chunk_size=512 '
+    'encoder=rowcol_concat_v0 chunk_size=512 '
     f'datamodule.batch_size={BATCH} '
     # warmup 1.6 epochs (2% of the 80-epoch finals) for any run length, stable, linear decay over the last 20%
     'finetune.schedule=wsd finetune.warmup_epochs=1.6 finetune.decay_frac=0.2 '
@@ -53,10 +53,10 @@ COMMON = (
 DROPOUT = ' '.join(
     f'{key}=0.2'
     for key in (
-        'encoders.global_encoder.layers.0.attn_dropout',
-        'encoders.global_encoder.layers.0.ff_dropout',
-        'encoders.constituents.tracks.layers.0.attn_dropout',
-        'encoders.constituents.tracks.layers.0.ff_dropout',
+        'encoder.global_encoder.layers.0.attn_dropout',
+        'encoder.global_encoder.layers.0.ff_dropout',
+        'encoder.constituents.tracks.layers.0.attn_dropout',
+        'encoder.constituents.tracks.layers.0.ff_dropout',
         'aggregator.attn_dropout',
         'aggregator.ff_dropout',
         'head.mlp_dropout',

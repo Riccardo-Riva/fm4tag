@@ -1,0 +1,21 @@
+# @package _global_
+# Multi-view augmentation (shared by pretrain and finetune): view 0 = CutMix +
+# Mixup of strength lambda, view 1 = the clean jet.  The first view is the
+# denoising input; all views enter the contrastive losses.  Instantiated in the
+# runner and passed to the module.  Top-level keys (@package _global_): cells
+# set `lambda=...` and the analysis scripts read cfg.views.
+
+# Augmentation strength: the λ-scan prior for the downstream JC; the
+# pretraining grid (S2) overrides it.
+lambda: 0.4
+
+views:
+  - _target_: fm4tag.augmentations.Compose
+    augmentations:
+      - _target_: fm4tag.augmentations.CutMix
+        lam: ${lambda}
+      - _target_: fm4tag.augmentations.Mixup
+        lam: ${lambda}
+  - _target_: fm4tag.augmentations.Compose
+    augmentations:
+      - _target_: fm4tag.augmentations.Identity

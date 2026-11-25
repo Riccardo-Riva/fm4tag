@@ -1,5 +1,9 @@
 # ════════════════════════════════════════════════════════════════════════════
-# Encoder architecture — RowCol with SAINT-style CONCATENATED row attention.
+# Encoder architecture — RowCol with SAINT-style CONCATENATED row attention,
+# REDUCED: the encoder of saint_reduced.yaml.
+#
+# STILL A COPY OF rowcol_concat_v0 (model B): the reduced sizes (depth,
+# row_heads, ff_mult, ...) are yet to be set here.
 #
 # Same as rowcol_v0, except the row (intersample) step runs `row_mode: concat`:
 # instead of one row attention per feature token (per_token), the N tokens are
@@ -14,7 +18,7 @@
 # encoder; ff_mult multiplies the largest term (the row feed-forward), so it is
 # the cheapest lever.  Check `scripts/model_summary.py` before raising `dim`.
 #
-# Select with:  encoders=rowcol_concat_v0
+# Select with:  encoder=rowcol_concat_v1_small
 # ════════════════════════════════════════════════════════════════════════════
 
 global_encoder:

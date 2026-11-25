@@ -14,10 +14,10 @@ Usage::
 
     scripts/model_summary.py                         # default.yaml, pretrain
     scripts/model_summary.py --phase finetune        # adds the classifier head
-    scripts/model_summary.py --config-name model_0   # a different config
+    scripts/model_summary.py --config-name saint_reduced   # another base config
 
-    scripts/model_summary.py encoders=col_v0         # compare architectures
-    scripts/model_summary.py encoders.constituents.tracks.layers.0.row_mode=concat
+    scripts/model_summary.py encoder=col_v0          # compare architectures
+    scripts/model_summary.py encoder.constituents.tracks.layers.0.row_mode=concat
 
     scripts/model_summary.py --max-depth 4           # deeper module tree
     scripts/model_summary.py --breakdown             # + per-component % shares
@@ -136,9 +136,7 @@ def main() -> None:
         action='store_true',
         help='also print the per-component parameter shares and encoder geometry',
     )
-    ap.add_argument(
-        'overrides', nargs='*', help='hydra overrides, e.g. encoders=col_v0'
-    )
+    ap.add_argument('overrides', nargs='*', help='hydra overrides, e.g. encoder=col_v0')
     args = ap.parse_args()
 
     with initialize_config_dir(version_base=None, config_dir=args.config_path):

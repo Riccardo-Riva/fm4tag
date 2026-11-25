@@ -115,7 +115,7 @@ def run(
     L.seed_everything(cfg.get('seed', 42), workers=True)
 
     # ── Trainer infrastructure ────────────────────────────────────────────
-    logger = instantiate_loggers(cfg.get('loggers'))
+    logger = instantiate_loggers(cfg.get('logger'))
     # Shared callbacks + phase-specific extras, merged in (not appended) so
     # that reusing a shared callback's key (e.g. ``model_checkpoint``) patches
     # its fields — such as ``monitor`` — instead of instantiating a second,

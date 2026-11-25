@@ -49,6 +49,9 @@ def main() -> None:
     parser.add_argument('--cells', type=Path, required=True)
     parser.add_argument('--expected', type=float, required=True)
     parser.add_argument(
+        '--config-name', default='default', help='base config the cells run with'
+    )
+    parser.add_argument(
         '--skip',
         nargs='*',
         default=[],
@@ -71,7 +74,7 @@ def main() -> None:
                 'encoder_ckpt=/placeholder' if tok.startswith('encoder_ckpt=@') else tok
             )
         with initialize_config_dir(config_dir=str(CONFIG_DIR), version_base=None):
-            cfg = compose(config_name='campaign_ssl', overrides=overrides)
+            cfg = compose(config_name=args.config_name, overrides=overrides)
         encoders = build_encoders(cfg)
         aggregator = build_aggregator(cfg, encoders)
         head = build_head(cfg, aggregator)

@@ -1,8 +1,16 @@
 # @package _global_
 # SC: the whole tagger trained from random init; every part at optimizer.lr.
+#
+# Every arm sets the same keys.
 phase: finetune
-encoder_ckpt: null
+
+encoder_ckpt:         null
+require_encoder_ckpt: false
+load_aggregator:      auto
 
 finetune:
   freeze_encoders:   false
   unfreeze_at_epoch: 0
+
+optimizer:
+  backbone_lr: null   # nothing is pretrained: no backbone parameter group

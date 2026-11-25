@@ -31,7 +31,7 @@ class _Worsening(L.LightningModule):
 
 def test_last_ckpt_is_the_final_epoch(tmp_path):
     with initialize_config_dir(config_dir=str(cfg_path[0]), version_base=None):
-        cfg = compose(config_name='campaign_ssl', overrides=['arm=pretrain'])
+        cfg = compose(config_name='default', overrides=['arm=pretrain'])
     with open_dict(cfg):
         for key in ('model_checkpoint', 'last_checkpoint'):
             cfg.callbacks[key].dirpath = str(tmp_path)

@@ -1,14 +1,14 @@
 # ════════════════════════════════════════════════════════════════════════════
-# Encoder architecture — Row (row / intersample attention only).
+# Encoder architecture — Col (column / within-sample attention only).
 #
 # Selected via the parent config's defaults list, e.g.
-#   defaults: [{encoders: row_v0}, _self_]
-# or overridden on the CLI:  encoders=row_v0
+#   defaults: [{encoder: col_v0}, _self_]
+# or overridden on the CLI:  encoder=col_v0
 #
-# RowTransformer's head arg is `row_heads` and its head dim `dim_row_head`; it
-# has no column attention — so no `col_heads` or `dim_head`.
-#   type: row → RowTransformer(row_heads, dim_row_head, row_mode, ...)
-# `dim` and `nfeats` are injected at runtime.
+# ColTransformer's head arg is `heads` (not `col_heads`), and it has no row
+# attention — so no `row_heads` or `dim_row_head`.
+#   type: col → ColTransformer(heads, dim_head, ...)
+# `dim` is injected at runtime.
 # ════════════════════════════════════════════════════════════════════════════
 
 global_encoder:
@@ -18,31 +18,27 @@ global_encoder:
   proj_out:     64    # projector output width — head only, never the backbone
   # num_features injected at runtime from variables.jets.inputs
   layers:
-    - type:         row
+    - type:         col
       depth:        4
-      row_heads:    3
-      dim_row_head: 32
+      heads:        2
+      dim_head:     32
       ff_mult:      1
       attn_dropout: 0.0
       ff_dropout:   0.0
-      row_mode:     per_token  # per_token | concat — see RowMixer
-      row_qk_norm:  ${oc.select:row_qk_norm,false}  # top-level switch
 
 constituents:
   tracks:
     _target_: fm4tag.models.Encoder
-    dim:              64
+    dim:              128
     cont_embeddings:  MLP    # MLP | pos_singleMLP
     proj_hidden:      256    # null → auto (3/4 × dim × n_tokens)
     proj_out:         128     # null → auto (1/2 × dim × n_tokens)
     # categories and num_continuous are injected at runtime from variables.tracks
     layers:
-      - type:          row
+      - type:          col
         depth:         4
-        row_heads:     4
-        dim_row_head:  64
+        heads:         2
+        dim_head:      32
         ff_mult:       1
         attn_dropout:  0.0
         ff_dropout:    0.0
-        row_mode:      per_token  # per_token | concat — see RowMixer
-        row_qk_norm:   ${oc.select:row_qk_norm,false}  # top-level switch

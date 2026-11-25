@@ -1,0 +1,32 @@
+# Hyperparameter optimisation (fm4tag-hpo): Optuna TPE sampler + median pruner.
+study_name:   fm4tag_hpo
+storage:      null            # e.g. sqlite:///hpo.db for parallel workers
+n_trials:     100
+timeout:      null
+phases:       [finetune]      # [pretrain] | [finetune] | [pretrain, finetune]
+pretrain_encoder_ckpt: null   # fixed pretrain ckpt for finetune-only HPO
+
+metric:       val/loss        # objective: any logged metric key
+direction:    minimize        # minimize | maximize
+disable_wandb: true           # drop the wandb logger per trial (keep CSV)
+
+sampler:  TPE
+pruner:   median
+pruner_n_startup_trials: 5
+pruner_n_warmup_steps:   10
+pruner_interval_steps:   1
+
+max_epochs_pretrain:  100
+max_epochs_finetune:  100
+
+search_space:
+  pretrain:
+    - {param: pretrain.contrastive_loss.temperature, type: float, low: 0.1, high: 0.5}
+    - {param: optimizer.lr,                   type: float, low: 1e-5,  high: 1e-2, log: true}
+    - {param: optimizer.weight_decay,         type: float, low: 1e-7,  high: 1e-3, log: true}
+
+  finetune:
+    - {param: aggregator.depth,                  type: int,         low: 3,   high: 6}
+    - {param: aggregator.ff_mult,                type: categorical, choices: [2, 4]}
+    - {param: optimizer.lr,                      type: float,       low: 1e-5, high: 1e-2, log: true}
+    - {param: optimizer.weight_decay,            type: float,       low: 1e-7, high: 1e-3, log: true}

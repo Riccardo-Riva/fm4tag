@@ -1,0 +1,6 @@
+# CSV only (metrics.csv in the run folder): no W&B run, e.g. for smoke runs and
+# tests.  The slurm pack workers set logger.wandb.* and need csv_wandb.
+csv:
+  _target_: lightning.pytorch.loggers.CSVLogger
+  save_dir: ${output_dir}
+  name:     ${experiment_name}

@@ -24,6 +24,8 @@
 # Usage:
 #   CELLS=experiments/<campaign>/configs/S2.cells SEEDS=42 PACKS=4 \
 #     MAX_EPOCHS=10 EST_SECONDS_PER_EPOCH=6000 bash slurm/ssl_pack.sh
+#   CONFIG=<base> ...             base config of the stage, in src/fm4tag/configs/
+#                                 (default: default = model B; e.g. saint_reduced)
 #   DRY_RUN=1 ...                 write everything, submit nothing
 #   CELL_FILTER=<regex> ...       only the cells whose name matches (e.g. the
 #                                 probes whose pretrainings have ended)
@@ -49,7 +51,7 @@ set -euo pipefail
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 VENV=${REPO}/.venv
 CONFIG_DIR=${REPO}/src/fm4tag/configs
-CONFIG=campaign_ssl
+CONFIG=${CONFIG:-default}
 
 PACKS=${PACKS:?set PACKS (number of GPU-pack jobs to submit)}
 GPUS_PER_PACK=${GPUS_PER_PACK:-2}

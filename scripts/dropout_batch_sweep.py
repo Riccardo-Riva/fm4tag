@@ -38,10 +38,10 @@ import pandas as pd
 REPO = Path(__file__).resolve().parents[1]
 CONFIG_DIR = REPO / 'src' / 'fm4tag' / 'configs'
 DROPOUT_KEYS = (
-    'encoders.global_encoder.layers.0.attn_dropout',
-    'encoders.global_encoder.layers.0.ff_dropout',
-    'encoders.constituents.tracks.layers.0.attn_dropout',
-    'encoders.constituents.tracks.layers.0.ff_dropout',
+    'encoder.global_encoder.layers.0.attn_dropout',
+    'encoder.global_encoder.layers.0.ff_dropout',
+    'encoder.constituents.tracks.layers.0.attn_dropout',
+    'encoder.constituents.tracks.layers.0.ff_dropout',
     'aggregator.attn_dropout',
     'aggregator.ff_dropout',
     'head.mlp_dropout',
@@ -105,7 +105,7 @@ def build_cmd(run_dir: Path, overrides: list[str], steps: int) -> list[str]:
     return [
         str(REPO / '.venv' / 'bin' / 'fm4tag'),
         f'--config-path={CONFIG_DIR}',
-        '--config-name=campaign_ssl',
+        '--config-name=default',
         'action=fit',
         'trainer.max_epochs=1',
         f'+trainer.limit_train_batches={steps}',

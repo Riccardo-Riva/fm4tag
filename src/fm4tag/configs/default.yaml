@@ -1,109 +1,63 @@
 # ════════════════════════════════════════════════════════════════════════════
-# fm4tag — pretrain experiment config
+# fm4tag — model B: SAINT-like per-feature encoders (6 row + column steps,
+# intersample attention over 512-jet chunks) + a 6-layer transformer
+# aggregator; 7.5 M parameters.  The base config `fm4tag` uses when no
+# --config-name is given.
 #
-# All keys can be overridden from the command line via Hydra dot-notation, e.g.
-#   python -m fm4tag.train phase=pretrain trainer.max_epochs=50
+#   fm4tag arm=pretrain                                   # P0
+#   fm4tag arm=pretrain pretrain.loss_weights.jet_contrastive=1.0   # P1
+#   fm4tag arm=scratch                                    # SC
+#   fm4tag arm=finetune encoder_ckpt=<ckpt>               # FT
+#   fm4tag arm=frozen   encoder_ckpt=<ckpt>               # FR
+#
+# Layout: one base config per model (this file, saint_reduced.yaml, ...); a
+# base never includes another base.  The pieces live in the config groups
+# below; every key is written in exactly one file (a group or this base), so
+# nothing is overwritten except on the command line / in a cells file.
 # ════════════════════════════════════════════════════════════════════════════
 
-# ── Config composition ──────────────────────────────────────────────────────
-# The embedding-transformer architecture is a swappable config group under
-# configs/encoders/.  Override on the CLI with e.g.  encoders=col_v0
 defaults:
-  - encoders: rowcol_v0
+  - data: split_152051             # files, objects, variables
+  - arm: scratch                   # what is trained from what (phase, checkpoint, freezing)
+  - encoder: rowcol_concat_v0      # per-object encoders (model B)
+  - aggregator: transformer
+  - head: mlp
+  - views: cutmix_mixup            # augmentation views + lambda
+  - callbacks: default_monitors    # default | default_monitors | smoke
+  - logger: csv_wandb              # csv_wandb | csv
+  - hpo: tpe                       # read by fm4tag-hpo only
   - _self_
 
 # ── Run control ─────────────────────────────────────────────────────────────
-phase:  pretrain   # pretrain | finetune
 action: fit        # fit | test | predict
 seed:   42
-experiment_name: fm4tag-pretrain-test
+experiment_name: ssl_campaign
 output_dir: outputs
 float32_matmul_precision: high   # highest | high | medium
+ckpt_path: null    # Lightning checkpoint to resume fit / run test / predict
 
-# ── Data — objects ──────────────────────────────────────────────────────────
-global_object: jets
-constituent_objects:
-  - tracks
+# ── Intersample attention ───────────────────────────────────────────────────
+# Jets per intersample-attention chunk: each jet, and each of its tracks,
+# attends (row attention) only within its chunk of chunk_size consecutive jets
+# of the batch.  A MODEL hyper-parameter (the intersample context), also used
+# at inference.  null = the whole rank-local batch is one chunk.
+# S1: 128 and 512 give the same tagger; 512 gives pretraining 4x more negatives.
+chunk_size: 512
 
-# ── Data — feature definitions ──────────────────────────────────────────────
-variables:
-  jets:
-    inputs:
-      - pt_btagJes
-      - eta_btagJes
-    label: flavour_label
-    unique_labels: [0, 1, 2, 3]
+# RMS-normalise the row attention's queries and keys per head (read by the row
+# layers of encoder/*.yaml).  Every arm (rriva, 2026-10-22): without it
+# contrastive pretraining grew the track row-attention logits to 1e5-1e7
+# (one-hot attention) and the 30-epoch runs blew up.
+row_qk_norm: true
 
-  tracks:
-    inputs:
-      continuous:
-        - d0
-        - z0SinTheta
-        - dphi
-        - deta
-        - qOverP
-        - lifetimeSignedD0Significance
-        - lifetimeSignedZ0SinThetaSignificance
-        - phiUncertainty
-        - thetaUncertainty
-        - qOverPUncertainty
-      categorical:
-        - numberOfPixelHits
-        - numberOfSCTHits
-        - numberOfInnermostPixelLayerHits
-        - numberOfNextToInnermostPixelLayerHits
-        - numberOfInnermostPixelLayerSharedHits
-        - numberOfInnermostPixelLayerSplitHits
-        - numberOfPixelSharedHits
-        - numberOfPixelSplitHits
-        - numberOfSCTSharedHits
-      cat_classes:
-        numberOfPixelHits:                        [0,1,2,3,4,5,6,7,8,9,10,11,12]
-        numberOfSCTHits:                          [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24]
-        numberOfInnermostPixelLayerHits:          [0,1,2,3]
-        numberOfNextToInnermostPixelLayerHits:    [0,1,2,3]
-        numberOfInnermostPixelLayerSharedHits:    [0,1]
-        numberOfInnermostPixelLayerSplitHits:     [0,1,2,3]
-        numberOfPixelSharedHits:                  [0,1]
-        numberOfPixelSplitHits:                   [0,1,2,3,4,5,6,7,8,9,10,11]
-        numberOfSCTSharedHits:                    [0,1,2,3]
-
-# ── Data — file paths ────────────────────────────────────────────────────────
-base_path: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_112022 # 62M
-#base_path: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251112_152051 # 60M
-#base_path: /storage3/DSIP/rriva/datasets/transforming-jet-flavor/data_parallel_preprocess_251114_155623 # 6M 
-
-pretrain_dataset_path: ${base_path}/pretrain/output/pp_output_pretrain.h5
-train_dataset_path: ${base_path}/train/output/pp_output_train.h5
-val_dataset_path:   ${base_path}/val/output/pp_output_val.h5
-test_dataset_path:  ${base_path}/test/output/pp_output_test.h5
-
-norm_dict_path:  ${base_path}/train/output/norm_dict.yaml
-class_dict_path: ${base_path}/train/output/class_dict.yaml
-
-# ── DataModule ────────────────────────────────────────────────────────────────
-# Instantiated via Hydra (with _convert_='all' at the call site, see pretrain):
-#   hydra_instantiate(cfg.datamodule, _convert_='all')                # finetune
-#   hydra_instantiate(cfg.datamodule, _convert_='all',
-#                     train_dataset_path=cfg.pretrain_dataset_path)   # pretrain
+# ── DataModule: how the data is read (the dataset is in data/) ──────────────
 datamodule:
-  _target_: fm4tag.datamodules.CatConDataModule
-
-  train_dataset_path: ${train_dataset_path}
-  val_dataset_path:   ${val_dataset_path}
-  test_dataset_path:  ${test_dataset_path}
-  variables:           ${variables}
-  global_object:       ${global_object}
-  constituent_objects: ${constituent_objects}
-  norm_dict_path:  ${norm_dict_path}
-  class_dict_path: ${class_dict_path}
-
-  # Jets per rank and step.  With chunk_size set (see below) the intersample
-  # context is the chunk, so batch_size is an optimisation knob only (gradient
-  # batch, VRAM); with chunk_size: null the whole batch is the context and
-  # batch_size is a MODEL hyper-parameter.  Must be a multiple of chunk_size.
-  batch_size:      1024
-  num_workers:     6
+  # Jets per rank and step: the largest multiple of 8*chunk_size under ~38 GiB
+  # (S0); this one fits SC/FT.  With chunk_size set the intersample context is
+  # the chunk, so batch_size is an optimisation knob only (gradient batch,
+  # VRAM).  Must be a multiple of chunk_size.
+  batch_size:      24576
+  num_workers:     10
   prefetch_factor: 2
   pin_memory:      true
   # Workers re-open the 43 GB HDF5 on every restart; a cold first batch was
@@ -122,96 +76,28 @@ datamodule:
   # low-label regime; null = all of it.  Validation and test stay whole.
   train_max_rows:  null
 
-# ── Intersample chunks ────────────────────────────────────────────────────────
-# Jets per intersample-attention chunk: each jet, and each of its tracks,
-# attends (row attention) only within its chunk of chunk_size consecutive jets
-# of the batch.  A MODEL hyper-parameter (the intersample context), also used at
-# inference.  null = the whole rank-local batch is one chunk.
-chunk_size: null
-
-# RMS-normalise the row (intersample) attention's queries and keys per head
-# (RowAttention qk_norm).  Read by the row layers of encoders/*.yaml.  Off here
-# so older run configs and checkpoints rebuild unchanged.
-row_qk_norm: false
-
-# ── Backbone architecture ─────────────────────────────────────────────────────
-# The encoder architecture (the per-object embedding transformers) lives in the
-# `encoders` config group under configs/encoders/ and is selected in the
-# defaults list at the top of this file.  Swap it on the CLI with e.g.
-#   encoders=col_v0       (choices: rowcol_v0 | col_v0 | row_v0)
-#
-# Each group file defines:
-#   encoders.global_encoder        — GlobalTransformerEncoder (continuous-only)
-#   encoders.constituents.<name>   — one Encoder per constituent object
-# whose "layers" list carries ONLY the kwargs its block class accepts:
-#   type: col    → ColTransformer    (heads, dim_head)
-#   type: row    → RowTransformer    (row_heads, dim_row_head, row_mode)
-#   type: rowcol → RowColTransformer (col_heads, row_heads, dim_head,
-#                                     dim_row_head, row_mode)
-# "dim" and (for row-aware blocks) "nfeats" are injected automatically.
-#
-# Per-key CLI overrides still work, e.g.
-#   fm4tag encoders.constituents.tracks.layers.0.depth=3
-
-# ── Jet aggregator (shared by pretrain + finetune) ────────────────────────────
-# Cross-constituent transformer + masked mean-pool that builds the jet embedding
-# z_jet from the per-object projections.  The class is selected by _target_;
-# global_dim and const_dims are injected at runtime from the encoders.
-aggregator:
-  _target_:     fm4tag.models.TransformerAggregator
-  depth:        6
-  heads:        4
-  dim_head:     64
-  ff_mult:      4
-  ff_dropout:   0.0
-  attn_dropout: 0.0
-
-# ── Classifier head (finetune only) ──────────────────────────────────────────
-# jet_dim (= aggregator.out_dim) and y_dim are injected at runtime.
-head:
-  _target_: fm4tag.models.MultiStreamClassifierHead
-  mlp_hidden:  256   # null → auto (max(jet_dim // 2, y_dim))
-  mlp_dropout: 0.02
-
-# ── Multi-view augmentation pipelines (shared by pretrain and finetune) ──────
-# First view is the denoising input; all views participate in contrastive.
-# Instantiated in the runner and passed to the module as a kwarg override.
-
-lambda: 0.1
-views:
-  - _target_: fm4tag.augmentations.Compose
-    augmentations:
-      - _target_: fm4tag.augmentations.CutMix
-        lam: ${lambda}
-      - _target_: fm4tag.augmentations.Mixup
-        lam: ${lambda}
-  - _target_: fm4tag.augmentations.Compose
-    augmentations:
-      - _target_: fm4tag.augmentations.Identity
-
-# ── Pretraining module ────────────────────────────────────────────────────────
-# Instantiated via Hydra with the runtime objects passed as overrides.
-# _convert_='all' at the call site keeps omegaconf objects out of the module
-# (and out of save_hyperparameters → checkpoints stay weights_only-loadable):
-#   hydra_instantiate(cfg.pretrain, encoders=..., aggregator=..., views=...,
-#                     _convert_='all')
-#
-# loss_weights are used as-is (not normalised) as the multiplier on each
-# component's loss; a weight of 0 disables that component entirely — not
-# computed, not logged.  Every active component is logged as
-# <split>/<component>/<metric>.
+# ── Pretraining module (phase: pretrain) ────────────────────────────────────
+# Instantiated with the runtime objects passed as overrides, _convert_='all'
+# (keeps omegaconf objects out of the checkpoints' hyper-parameters).
+# loss_weights are the multipliers of each component's loss, as-is (not
+# normalised); a weight of 0 disables that component — not computed, not
+# logged.  Every active component is logged as <split>/<component>/<metric>.
 pretrain:
   _target_: fm4tag.modules.PretrainModule
 
   global_object: ${global_object}
   constituent_objects: ${constituent_objects}
 
+  # P0 recipe from S2 (rriva, 2026-10-21): contrastive on the per-object
+  # embeddings only; P1 sets jet_contrastive=1.0.
   loss_weights:
-    contrastive:     0.6   # per-object embeddings (encoder projections)
-    denoising_cat:   0.2   # categorical reconstruction (constituents only)
-    denoising_con:   0.2   # continuous reconstruction
-    jet_contrastive: 1.0   # aggregator output
+    contrastive:     1.0   # per-object embeddings (encoder projections)
+    denoising_cat:   0.0   # categorical reconstruction (constituents only)
+    denoising_con:   0.0   # continuous reconstruction
+    jet_contrastive: 0.0   # aggregator output
 
+  # T 0.1 with lambda 0.4: the best frozen-encoder probe in S2, 0.635 vs 0.656
+  # for frozen random encoders.
   contrastive_loss:
     _target_: fm4tag.losses.MultiViewSupConLoss
     temperature:          0.1
@@ -228,24 +114,18 @@ pretrain:
 
   lr:           ${optimizer.lr}
   weight_decay: ${optimizer.weight_decay}
-  warmup_frac:  0.1
+  warmup_frac:  0.02
   warmup_epochs: null      # warmup length in epochs; when set it replaces warmup_frac
   schedule:     cosine     # cosine | wsd (warmup, constant, linear decay over the last decay_frac)
   decay_frac:   0.2
   chunk_size:   ${chunk_size}
 
-# ── Fine-tuning settings (runner-level) ───────────────────────────────────────
-encoder_ckpt:   null    # path to a pretraining checkpoint to load the encoder
-load_aggregator: auto   # load the aggregator from encoder_ckpt too: auto = only if
-                        # that pretraining trained it (jet_contrastive > 0); true | false
-ckpt_path:      null    # Lightning checkpoint to resume fit / run test / predict
-use_class_weights: false  # true → derive per-class CE weights for the global
-                          # object's label from class_dict_path
+# ── Fine-tuning module (phase: finetune) ────────────────────────────────────
+# Instantiated like the pretrain module (shared views).  The arm sets
+# freeze_encoders and unfreeze_at_epoch (arm/*.yaml).
+use_class_weights: false  # true → per-class CE weights for the global object's
+                          # label from class_dict_path (overrides class_weights)
 
-# ── Fine-tuning module ────────────────────────────────────────────────────────
-# Instantiated like the pretrain module (shared top-level views):
-#   hydra_instantiate(cfg.finetune, encoders=..., aggregator=..., head=...,
-#                     views=..., n_classes=..., _convert_='all')
 finetune:
   _target_: fm4tag.modules.FinetuneModule
 
@@ -254,7 +134,7 @@ finetune:
 
   loss_weights:
     cross_entropy:   1.0   # head classification output
-    jet_contrastive: 0.3   # aggregator output
+    jet_contrastive: 0.0   # aggregator output; the JC arms use 0.3 (λ-scan prior)
 
   jet_contrastive_loss:
     _target_: fm4tag.losses.MultiViewSupConLoss
@@ -263,185 +143,39 @@ finetune:
     include_pos_in_denom: true
     include_same_view_negatives: false
 
-  class_weights: null      # explicit per-class CE weights, e.g. [1.0, 2.3, 1.1, 0.9];
-                           # overridden by the runner when use_class_weights: true
+  class_weights: null      # explicit per-class CE weights, e.g. [1.0, 2.3, 1.1, 0.9]
 
   lr:           ${optimizer.lr}
   backbone_lr:  ${optimizer.backbone_lr}
   weight_decay: ${optimizer.weight_decay}
-  warmup_frac:  0.00
+  warmup_frac:  0.02
   warmup_epochs: null      # warmup length in epochs; when set it replaces warmup_frac
   # cosine = warmup, then cosine annealing to 0 over the rest of the run;
   # wsd = warmup, stable at the base lr, linear decay to 0 over the last
   # decay_frac of the steps (the pretrained parts warm up after their unfreeze).
   schedule:     cosine
   decay_frac:   0.2
-  # DDP-safe staged unfreeze (all params in the optimiser from step 0; the
-  # pretrained parts held at lr=0 until this epoch, then ramped onto the cosine
-  # schedule). 0 = train everything from step 0 (from-scratch); >= max_epochs =
-  # frozen for the whole run.
-  unfreeze_at_epoch: 3
-  # Frozen-encoder downstream: encoders + projectors never train (no backward);
-  # the aggregator and the head do.
-  freeze_encoders: false
   chunk_size:   ${chunk_size}
 
-# ── Optimiser ─────────────────────────────────────────────────────────────────
+# ── Optimiser (AdamW) ───────────────────────────────────────────────────────
+# backbone_lr (the pretrained parts' lr) is set by the arm.
 optimizer:
-  lr:           0.00011284338470369939
-  backbone_lr:  1.0e-5
+  lr:           3.0e-4     # tuned per arm (S3)
   weight_decay: 5.962613854843877e-05
 
-# ── PyTorch Lightning Trainer ─────────────────────────────────────────────────
+# ── PyTorch Lightning Trainer ───────────────────────────────────────────────
 trainer:
-  max_epochs:         50
+  # S1: the best epoch comes at 7-10, so the cosine has to decay within reach
+  # of it.  The slurm pack workers always set it per cell.
+  max_epochs:         40
   accelerator:        gpu
-  devices:            2
-  #strategy:          ddp_find_unused_parameters_true
+  devices:            1
   precision:          "bf16-mixed"
   log_every_n_steps:  100
   # BatchSliceSampler shards batches across ranks itself (it yields row spans,
   # which Lightning's injected DistributedSampler would replace with plain
   # integer indices and silently undo the batched reads). Must stay false.
   use_distributed_sampler: false
-  #gradient_clip_val:  1.0   # global grad-norm clip (transformer stability)
 
-# ── Profiler ─────────────────────────────────────────────────────────────────
-# Hydra-instantiated; set to null (or remove) to disable.
 profiler:
   _target_: lightning.pytorch.profilers.SimpleProfiler
-
-# ── Callbacks ─────────────────────────────────────────────────────────────────
-callbacks:
-  model_summary:
-    #_target_: lightning.pytorch.callbacks.RichModelSummary
-    _target_: lightning.pytorch.callbacks.ModelSummary
-    max_depth: 4
-
-  progress_bar:
-    _target_: lightning.pytorch.callbacks.TQDMProgressBar
-    refresh_rate: 500
-
-  # Logs the live per-group learning rate to every logger (csv + wandb).
-  # Finetune groups are labelled -> lr-AdamW/backbone, lr-AdamW/head (so the
-  # staged unfreeze at finetune.unfreeze_at_epoch is visible).
-  lr_monitor:
-    _target_: lightning.pytorch.callbacks.LearningRateMonitor
-    logging_interval: step
-
-  # Online representation-quality monitoring on clean embeddings.
-  # Logs <split>/<embedding>/<metric>, e.g. val/aggregator/effective_rank.
-  embedding_metrics:
-    _target_: fm4tag.callbacks.EmbeddingMetrics
-    metrics: [uniformity, effective_rank]
-    embeddings: null    # null → all embeddings the module's forward returns
-    splits: [val]
-    n_samples: 8192     # global cap across all DDP ranks
-
-  model_checkpoint:
-    _target_: lightning.pytorch.callbacks.ModelCheckpoint
-    monitor:    val/loss
-    save_top_k: 3
-    mode:       min
-    save_last:  false         # last.ckpt comes from last_checkpoint below
-    # The monitored metric 'val/loss' contains a '/'. With
-    # auto_insert_metric_name: false only the metric VALUE is interpolated
-    # (via the {val/loss:.4f} placeholder) — the metric NAME never reaches the
-    # filename, so no spurious subdirectory is created. The human-readable
-    # label 'val_loss' is written literally (slash rewritten as underscore),
-    # giving names like `epoch012-step3400-val_loss0.1235.ckpt`.
-    filename:   'epoch{epoch:03d}-step{step}-val_loss{val/loss:.4f}'
-    auto_insert_metric_name: false
-
-  # `last.ckpt` = the latest training state, rewritten every epoch. Lightning
-  # 2.6's save_last only writes it in epochs that also save a top-k checkpoint,
-  # so after the last val/loss improvement it stopped following training.
-  last_checkpoint:
-    _target_: lightning.pytorch.callbacks.ModelCheckpoint
-    monitor:    null
-    save_top_k: 1
-    filename:   last
-    enable_version_counter: false
-
-  early_stopping:
-    _target_: lightning.pytorch.callbacks.EarlyStopping
-    monitor:  val/loss
-    min_delta: 0. # minimum change in the monitored quantity to qualify as an improvement
-    patience: 12
-    mode:     min
-
-# Staged unfreeze of the pretrained parts during finetuning is handled by
-# finetune.unfreeze_at_epoch (see the finetune block), not a callback.
-
-# Finetune-only overrides, merged onto `callbacks` by key (see runner/run.py)
-# when phase == finetune. Pretrain never logs head/loss_ce (only the
-# finetune module computes a classification loss), so pretrain keeps
-# tracking the plain val/loss above.
-callbacks_finetune:
-  model_checkpoint:
-    monitor:  val/head/loss_ce
-    filename: 'epoch{epoch:03d}-step{step}-val_loss_ce{val/head/loss_ce:.4f}'
-
-  early_stopping:
-    monitor:  val/head/loss_ce
-
-# ── Logger ────────────────────────────────────────────────────────────────────
-
-loggers:
-  csv:
-    _target_: lightning.pytorch.loggers.CSVLogger
-    save_dir: ${output_dir}
-    name:     ${experiment_name}
-
-  wandb:
-    _target_: lightning.pytorch.loggers.WandbLogger
-    save_dir: ${output_dir}
-    project:  fm4tag
-    entity:   ririva-cern
-    log_model: true
-    # name/group/job_type below are fallbacks for ad-hoc manual runs. The
-    # slurm/*.sh sweep scripts override all three on the CLI so that every
-    # run launched by one `bash *.sh` invocation shares a `group` (one row
-    # per sweep in the wandb UI, expandable into its member runs), `job_type`
-    # is a stable phase label ("pretrain"/"finetune"/"scratch") that survives
-    # across sweeps even though classify_from_scratch.sh runs under
-    # phase=finetune under the hood, and `name` carries only the
-    # hyperparameters that vary WITHIN the sweep (phase+timestamp already
-    # live in `group`, so repeating them in `name` would be noise).
-    name:     ${experiment_name}
-    group:    ${phase}
-    job_type: ${phase}
-
-# ── Hyperparameter optimisation (fm4tag-hpo) ──────────────────────────────────
-hpo:
-  study_name:   fm4tag_hpo
-  storage:      null            # e.g. sqlite:///hpo.db for parallel workers
-  n_trials:     100
-  timeout:      null
-  phases:       [finetune]      # [pretrain] | [finetune] | [pretrain, finetune]
-  pretrain_encoder_ckpt: null   # fixed pretrain ckpt for finetune-only HPO
-
-  metric:       val/loss        # objective: any logged metric key
-  direction:    minimize        # minimize | maximize
-  disable_wandb: true           # drop the wandb logger per trial (keep CSV)
-
-  sampler:  TPE
-  pruner:   median
-  pruner_n_startup_trials: 5
-  pruner_n_warmup_steps:   10
-  pruner_interval_steps:   1
-
-  max_epochs_pretrain:  100
-  max_epochs_finetune:  100
-
-  search_space:
-    pretrain:
-      - {param: pretrain.contrastive_loss.temperature, type: float, low: 0.1, high: 0.5}
-      - {param: optimizer.lr,                   type: float, low: 1e-5,  high: 1e-2, log: true}
-      - {param: optimizer.weight_decay,         type: float, low: 1e-7,  high: 1e-3, log: true}
-
-    finetune:
-      - {param: aggregator.depth,                  type: int,         low: 3,   high: 6}
-      - {param: aggregator.ff_mult,                type: categorical, choices: [2, 4]}
-      - {param: optimizer.lr,                      type: float,       low: 1e-5, high: 1e-2, log: true}
-      - {param: optimizer.weight_decay,            type: float,       low: 1e-7, high: 1e-3, log: true}

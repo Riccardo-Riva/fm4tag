@@ -1,0 +1,38 @@
+# @package _global_
+# ════════════════════════════════════════════════════════════════════════════
+# Callbacks for smoke runs: the short runs that measure GPU memory and seconds
+# per step before a launch (and check that a configuration trains at all).
+# Progress bar, lr monitor, model summary, GPU/CPU memory, and last.ckpt only:
+# no top-k checkpoints, no early stopping, no embedding metrics or other
+# monitors, which only add validation and disk time here.
+# ════════════════════════════════════════════════════════════════════════════
+
+callbacks:
+  model_summary:
+    _target_: lightning.pytorch.callbacks.ModelSummary
+    max_depth: 4
+
+  progress_bar:
+    _target_: lightning.pytorch.callbacks.TQDMProgressBar
+    refresh_rate: 50
+
+  lr_monitor:
+    _target_: lightning.pytorch.callbacks.LearningRateMonitor
+    logging_interval: step
+
+  # CPU RSS and GPU allocated / reserved / peak memory in metrics.csv: the
+  # numbers a smoke run is for.
+  memory_monitor:
+    _target_: fm4tag.callbacks.MemoryMonitorCallback
+    log_every_n_steps: 50
+
+  # last.ckpt: checks that checkpointing works without writing top-k files.
+  last_checkpoint:
+    _target_: lightning.pytorch.callbacks.ModelCheckpoint
+    monitor:    null
+    save_top_k: 1
+    filename:   last
+    enable_version_counter: false
+
+# Nothing to switch for finetuning: no callback here monitors a loss.
+callbacks_finetune: {}

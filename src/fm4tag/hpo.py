@@ -180,9 +180,9 @@ def _objective(trial: optuna.Trial, cfg: DictConfig) -> float:
             if max_epochs is not None:
                 cfg_trial.trainer.max_epochs = max_epochs
             if hpo_cfg.get('disable_wandb', True) and OmegaConf.select(
-                cfg_trial, 'loggers.wandb'
+                cfg_trial, 'logger.wandb'
             ):
-                del cfg_trial.loggers.wandb
+                del cfg_trial.logger.wandb
 
         # Report/prune only on the last phase — its metric is the objective.
         is_last = phase == phases[-1]

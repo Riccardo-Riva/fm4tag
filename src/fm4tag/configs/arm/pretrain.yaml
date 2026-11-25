@@ -1,24 +1,25 @@
 # @package _global_
-# Pretraining (P0): contrastive loss on the feature embeddings only — the
-# per-object embeddings of the tracks and of the global jet features.  P1 adds
-# the jet-level contrastive on the aggregator output:
+# Pretraining (P0 / P1): what pretrains is the base config's `pretrain` block —
+# P0 = contrastive loss on the per-object embeddings only (its loss weights);
+# P1 adds the jet-level contrastive on the aggregator output:
 #   pretrain.loss_weights.jet_contrastive=1.0
+#
+# Every arm sets the same keys; the fine-tuning ones are not read here.
 phase: pretrain
 
-pretrain:
-  loss_weights:
-    contrastive:     1.0
-    denoising_cat:   0.0
-    denoising_con:   0.0
-    jet_contrastive: 0.0
-  warmup_frac: 0.02
-  # P0 recipe from S2 (rriva, 2026-10-21): T 0.1 with lambda 0.4 (campaign_ssl.yaml);
-  # best frozen-encoder probe, 0.635 vs 0.656 for frozen random encoders.
-  contrastive_loss:
-    temperature: 0.1
+encoder_ckpt:         null
+require_encoder_ckpt: false
+load_aggregator:      auto
+
+finetune:
+  freeze_encoders:   false   # not read in pretraining
+  unfreeze_at_epoch: 0       # not read in pretraining
+
+optimizer:
+  backbone_lr: null          # not read in pretraining
 
 trainer:
-  max_epochs: 30
-  # S2 (no clipping): every run spiked after the lr peak; P2 then sat on a
-  # plateau (T 0.1) or collapsed completely (T 0.3).
+  # S2 (no clipping): every pretraining spiked after the lr peak; P2 then sat
+  # on a plateau (T 0.1) or collapsed completely (T 0.3).  Pretraining only:
+  # the downstream cells add it with +trainer.gradient_clip_val.
   gradient_clip_val: 1.0

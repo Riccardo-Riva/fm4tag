@@ -19,7 +19,7 @@ Usage (typically inside an sbatch wrapper — see submit_profile_timing.sh):
     python scripts/profile_timing.py --phase pretrain  [hydra overrides ...]
     python scripts/profile_timing.py --phase finetune datamodule.batch_size=512
     python scripts/profile_timing.py --phase pretrain --synthetic --device cpu
-    python scripts/profile_timing.py --phase finetune --config-name campaign_ssl \
+    python scripts/profile_timing.py --phase finetune --config-name default \
         arm=frozen chunk_size=256 datamodule.batch_size=8192
 
 Results are printed as tables and saved as JSON next to --out.
@@ -219,7 +219,7 @@ def main() -> None:
     ap.add_argument(
         '--config-name',
         default='default',
-        help='primary config in src/fm4tag/configs (e.g. campaign_ssl)',
+        help='primary config in src/fm4tag/configs (e.g. default, saint_reduced)',
     )
     ap.add_argument('--steps', type=int, default=30, help='measured steps')
     ap.add_argument('--warmup', type=int, default=10, help='untimed warmup steps')
@@ -257,9 +257,7 @@ def main() -> None:
         'backward (efficient/flash) explains a high backward/forward ratio '
         'vs the cache-based math backend.',
     )
-    ap.add_argument(
-        'overrides', nargs='*', help='hydra overrides, e.g. encoders=col_v0'
-    )
+    ap.add_argument('overrides', nargs='*', help='hydra overrides, e.g. encoder=col_v0')
     args = ap.parse_args()
 
     with initialize_config_dir(version_base=None, config_dir=CONFIG_DIR):

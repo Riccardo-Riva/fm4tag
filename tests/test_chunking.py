@@ -50,6 +50,17 @@ def test_batch_size_must_split_into_whole_chunks():
 # ── modules ──────────────────────────────────────────────────────────────────
 
 
+# Every loss on (denoising, per-object and jet contrastive; JC downstream), so
+# the chunking is checked on every path whatever the base config trains with.
+ALL_LOSSES = [
+    'pretrain.loss_weights.contrastive=0.6',
+    'pretrain.loss_weights.denoising_cat=0.2',
+    'pretrain.loss_weights.denoising_con=0.2',
+    'pretrain.loss_weights.jet_contrastive=1.0',
+    'finetune.loss_weights.jet_contrastive=0.3',
+]
+
+
 def _compose(overrides):
     from hydra import compose as hydra_compose
     from hydra import initialize_config_dir
@@ -95,7 +106,9 @@ def _build(phase, chunk_size, row_mode='per_token'):
     )
 
     enc = 'rowcol_v0' if row_mode == 'per_token' else 'rowcol_concat_v0'
-    cfg = _compose([f'phase={phase}', f'encoders={enc}', f'chunk_size={chunk_size}'])
+    cfg = _compose(
+        [f'phase={phase}', f'encoder={enc}', f'chunk_size={chunk_size}', *ALL_LOSSES]
+    )
     torch.manual_seed(0)
     encoders = build_encoders(cfg)
     aggregator = build_aggregator(cfg, encoders)

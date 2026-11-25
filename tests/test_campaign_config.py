@@ -1,4 +1,5 @@
-"""The SSL campaign config: every arm composes, builds, and means what it says."""
+"""The model-B base config (default.yaml, the SSL campaign settings): every arm
+composes, builds, and means what it says."""
 
 from __future__ import annotations
 
@@ -12,7 +13,7 @@ from fm4tag.utils.model_builders import build_aggregator, build_encoders, build_
 
 def _cfg(*overrides):
     with initialize_config_dir(config_dir=str(cfg_path[0]), version_base=None):
-        return compose(config_name='campaign_ssl', overrides=list(overrides))
+        return compose(config_name='default', overrides=list(overrides))
 
 
 def test_campaign_uses_the_disjoint_split():
@@ -107,11 +108,14 @@ def test_every_arm_has_qk_norm_in_its_row_attention(arm):
     assert attns and all(m.qk_norm for m in attns)
 
 
-def test_qk_norm_is_off_outside_the_campaign():
-    """Older run configs rebuild without q_norm/k_norm, so their checkpoints load."""
-    with initialize_config_dir(config_dir=str(cfg_path[0]), version_base=None):
-        cfg = compose(config_name='default')
-    assert cfg.row_qk_norm is False
+def test_qk_norm_is_off_for_run_configs_without_the_switch():
+    """Run configs older than row_qk_norm rebuild without q_norm/k_norm, so their
+    checkpoints load (the encoder files read it with a false default)."""
+    from omegaconf import open_dict
+
+    cfg = _cfg('arm=scratch')
+    with open_dict(cfg):
+        del cfg.row_qk_norm
     assert not any('q_norm' in k for k in build_encoders(cfg).state_dict())
 
 

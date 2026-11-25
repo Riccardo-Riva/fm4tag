@@ -1,0 +1,76 @@
+# @package _global_
+# ════════════════════════════════════════════════════════════════════════════
+# Callbacks: what every run needs — checkpoints (best top-3 + last), early
+# stopping, lr monitor, progress bar, model summary, and the embedding-quality
+# metrics (uniformity, effective rank) that the CE + embedding plots read.
+# No hardware / training-health monitors: see default_monitors.yaml.
+#
+# Top-level keys (@package _global_): `callbacks` and `callbacks_finetune`,
+# the finetune-only overrides that the runner merges onto `callbacks` by key
+# when phase == finetune.  Drop one on the CLI with e.g.
+#   ~callbacks.early_stopping ~callbacks_finetune.early_stopping
+# ════════════════════════════════════════════════════════════════════════════
+
+callbacks:
+  model_summary:
+    _target_: lightning.pytorch.callbacks.ModelSummary
+    max_depth: 4
+
+  progress_bar:
+    _target_: lightning.pytorch.callbacks.TQDMProgressBar
+    refresh_rate: 500
+
+  # Logs the live per-group learning rate to every logger (csv + wandb).
+  # Finetune groups are labelled -> lr-AdamW/backbone, lr-AdamW/head (so the
+  # staged unfreeze at finetune.unfreeze_at_epoch is visible).
+  lr_monitor:
+    _target_: lightning.pytorch.callbacks.LearningRateMonitor
+    logging_interval: step
+
+  # Online representation-quality monitoring on clean embeddings.
+  # Logs <split>/<embedding>/<metric>, e.g. val/aggregator/effective_rank.
+  embedding_metrics:
+    _target_: fm4tag.callbacks.EmbeddingMetrics
+    metrics: [uniformity, effective_rank]
+    embeddings: null    # null → all embeddings the module's forward returns
+    splits: [val]
+    n_samples: 8192     # global cap across all DDP ranks
+
+  model_checkpoint:
+    _target_: lightning.pytorch.callbacks.ModelCheckpoint
+    monitor:    val/loss
+    save_top_k: 3
+    mode:       min
+    save_last:  false         # last.ckpt comes from last_checkpoint below
+    # With auto_insert_metric_name: false only the metric VALUE is
+    # interpolated, so the '/' of 'val/loss' never reaches the filename (no
+    # spurious subdirectory): names like epoch012-step3400-val_loss0.1235.ckpt.
+    filename:   'epoch{epoch:03d}-step{step}-val_loss{val/loss:.4f}'
+    auto_insert_metric_name: false
+
+  # `last.ckpt` = the latest training state, rewritten every epoch. Lightning
+  # 2.6's save_last only writes it in epochs that also save a top-k checkpoint,
+  # so after the last val/loss improvement it stopped following training.
+  last_checkpoint:
+    _target_: lightning.pytorch.callbacks.ModelCheckpoint
+    monitor:    null
+    save_top_k: 1
+    filename:   last
+    enable_version_counter: false
+
+  early_stopping:
+    _target_: lightning.pytorch.callbacks.EarlyStopping
+    monitor:  val/loss
+    min_delta: 0.   # minimum change in the monitored quantity to qualify as an improvement
+    patience: 12
+    mode:     min
+
+# Finetune only: pretraining never logs head/loss_ce (only the finetune module
+# computes a classification loss), so pretraining keeps val/loss above.
+callbacks_finetune:
+  model_checkpoint:
+    monitor:  val/head/loss_ce
+    filename: 'epoch{epoch:03d}-step{step}-val_loss_ce{val/head/loss_ce:.4f}'
+
+  early_stopping:
+    monitor:  val/head/loss_ce

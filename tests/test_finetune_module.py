@@ -196,7 +196,7 @@ def test_runner_derives_class_weights_from_the_class_dict(tmp_path):
     assert 'class_dict[cfg.global_object][label_var]' in src
     config_dir = Path(runner.__file__).resolve().parents[1] / 'configs'
     with initialize_config_dir(config_dir=str(config_dir), version_base=None):
-        cfg = compose(config_name='campaign_ssl', overrides=['use_class_weights=true'])
+        cfg = compose(config_name='default', overrides=['use_class_weights=true'])
     assert cfg.use_class_weights is True
     class_dict = tmp_path / 'class_dict.yaml'
     class_dict.write_text(
