@@ -1,0 +1,8 @@
+# P0 and P1 of SAINT-small (CONFIG=saint_reduced, 4.34 M parameters), with the P_v1 recipe (rriva, 2026-11-25):
+# batch 12800, AdamW lr 1e-3, gradient clip 1.0 (arm=pretrain), contrastive T 0.1, noise lambda 0.4, no dropout;
+# WSD: warmup 4 epochs, constant, linear decay over the last 20 %; no early stopping, the downstream loads last.ckpt.
+#   p0_small = per-object contrastive on the track and jet-feature embeddings (the aggregator is not trained)
+#   p1_small = p0 + jet contrastive (weight 1.0, T 0.1) on the aggregator output (the aggregator is trained)
+# @est / @mem: to be set from the measurement job (dropout_batch_sweep.py at batch 12800), see the README.
+p1_small  arm=pretrain chunk_size=512 datamodule.batch_size=12800 optimizer.lr=1e-3 pretrain.loss_weights.jet_contrastive=1.0 optimizer.schedule=wsd optimizer.warmup_epochs=4 optimizer.decay_frac=0.2 ~callbacks.early_stopping
+p0_small  arm=pretrain chunk_size=512 datamodule.batch_size=12800 optimizer.lr=1e-3 optimizer.schedule=wsd optimizer.warmup_epochs=4 optimizer.decay_frac=0.2 ~callbacks.early_stopping

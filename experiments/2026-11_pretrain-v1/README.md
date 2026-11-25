@@ -1,6 +1,6 @@
 # P0 and P1 pretrainings with the protocol-v1 settings (2026-11-23 →)
 
-**Status:** running: seed 42 (stage `P_v1_s42_*`, L40S cards). Seed 424 follows when a GPU-job slot frees.
+**Status:** cancelled on 2026-11-25 by the owner (job 7387250, 1 h 40 min after its start): with the move to a smaller model, a 4-day pretraining of model B is not the next step. Successor: `2026-11_pretrain-saint-small`.
 
 ## Question
 Pretrain P0 and P1 again with the same settings as the downstream protocol v1 (batch 12800, WSD, 80 epochs, no early
