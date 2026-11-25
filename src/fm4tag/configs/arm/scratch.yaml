@@ -11,6 +11,3 @@ load_aggregator:      auto
 finetune:
   freeze_encoders:   false
   unfreeze_at_epoch: 0
-
-optimizer:
-  backbone_lr: null   # nothing is pretrained: no backbone parameter group

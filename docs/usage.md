@@ -59,7 +59,7 @@ file; a new variant of a part is a new option file in its group.
 | Group | Options | Sets |
 |---|---|---|
 | `data/` | `split_152051` | files, objects, `variables`, the dataset half of `datamodule` |
-| `arm/` | `pretrain` `scratch` `finetune` `frozen` | `phase`, `encoder_ckpt`, freezing / unfreeze epoch, `optimizer.backbone_lr` (+ gradient clipping for pretraining) |
+| `arm/` | `pretrain` `scratch` `finetune` `frozen` | `phase`, `encoder_ckpt`, freezing / unfreeze epoch (+ gradient clipping for pretraining) |
 | `encoder/` | `rowcol_concat_v0` (model B) `rowcol_concat_v1_small` `rowcol_v0` `col_v0` `row_v0` | `encoder`: one encoder per object |
 | `aggregator/` | `transformer` | `aggregator` |
 | `head/` | `mlp` | `head` (finetune only) |
@@ -70,10 +70,12 @@ file; a new variant of a part is a new option file in its group.
 
 In the base: run control (`seed`, `experiment_name`, `output_dir`, ...),
 `chunk_size` and `row_qk_norm`, how the data is read (`datamodule.batch_size`,
-workers, ...), the `pretrain` / `finetune` modules (loss weights, schedule),
-`optimizer`, `trainer`.  Run configs written before 2026-11-25 call the encoder
+workers, ...), the `pretrain` / `finetune` modules (loss weights; `finetune.backbone_lr`),
+`optimizer` (lr, weight decay and the lr schedule, one block for both
+modules: the runner passes it to the module that runs), `trainer`.  Run configs written before 2026-11-25 call the encoder
 block `encoders` (`build_encoders` still reads it, so old checkpoints rebuild)
-and the logger block `loggers`.
+and the logger block `loggers`; they also write the lr and schedule inside
+`pretrain` / `finetune`, and the backbone lr as `optimizer.backbone_lr`.
 
 Anything can be overridden on the command line with Hydra dot-notation.
 
@@ -105,8 +107,8 @@ Checkpoint knobs:
 - `ckpt_path` — a full Lightning checkpoint of the *current* phase (resume /
   test / predict).
 - `finetune.unfreeze_at_epoch` — holds the pretrained parts (encoders +
-  aggregator) at `lr=0` for this many epochs, then ramps them onto the cosine
-  schedule. `0` trains everything from step 0 (from-scratch); `>= max_epochs`
+  aggregator) at `lr=0` for this many epochs, then ramps them onto the lr
+  schedule (`optimizer.schedule`). `0` trains everything from step 0 (from-scratch); `>= max_epochs`
   keeps them frozen. DDP-safe (all params are in the optimiser from step 0).
 
 From a notebook — use Hydra's `compose` API so the config groups are resolved
@@ -151,7 +153,7 @@ fm4tag-hpo hpo.n_trials=50
 - `search_space.<phase>` is a list of
   `{param: <dotted.config.path>, type: float|int|categorical, ...}` entries.
   Overrides are applied to an **unresolved** config copy, so interpolations
-  like `pretrain.lr: ${optimizer.lr}` follow a tuned `optimizer.lr`.
+  like `lam: ${lambda}` follow a tuned `lambda`.
 - `metric` / `direction` define the objective (any logged key, e.g.
   `val/head/auroc` + `maximize`); it is reported every validation epoch and
   the `pruner` may stop bad trials early.

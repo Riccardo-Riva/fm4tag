@@ -1,7 +1,7 @@
 # @package _global_
 # FT: start from a pretraining checkpoint, train everything.  The loaded parts
 # (encoders; the aggregator only if that pretraining trained it) train at
-# optimizer.backbone_lr, held at 0 for the first unfreeze_at_epoch epochs.
+# finetune.backbone_lr, held at 0 for the first unfreeze_at_epoch epochs.
 #
 # Every arm sets the same keys.
 phase: finetune
@@ -13,6 +13,3 @@ load_aggregator:      auto   # auto = only if that pretraining trained it (jet_c
 finetune:
   freeze_encoders:   false
   unfreeze_at_epoch: 2
-
-optimizer:
-  backbone_lr: ${optimizer.lr}   # S3 also tries lr / 10

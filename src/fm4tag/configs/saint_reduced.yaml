@@ -17,13 +17,13 @@
 
 defaults:
   - data: split_152051             # files, objects, variables
-  - arm: scratch                   # what is trained from what (phase, checkpoint, freezing)
   - encoder: rowcol_concat_v1_small   # per-object encoders (reduced)
   - aggregator: transformer
   - head: mlp
   - views: cutmix_mixup            # augmentation views + lambda
   - callbacks: default_monitors    # default | default_monitors | smoke
   - logger: csv_wandb              # csv_wandb | csv
+  - arm: scratch                   # what is trained from what (phase, checkpoint, freezing)
   - hpo: tpe                       # read by fm4tag-hpo only
   - _self_
 
@@ -55,7 +55,7 @@ datamodule:
   # (S0); this one fits SC/FT.  With chunk_size set the intersample context is
   # the chunk, so batch_size is an optimisation knob only (gradient batch,
   # VRAM).  Must be a multiple of chunk_size.
-  batch_size:      24576
+  batch_size:      12800
   num_workers:     10
   prefetch_factor: 2
   pin_memory:      true
@@ -111,12 +111,6 @@ pretrain:
     include_pos_in_denom: true
     include_same_view_negatives: false
 
-  lr:           ${optimizer.lr}
-  weight_decay: ${optimizer.weight_decay}
-  warmup_frac:  0.02
-  warmup_epochs: null      # warmup length in epochs; when set it replaces warmup_frac
-  schedule:     cosine     # cosine | wsd (warmup, constant, linear decay over the last decay_frac)
-  decay_frac:   0.2
   chunk_size:   ${chunk_size}
 
 # ── Fine-tuning module (phase: finetune) ────────────────────────────────────
@@ -144,23 +138,24 @@ finetune:
 
   class_weights: null      # explicit per-class CE weights, e.g. [1.0, 2.3, 1.1, 0.9]
 
-  lr:           ${optimizer.lr}
-  backbone_lr:  ${optimizer.backbone_lr}
-  weight_decay: ${optimizer.weight_decay}
-  warmup_frac:  0.02
-  warmup_epochs: null      # warmup length in epochs; when set it replaces warmup_frac
-  # cosine = warmup, then cosine annealing to 0 over the rest of the run;
-  # wsd = warmup, stable at the base lr, linear decay to 0 over the last
-  # decay_frac of the steps (the pretrained parts warm up after their unfreeze).
-  schedule:     cosine
-  decay_frac:   0.2
+  # lr of the parts loaded from encoder_ckpt; null = optimizer.lr.  Nothing
+  # is loaded in scratch, so it is not read there.
+  backbone_lr:  null
   chunk_size:   ${chunk_size}
 
-# ── Optimiser (AdamW) ───────────────────────────────────────────────────────
-# backbone_lr (the pretrained parts' lr) is set by the arm.
+# ── Optimiser (AdamW) and lr schedule ───────────────────────────────────────
+# Written once for both modules: the runner passes every key below to the
+# module that runs (pretrain or finetune).
 optimizer:
-  lr:           3.0e-4     # tuned per arm (S3)
-  weight_decay: 5.962613854843877e-05
+  lr:            3.0e-4    # tuned per arm under cosine (S3); wsd cells set it per cell
+  weight_decay:  5.962613854843877e-05
+  # wsd = warmup, stable at lr, linear decay to 0 over the last decay_frac of
+  # the steps (the pretrained parts warm up again after their unfreeze);
+  # cosine = warmup, then cosine annealing to 0 over the rest of the run.
+  schedule:      wsd       # wsd | cosine
+  warmup_frac:   0.02
+  warmup_epochs: null      # warmup length in epochs; when set it replaces warmup_frac
+  decay_frac:    0.2       # wsd only
 
 # ── PyTorch Lightning Trainer ───────────────────────────────────────────────
 trainer:

@@ -15,9 +15,6 @@ finetune:
   freeze_encoders:   false   # not read in pretraining
   unfreeze_at_epoch: 0       # not read in pretraining
 
-optimizer:
-  backbone_lr: null          # not read in pretraining
-
 trainer:
   # S2 (no clipping): every pretraining spiked after the lr peak; P2 then sat
   # on a plateau (T 0.1) or collapsed completely (T 0.3).  Pretraining only:
