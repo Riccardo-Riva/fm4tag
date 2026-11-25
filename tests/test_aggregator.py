@@ -16,7 +16,10 @@ _GLOBAL_DIM = 5
 _CONST_DIM = 8
 
 
-def _make_aggregator() -> TransformerAggregator:
+_PROJ_DIM = 3
+
+
+def _make_aggregator(**kwargs) -> TransformerAggregator:
     torch.manual_seed(0)
     return TransformerAggregator(
         global_dim=_GLOBAL_DIM,
@@ -25,6 +28,7 @@ def _make_aggregator() -> TransformerAggregator:
         heads=2,
         dim_head=4,
         ff_mult=1,
+        **kwargs,
     ).eval()
 
 
@@ -102,14 +106,23 @@ def _padded_reference(agg, z_global, z, valid):
     """The pre-packing implementation: padded grid + key mask + masked mean."""
     z = torch.where(valid.unsqueeze(-1), z, 0.0)
     z = agg.const_transformer[0](z, valid)
+    z = agg.const_norm[0](agg.const_proj[0](z))  # Identity unless enabled
     z = torch.where(valid.unsqueeze(-1), z, 0.0)
     pooled = z.sum(dim=1) / valid.sum(dim=1, keepdim=True).float().clamp(min=1.0)
     return torch.cat([z_global, pooled], dim=-1)
 
 
+_OUTPUT_STAGES = {
+    'none': {},
+    'proj_norm': {'proj_dim': _PROJ_DIM, 'final_norm': True},
+    'norm_only': {'final_norm': True},
+}
+
+
+@pytest.mark.parametrize('stage', list(_OUTPUT_STAGES))
 @pytest.mark.parametrize('packed_input', [True, False])
-def test_packed_aggregator_matches_padded_reference(packed_input):
-    agg = _make_aggregator().eval()
+def test_packed_aggregator_matches_padded_reference(packed_input, stage):
+    agg = _make_aggregator(**_OUTPUT_STAGES[stage]).eval()
     torch.manual_seed(3)
     B, C = 9, 7
     valid = torch.rand(B, C) < 0.5
@@ -121,6 +134,62 @@ def test_packed_aggregator_matches_padded_reference(packed_input):
         out = agg(z_global, [z[valid] if packed_input else z], [valid])
     assert torch.allclose(out, ref, atol=1e-5)
     assert torch.count_nonzero(out[2, _GLOBAL_DIM:]) == 0
+
+
+def test_output_stage_off_adds_no_parameters():
+    """Without proj_dim / final_norm the state_dict is the pre-option one, so
+    existing checkpoints still load strictly."""
+    keys = _make_aggregator().state_dict().keys()
+    assert all(k.startswith('const_transformer.') for k in keys)
+
+
+def test_projection_then_norm():
+    """proj_dim sets the pooled width; the LayerNorm acts on each projected
+    token (so every valid token is normalised before the mean)."""
+    agg = _make_aggregator(proj_dim=_PROJ_DIM, final_norm=True)
+    assert agg.out_dim == _GLOBAL_DIM + _PROJ_DIM
+    assert agg.const_proj[0].weight.shape == (_PROJ_DIM, _CONST_DIM)
+    assert agg.const_norm[0].normalized_shape == (_PROJ_DIM,)
+
+    B, C = 5, 4
+    valid = torch.ones(B, C, dtype=torch.bool)
+    z = torch.randn(B, C, _CONST_DIM)
+    with torch.no_grad():
+        tokens = agg.const_transformer[0](z, valid)
+        tokens = agg.const_norm[0](agg.const_proj[0](tokens))
+        out = agg(torch.randn(B, _GLOBAL_DIM), [z], [valid])
+    assert torch.allclose(tokens.mean(-1), torch.zeros(B, C), atol=1e-5)
+    assert out.shape == (B, _GLOBAL_DIM + _PROJ_DIM)
+    assert torch.allclose(out[:, _GLOBAL_DIM:], tokens.mean(1), atol=1e-5)
+
+
+def test_output_stage_state_dict_round_trip_and_grads():
+    agg = _make_aggregator(proj_dim=_PROJ_DIM, final_norm=True).train()
+    B, C = 6, 5
+    valid = torch.rand(B, C) > 0.3
+    valid[0] = False
+    args = (torch.randn(B, _GLOBAL_DIM), [torch.randn(B, C, _CONST_DIM)], [valid])
+    out = agg(*args)
+    out.sum().backward()
+    assert torch.isfinite(out).all()
+    assert all(torch.isfinite(p.grad).all() for p in agg.parameters())
+    assert agg.const_proj[0].weight.grad.abs().sum() > 0
+
+    fresh = TransformerAggregator(
+        global_dim=_GLOBAL_DIM,
+        const_dims=[_CONST_DIM],
+        depth=2,
+        heads=2,
+        dim_head=4,
+        ff_mult=1,
+        proj_dim=_PROJ_DIM,
+        final_norm=True,
+    )
+    fresh.load_state_dict(agg.state_dict(), strict=True)
+    agg.eval()
+    fresh.eval()
+    with torch.no_grad():
+        assert torch.equal(agg(*args), fresh(*args))
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason='requires a CUDA device')

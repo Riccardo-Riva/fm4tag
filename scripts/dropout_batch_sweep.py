@@ -20,6 +20,9 @@ literals or with ``${ENCODERS}`` / ``${CHUNK}`` (the only variables filled by de
 To only MEASURE cells at their own batch size (peak memory and s/step, e.g. the WSD cells at batch 12800)::
 
     ... --fractions 1.0 --max-peak-gib 45 --skip-baseline --extra optimizer.warmup_epochs=0.2
+
+``--config-name`` picks the base config of the cells (default ``default`` = model B; e.g. ``saint_reduced``), as
+``CONFIG=`` does for ``slurm/ssl_pack.sh``.
 """
 
 from __future__ import annotations
@@ -50,6 +53,7 @@ GIB = 1024.0
 EXTRA: list[
     str
 ] = []  # --extra: overrides appended to every run (after the cell's, so they win)
+CONFIG_NAME = 'default'  # --config-name: the base config of the cells
 
 
 def read_cells(path: Path, env: dict[str, str]) -> dict[str, list[str]]:
@@ -105,7 +109,7 @@ def build_cmd(run_dir: Path, overrides: list[str], steps: int) -> list[str]:
     return [
         str(REPO / '.venv' / 'bin' / 'fm4tag'),
         f'--config-path={CONFIG_DIR}',
-        '--config-name=default',
+        f'--config-name={CONFIG_NAME}',
         'action=fit',
         'trainer.max_epochs=1',
         f'+trainer.limit_train_batches={steps}',
@@ -263,9 +267,14 @@ def main() -> None:
         help='overrides appended to every run, e.g. optimizer.warmup_epochs=0.2 for '
         'WSD cells (their 1.6-epoch warmup does not fit a 1-epoch test)',
     )
+    parser.add_argument(
+        '--config-name', default='default', help='base config of the cells'
+    )
     parser.add_argument('--dry-run', action='store_true')
     args = parser.parse_args()
     EXTRA.extend(args.extra)
+    global CONFIG_NAME
+    CONFIG_NAME = args.config_name
 
     env = {**os.environ}
     env.setdefault('ENCODERS', 'rowcol_concat_v0')
