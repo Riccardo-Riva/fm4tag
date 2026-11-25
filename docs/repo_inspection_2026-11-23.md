@@ -574,3 +574,58 @@ cleanup before submitting.
   behind it. It peaks at the constant lr, so the decay at epochs 64–80 comes too late to help it. CE alone will
   probably behave the same way. CE + dropout is still improving and has not reached the decay. CE + JC + dropout is
   broken (validation accuracy flat since epoch 0).
+
+## 14. Why is our model behind GN2, and how to compare techniques fairly (proposed, 2026-11-25)
+
+**Facts checked:**
+- **Same inputs.** The four-way runs and the salt GN2 same-data run read the same variables: jet pt and eta, plus the
+  same 19 track variables. fm4tag embeds the 9 hit counts as categories; GN2 normalises them as numbers.
+- **Size.** GN2 has 2.24 M parameters:
+  - per-track MLP 0.07 M;
+  - 4-layer transformer over the tracks of each jet (embed 256), 2.10 M;
+  - head 0.03 M.
+
+  Model B has 7.49 M:
+  - per-feature track encoder 5.23 M (70 %);
+  - aggregator (6-layer transformer over the tracks of each jet) 1.98 M, about the size of GN2's whole transformer;
+  - jet encoder 0.08 M;
+  - head 0.07 M.
+- **Model B generalises worse at the same training CE.** GN2 does 2.1× more steps per epoch (batch 6000 vs 12800), so
+  equal training CE is a fairer reference than equal epoch.
+  - At training CE 0.620: validation CE is 0.621 for GN2 and 0.628 for model B, CE only (`t1_ce` s4242, epoch 4).
+  - At training CE about 0.59: validation CE is 0.614 for GN2 and about 0.635 for model B, CE + JC.
+  - After the best epoch, GN2's validation CE rises 0.614 → 0.638 in 18 epochs. Model B's (CE + JC) rises 0.63 → 0.80
+    in 32 epochs.
+- **Across-jet attention.** The encoders' row attention is intersample. Each track attends to all tracks of the
+  512-jet chunk, and the jet encoder to the other 511 jets. GN2 never mixes jets.
+  - It adds no physics information, since a jet's flavour does not depend on its batch neighbours.
+  - It makes the outputs depend on the batch composition, also at inference.
+  - The model uses it. On the tracks, the largest row-attention logit grows from 5.6 to 13 while the run overfits
+    (CE + JC, s42424242).
+  - S1 compared chunks of 128 and 512 (no difference). No run has ever been made without it.
+
+**How to decide that a technique is better:**
+- Change one thing at a time, in one pipeline, with the same data, recipe and selection rule.
+- Give every candidate the same tuning budget (at least 3 learning rates).
+- Use 3–6 seeds and trust only differences larger than the seed spread.
+- Compare architectures as curves of best validation loss against size (2–3 sizes each), not as single points.
+- Judge JC, dropout and pretraining on top of a well-sized, tuned baseline.
+
+**Proposed ladder** (fm4tag, CE only, 3 seeds per rung, 6 for the finalists):
+
+| rung | model | parameters | the step from the rung above measures |
+|---|---|---|---|
+| R0 | GN2 in salt (exists, 0.6137–0.6154) | 2.2 M | reference |
+| R1 | encoders without attention layers (`layers=[]`): per-feature embedding → projector MLP → aggregator | ≈ 2.2 M | our pipeline against salt's |
+| R2 | model B with `chunk_size=1`: attention only within the jet | 7.5 M | per-feature encoder |
+| R3 | model B, `chunk_size=512` (current) | 7.5 M | across-jet attention (same parameters as R2) |
+
+Then a size scan on the best rung (encoder depth 6 → 2, aggregator 6 → 4), and only then JC, dropout and pretraining on
+top of the winner. All rungs look config-only; to be verified with a smoke run.
+
+**Open decisions:**
+- **Epochs.** Every model without dropout (GN2 included) peaks at epochs 8–16. With 80 WSD epochs the decay (epochs
+  64–80) comes after the peak. Proposal: 20 epochs for every rung (warmup 1, decay over epochs 16–20), with R3 rerun.
+  The alternative is to keep 80 epochs and reuse the running `t1_ce` runs as R3.
+- **Job slots.** The user is at 10 of 10. Proposal: hold the pending P_v1 s42 pretraining (current architecture), and
+  cancel the 4 CE + JC + dropout runs on A40.
