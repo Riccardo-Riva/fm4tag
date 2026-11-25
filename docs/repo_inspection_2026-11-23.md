@@ -629,3 +629,16 @@ top of the winner. All rungs look config-only; to be verified with a smoke run.
   The alternative is to keep 80 epochs and reuse the running `t1_ce` runs as R3.
 - **Job slots.** The user is at 10 of 10. Proposal: hold the pending P_v1 s42 pretraining (current architecture), and
   cancel the 4 CE + JC + dropout runs on A40.
+
+**2026-11-25, owner's decision on the ladder:** R1 is accepted. R2 and R3 (7.5 M) are dropped. In their place is a small
+SAINT-like model of 2.7–3 M parameters: model B with fewer encoder layers, same code. Parameter counts from
+`scripts/model_summary.py` (fine-tune phase):
+
+| model | encoders | aggregator | total |
+|---|---|---|---|
+| R1: `encoders.*.layers=[]` | 0.13 M | 1.98 M (6 layers) | 2.18 M |
+| R1 with an 8-layer aggregator (size control) | 0.13 M | 2.64 M | 2.83 M |
+| SAINT-small: model B, depth 1, `ff_mult=1` (proposed) | 0.74 M | 1.98 M | 2.78 M |
+| SAINT-small: depth 1, 4 row heads | 0.86 M | 1.98 M | 2.90 M |
+| SAINT-small: depth 1, as model B | 1.02 M | 1.98 M | 3.06 M |
+| SAINT-small: depth 2, 4 row heads, `ff_mult=1`, aggregator depth 5 | 1.03 M | 1.65 M | 2.75 M |
