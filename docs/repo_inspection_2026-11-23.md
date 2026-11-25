@@ -81,7 +81,8 @@ longer exists (`experiment/embedding-management`, pretraining eval metrics, 433 
   - `slurm/ssl_pack.sh` runs a cells file × seeds as 1-GPU trainings inside 2-GPU jobs that share a task queue,
     respecting the 10-job limit.
   - The shared-card ledger (`slurm/pack_gpu.sh`, `SLOTS_PER_GPU`, `@mem`) runs several trainings per card.
-  - `slurm/gpu_preflight.sh`, batch-size sweeps and launchers. See `docs/gpu_packing.md` and `docs/ssl_campaign.md`.
+  - `slurm/gpu_preflight.sh`, batch-size sweeps and launchers. See `docs/gpu_packing.md` and `docs/ssl_campaign.md` (since 2026-11-23
+    `experiments/2026-10_ssl-campaign/notes/ssl_campaign.md`).
 - **Analysis:** scripts for per-epoch curves, summaries, test rejections (`arm_test_metrics.py` with fraction searches),
   ROC vs GN2, the lr search, the deck builder and the cell generators. All plot wording lives in YAML. There are 13 new
   test files (+1537 lines).
@@ -580,15 +581,19 @@ cleanup before submitting.
 **Facts checked:**
 - **Same inputs.** The four-way runs and the salt GN2 same-data run read the same variables: jet pt and eta, plus the
   same 19 track variables. fm4tag embeds the 9 hit counts as categories; GN2 normalises them as numbers.
-- **Size.** GN2 has 2.24 M parameters:
+- **Size** (re-measured 2026-11-25 with `scripts/model_summary.py`; the first version of this list gave only the
+  attention stacks, so its parts did not add up to the totals). GN2 has 2.24 M parameters:
   - per-track MLP 0.07 M;
-  - 4-layer transformer over the tracks of each jet (embed 256), 2.10 M;
+  - transformer over the tracks of each jet (embed 256) 2.14 M: 4 layers of 0.53 M = 2.10 M, plus the output
+    projection 256 → 128 (0.03 M) and the register token;
+  - attention pooling 129;
   - head 0.03 M.
 
   Model B has 7.49 M:
-  - per-feature track encoder 5.23 M (70 %);
+  - track encoder 5.35 M (71 %), of which the 6 rowcol steps are 5.23 M; the rest is the per-feature embeddings, the
+    projector (0.10 M) and the denoising heads;
   - aggregator (6-layer transformer over the tracks of each jet) 1.98 M, about the size of GN2's whole transformer;
-  - jet encoder 0.08 M;
+  - jet encoder 0.09 M, of which the rowcol steps are 0.08 M;
   - head 0.07 M.
 - **Model B generalises worse at the same training CE.** GN2 does 2.1× more steps per epoch (batch 6000 vs 12800), so
   equal training CE is a fairer reference than equal epoch.
@@ -628,7 +633,8 @@ top of the winner. All rungs look config-only; to be verified with a smoke run.
   64–80) comes after the peak. Proposal: 20 epochs for every rung (warmup 1, decay over epochs 16–20), with R3 rerun.
   The alternative is to keep 80 epochs and reuse the running `t1_ce` runs as R3.
 - **Job slots.** The user is at 10 of 10. Proposal: hold the pending P_v1 s42 pretraining (current architecture), and
-  cancel the 4 CE + JC + dropout runs on A40.
+  cancel the 4 CE + JC + dropout runs on A40. *(Done on 2026-11-25 at epoch 35, owner's decision. The 2 L40S seeds
+  that ran to epoch 80 failed too: best val CE 0.74 and 0.79. See the four-way README.)*
 
 **2026-11-25, owner's decision on the ladder:** R1 is accepted. R2 and R3 (7.5 M) are dropped. In their place is a small
 SAINT-like model of 2.7–3 M parameters: model B with fewer encoder layers, same code. Parameter counts from
@@ -636,7 +642,7 @@ SAINT-like model of 2.7–3 M parameters: model B with fewer encoder layers, sam
 
 | model | encoders | aggregator | total |
 |---|---|---|---|
-| R1: `encoders.*.layers=[]` | 0.13 M | 1.98 M (6 layers) | 2.18 M |
+| R1: `encoder.*.layers=[]` | 0.13 M | 1.98 M (6 layers) | 2.18 M |
 | R1 with an 8-layer aggregator (size control) | 0.13 M | 2.64 M | 2.83 M |
 | SAINT-small: model B, depth 1, `ff_mult=1` (proposed) | 0.74 M | 1.98 M | 2.78 M |
 | SAINT-small: depth 1, 4 row heads | 0.86 M | 1.98 M | 2.90 M |
@@ -648,6 +654,48 @@ min after its start: with the move to a smaller model, a 4-day pretraining of mo
 (`p0_v1`, `p1_v1`) stay in `experiments/2026-11_pretrain-v1/outputs/P_v1_s42_20261123_222330/.queue/`; no other worker
 serves that stage. Whether and how long to pretrain a small model is open (40 M jets, fewer epochs; P0 pretrains only the
 encoders, P1 the aggregator too).
+
+**2026-11-25, owner's choice of SAINT-small** (`saint_reduced.yaml`): encoder `rowcol_concat_v1_small` = depth 2 on both
+encoders, 4 track row heads, `ff_mult=2`; aggregator `transformer_v1_small` = depth 4. 2.98 M parameters
+(`scripts/model_summary.py --phase finetune --config-name saint_reduced`):
+- track encoder 1.55 M, of which 1.43 M is its two rowcol steps;
+- jet encoder 0.04 M;
+- aggregator 1.32 M (4 × 0.33 M, width 128);
+- head 0.07 M;
+- 14 K are the denoising reconstructors, frozen in fine-tuning.
+
+GN2 for comparison, rebuilt from the config of `run_20261106_092332` seed 42 (it loads the epoch-12 checkpoint with no
+missing keys): 2.24 M in total.
+- per-track MLP 0.07 M;
+- transformer 2.14 M (4 × 0.53 M at width 256, plus the 0.03 M output projection);
+- attention pooling 129;
+- head 0.03 M.
+
+**2026-11-25, later: aggregator and head made GN2-like.** The 128-wide aggregator layer (4 × 64 heads, GEGLU hidden
+512) is about 20 d² = 0.33 M. GN2's layer (8 × 32 heads, ReLU hidden 512) is about 8 d² = 0.53 M at twice the width.
+
+The owner chose:
+- width 256: the track projector is now 304 → 256 → 256;
+- 8 heads × 32; first `ff_mult=2` (GEGLU hidden 512, 0.39 M per feed-forward), then `ff_mult=1` (hidden 256,
+  0.20 M), which is the setting the pretrainings use;
+- after the transformer, a per-track projection 256 → 128 and a LayerNorm, in GN2's order (salt applies `out_proj`
+  then `out_norm`). New aggregator options `proj_dim` and `final_norm`, off by default, so model B's state_dict is
+  unchanged;
+- GN2's head 128 → 64 → 32, no dropout. `mlp_hidden` now accepts a list.
+
+Not taken: ReLU feed-forward (ours stays GEGLU), the register token, attention pooling, jet pT/η attached to every
+track.
+
+`saint_reduced` is now 3.56 M (with `ff_mult=2` it was 4.34 M, aggregator 2.66 M):
+- track encoder 1.60 M (two rowcol steps 1.43 M, projector 0.14 M);
+- jet encoder 0.04 M;
+- aggregator 1.88 M (4 layers of 0.46 M, plus the projection 0.03 M);
+- head 0.04 M;
+- 14 K of the total are the denoising heads, frozen in fine-tuning.
+
+The track projector's output is also the per-object contrastive embedding in pretraining, so that is now 256-wide.
+
+Batch size, lr and `chunk_size` for the small model are still model B's.
 
 ## 15. Config layout refactor (decided and done, 2026-11-25)
 
@@ -689,3 +737,18 @@ Tests: 333 passed (non-DDP), 11 DDP passed.
 `encoder.…` / `logger.…`; the cells files of past stages (written with `encoders=…`) are records and do not compose any
 more as they are. The stages launched before the refactor have `CONFIG=campaign_ssl` in their `pack.env`: re-running a
 task of one of them needs that line changed to `default` and its cells' `encoders` tokens renamed.
+
+**Changed since then (2026-11-25, later).** The table above is the state of commit 7845971. Since then:
+- **Owner's step 1 (be345a8, `DIARY.md`):**
+  - lr, weight decay and the lr schedule are written once, in the base's `optimizer` block, for both modules. The
+    runner passes it to the module that runs.
+  - The default schedule is now WSD.
+  - `finetune.backbone_lr: null` in the base replaces the arms' `optimizer.backbone_lr`, so the `arm/` row above no
+    longer sets the backbone lr.
+  - Old cells need `pretrain.|finetune.{schedule, warmup_frac, warmup_epochs, decay_frac}` → `optimizer.*`, and
+    `optimizer.backbone_lr` → `finetune.backbone_lr`.
+- **Aggregator options** renamed `transformer_v0` (model B) and `transformer_v1_small` (GN2-like, §14).
+- **New head option** `mlp_v1_small`.
+- **`saint_reduced.yaml`** now has its own sizes (§14). Only its batch size, lr and `chunk_size` are still model B's.
+- **Model B's base batch size** is now 12800 (was 24576, be345a8). `tests/test_campaign_config.py` still requires a
+  multiple of 8 × `chunk_size` (4096), so it fails. Open in `DIARY.md`.

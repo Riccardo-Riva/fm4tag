@@ -60,9 +60,9 @@ file; a new variant of a part is a new option file in its group.
 |---|---|---|
 | `data/` | `split_152051` | files, objects, `variables`, the dataset half of `datamodule` |
 | `arm/` | `pretrain` `scratch` `finetune` `frozen` | `phase`, `encoder_ckpt`, freezing / unfreeze epoch (+ gradient clipping for pretraining) |
-| `encoder/` | `rowcol_concat_v0` (model B) `rowcol_concat_v1_small` `rowcol_v0` `col_v0` `row_v0` | `encoder`: one encoder per object |
-| `aggregator/` | `transformer` | `aggregator` |
-| `head/` | `mlp` | `head` (finetune only) |
+| `encoder/` | `rowcol_concat_v0` (model B) `rowcol_concat_v1_small` (SAINT-small: depth 2, track projector 256) `rowcol_v0` `col_v0` `row_v0` | `encoder`: one encoder per object |
+| `aggregator/` | `transformer_v0` (model B) `transformer_v1_small` (GN2-like: 8×32 heads, projection 128 + LayerNorm) | `aggregator` |
+| `head/` | `mlp` (model B) `mlp_v1_small` (GN2's 128 → 64 → 32) | `head` (finetune only) |
 | `views/` | `cutmix_mixup` | `lambda`, `views` (augmentation pipelines, both phases) |
 | `callbacks/` | `default` `default_monitors` `smoke` | `callbacks`, `callbacks_finetune` |
 | `logger/` | `csv_wandb` `csv` | `logger` |

@@ -2,6 +2,14 @@
 
 **Status:** running (see `outputs/`).
 
+**2026-11-25, t4 (CE + JC + dropout) stopped early.** The 2 seeds on L40S (job 7385104: 4242, 42424) ran to
+epoch 80. Best val CE 0.737 and 0.786, last 1.23 and 1.21: they fail.
+
+The owner cancelled the other 4 seeds (jobs 7385105/106 on A40: 424242, 4242424, 42424242, 424242424) at epoch 35.
+- Best val CE 0.79–0.84, last 0.94–1.02.
+- Their curves stop at epoch 35.
+- Their queue tasks are marked `.failed`, with a `.cancelled` note, so no worker restarts them.
+
 ## Question
 Is the gain of JC seen in the λ scan a contrastive effect, or the regularisation that dropout gives as well?
 

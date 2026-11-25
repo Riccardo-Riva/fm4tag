@@ -53,10 +53,11 @@ sections, checkpoint knobs, logging conventions, HPO, gotchas).
 |---|---|
 | [src/fm4tag/](src/fm4tag) | Library: datamodules/datasets, encoders/aggregator/heads, losses, augmentations, callbacks, the Hydra `runner`, and configs |
 | [scripts/](scripts) | Standalone analysis scripts (ROC comparisons vs. reference taggers, f_c/f_tau working-point search, permutation importance, timing/profiling) and their YAML configs |
-| [slurm/](slurm) | Cluster job scripts for pretrain/finetune/classify-from-scratch, incl. seed-repeated parameter scans |
+| [slurm/](slurm) | Generic cluster tools: the pack launcher `ssl_pack.sh` (+ `pack_gpu.sh`, `pack_worker.sh`, `gpu_preflight.sh`), batch-size sweeps, test-set inference (ROC, test metrics), CPU plot jobs, test-suite jobs |
+| [experiments/](experiments) | One folder per experiment: README (question, model, methods, results), cells files, its own launchers, outputs, plots |
 | [notebooks/](notebooks) | Interactive exploration and plotting |
 | [tests/](tests) | Unit tests + `tests/ddp/` (CPU, gloo-backend DDP correctness tests) |
-| [docs/](docs) | Usage guide, encoder data-flow, parameter-scan guide |
+| [docs/](docs) | Usage guide, encoder data-flow, GPU packing, parameter-scan guide, repository inspection log |
 
 ## Documentation
 
@@ -66,8 +67,12 @@ sections, checkpoint knobs, logging conventions, HPO, gotchas).
 - [docs/encoder_dataflow.md](docs/encoder_dataflow.md) — how a per-object
   encoder turns raw features into tokens, embeddings, and reconstructions
   (col / row / rowcol backbones).
+- [docs/gpu_packing.md](docs/gpu_packing.md) — how `slurm/ssl_pack.sh` runs a
+  cells file as 1-GPU trainings inside 2-GPU jobs, and several per card.
 - [docs/param_scan_guide.md](docs/param_scan_guide.md) — running seed-repeated
   hyperparameter scans on Slurm and plotting the results.
+- [experiments/README.md](experiments/README.md) — the index of experiments.
+- [DIARY.md](DIARY.md) — plan, decision log and progress, one entry per session.
 - [experiments/2026-10_ssl-campaign/notes/ssl_campaign.md](experiments/2026-10_ssl-campaign/notes/ssl_campaign.md) — the SSL campaign: does contrastive
   pretraining of the SAINT-like encoders help? Tests, setup, stages, plots.
 - [tests/README.md](tests/README.md) — running the DDP test suite and what

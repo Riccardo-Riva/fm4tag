@@ -66,3 +66,57 @@ Renames an old cell needs to run on main: `encoders` → `encoder` (a4577c4); `p
 warmup_frac,warmup_epochs,decay_frac}` → `optimizer.*`; `optimizer.backbone_lr` → `finetune.backbone_lr` (be345a8).
 
 **Next.** Step 1b (shared schedule function), after review.
+
+## 2026-11-25 (evening) — SAINT-small: GN2-like aggregator and head, pretraining prepared, t4 stopped
+
+**Done.**
+- **SAINT-small sizes** (owner):
+  - encoder `rowcol_concat_v1_small`: depth 2 (both encoders), 4 track row heads, `ff_mult` 2, track projector
+    304 → 256 → 256;
+  - aggregator `transformer_v1_small`: width 256 (= the track projector's output), 4 layers, 8 heads × 32,
+    `ff_mult` 1, per-track projection 256 → 128 + LayerNorm;
+  - head `mlp_v1_small`: 128 → 64 → 32, no dropout;
+  - 3.56 M parameters with the head (GN2: 2.24 M).
+- **Code:**
+  - `TransformerAggregator` gets `proj_dim` and `final_norm` (off by default: model B's state_dict is unchanged).
+    They are applied per track after the transformer, in GN2's order: salt's `out_proj`, then `out_norm`.
+  - `MultiStreamClassifierHead.mlp_hidden` takes an int or a list.
+  - `scripts/dropout_batch_sweep.py` gets `--config-name`.
+  - Tests: `tests/test_aggregator.py` (+ the projection and norm), new `tests/test_heads.py`.
+- **GN2 rebuilt** from salt's `config.yaml` (`run_20261106_092332` s42; the epoch-12 checkpoint loads with no missing
+  keys). Depth-5 module summary in the inspection log §14; script in the session scratchpad (`gn2_summary.py`).
+- **New experiment `experiments/2026-11_pretrain-saint-small/`** (README, `configs/P_small.cells`: P0 and P1 with the
+  P_v1 recipe, `CONFIG=saint_reduced`).
+  - Measurement job 7470396 (peak GPU memory and s/step of both cells at batch 12800) submitted. Pending at 21:30.
+- **Four-way t4 (CE + JC + dropout) stopped.** The 4 A40 seeds (jobs 7385105/106) were cancelled at epoch 35, with
+  their tasks marked `.failed` + `.cancelled`. The 2 L40S seeds had finished: best val CE 0.737 and 0.786, last 1.2.
+- **Docs:**
+  - P_v1 marked cancelled (its README and `experiments/README.md`);
+  - README layout and docs list (`slurm/` is generic tools now; `experiments/`, `gpu_packing.md`, `DIARY.md` added);
+  - `gpu_packing.md` launch example (cells path, `CONFIG=`);
+  - `usage.md` group table;
+  - inspection log §14 (SAINT-small, GN2 comparison) and §15 ("changed since then").
+
+**Decisions** (owner):
+- the SAINT-small sizes above;
+- GEGLU kept (not ReLU), no register token, mean pool kept, jet pT/η not attached to the tracks;
+- t4 cancelled.
+
+**Numbers.**
+- Parameters (fine-tune phase): track encoder 1.60 M, jet encoder 0.04 M, aggregator 1.88 M, head 0.04 M.
+- Aggregator layer at width 256: 8 × 32 attention 262 K; GEGLU feed-forward `ff_mult` 2 394 K (GN2's ReLU 263 K).
+- Tests: `pytest -m "not ddp"` 349 passed, 1 failed (`test_campaign_uses_the_disjoint_split`, the batch 12800 open
+  question above). The DDP suite was not run.
+- Four-way best val CE so far (20:43): t1 CE 0.620–0.633, t2 CE + JC 0.624–0.630, t3 CE + dropout 0.622–0.629 (two
+  seeds 0.653 and 0.663). GN2: 0.6137–0.6154.
+
+**Open questions.**
+- Pretraining epochs (P_v1's 80, or 40) and seeds (2 seeds per pack if a P0 and a P1 fit on one card).
+- Batch size, lr and `chunk_size` of `saint_reduced` are still model B's.
+- `docs/param_scan_guide.md` describes a closed experiment's launcher (`2026-08_lambda-scan`). Should it move to that
+  experiment's `notes/`?
+
+**Next.**
+- Code, configs and the experiment folder are committed (bc107ea, 5d0ba97, 29b0235). The doc edits of this entry are
+  not yet committed.
+- Read the measurement, set `@est` / `@mem` in `P_small.cells`, launch `P_small`.
