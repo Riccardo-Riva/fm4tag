@@ -1,3 +1,5 @@
+from collections.abc import Sequence
+
 import torch
 from torch import nn
 
@@ -9,7 +11,7 @@ class MultiStreamClassifierHead(nn.Module):
 
     Receives the **already-aggregated** jet embedding ``z_jet`` (POINT B,
     produced by :class:`~fm4tag.models.aggregator.TransformerAggregator`) and produces
-    class logits via a 2-layer feed-forward MLP:
+    class logits via a feed-forward MLP (ReLU between layers):
 
         z_jet  (B, jet_dim) → MLP → logits (B, y_dim)
 
@@ -28,9 +30,11 @@ class MultiStreamClassifierHead(nn.Module):
         jet_dim:     Dimension of the incoming jet embedding
                      (``aggregator.out_dim``).
         y_dim:       Number of output classes.
-        mlp_hidden:  Hidden width of the classification MLP.  ``None`` → auto
-                     (``max(jet_dim // 2, y_dim)``).
-        mlp_dropout: Dropout inside the final classification MLP.
+        mlp_hidden:  Hidden width(s) of the classification MLP: one int (one
+                     hidden layer) or a list (one hidden layer per entry, e.g.
+                     ``[128, 64, 32]``).  ``None`` → one hidden layer of
+                     ``max(jet_dim // 2, y_dim)``.
+        mlp_dropout: Dropout after each hidden activation.
     """
 
     def __init__(
@@ -38,14 +42,19 @@ class MultiStreamClassifierHead(nn.Module):
         *,
         jet_dim: int,
         y_dim: int = 2,
-        mlp_hidden: int | None = None,
+        mlp_hidden: int | Sequence[int] | None = None,
         mlp_dropout: float = 0.0,
     ) -> None:
         super().__init__()
 
-        _hidden = mlp_hidden if mlp_hidden is not None else max(jet_dim // 2, y_dim)
+        if mlp_hidden is None:
+            hidden = [max(jet_dim // 2, y_dim)]
+        elif isinstance(mlp_hidden, int):
+            hidden = [mlp_hidden]
+        else:
+            hidden = list(mlp_hidden)
         self.cls_mlp = MLP_dropout(
-            [jet_dim, _hidden, y_dim], act=nn.ReLU(), dropout=mlp_dropout
+            [jet_dim, *hidden, y_dim], act=nn.ReLU(), dropout=mlp_dropout
         )
 
     def forward(self, z_jet: torch.Tensor) -> torch.Tensor:

@@ -10,3 +10,5 @@ dim_head:     64
 ff_mult:      4
 ff_dropout:   0.0
 attn_dropout: 0.0
+proj_dim:     null    # no per-track projection after the transformer
+final_norm:   false

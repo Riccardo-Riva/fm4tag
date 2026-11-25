@@ -1,0 +1,9 @@
+# Classifier head (finetune only): z_jet -> mlp_hidden -> class logits.
+# jet_dim (= aggregator.out_dim) and y_dim are injected at runtime.
+#
+# GN2's head (rriva, 2026-11-25): hidden layers 128 -> 64 -> 32, ReLU, no
+# dropout (GN2's has none).  GN2 reads a 128-wide jet vector; ours reads z_jet
+# = jet projection (128) + pooled tracks (128) = 256.
+_target_:    fm4tag.models.MultiStreamClassifierHead
+mlp_hidden:  [128, 64, 32]
+mlp_dropout: 0.0

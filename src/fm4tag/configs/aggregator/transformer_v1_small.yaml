@@ -1,0 +1,21 @@
+# Jet aggregator (shared by pretrain + finetune): per constituent type, a
+# transformer over each jet's valid constituents (attention within the jet
+# only), then a masked mean-pool; the pooled vectors are concatenated with the
+# global projection into the jet embedding z_jet.  global_dim and const_dims
+# are injected at runtime from the encoders.
+#
+# Shaped like GN2's transformer (rriva, 2026-11-25): it runs at the track
+# projector's width (encoder.constituents.tracks.proj_out = 256), 8 heads x 32
+# (inner width = token width), feed-forward hidden 512, then per track a
+# projection 256 -> 128 and a LayerNorm (GN2's out_proj + out_norm, in its
+# order).  GN2 differs still in: ReLU feed-forward (ours is GEGLU), 1 register
+# token, attention pooling (ours is the mean).
+_target_:     fm4tag.models.TransformerAggregator
+depth:        4
+heads:        8
+dim_head:     32
+ff_mult:      1
+ff_dropout:   0.0
+attn_dropout: 0.0
+proj_dim:     128     # per-track projection after the transformer
+final_norm:   true    # LayerNorm after the projection

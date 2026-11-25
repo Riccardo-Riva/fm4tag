@@ -19,7 +19,7 @@
 defaults:
   - data: split_152051             # files, objects, variables
   - encoder: rowcol_concat_v0      # per-object encoders (model B)
-  - aggregator: transformer
+  - aggregator: transformer_v0
   - head: mlp
   - views: cutmix_mixup            # augmentation views + lambda
   - callbacks: default_monitors    # default | default_monitors | smoke

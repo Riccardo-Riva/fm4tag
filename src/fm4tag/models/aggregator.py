@@ -9,8 +9,9 @@ single jet embedding ``z_jet`` (POINT B in the pipeline):
 
 For each constituent type the projected embeddings are refined by a
 :class:`~fm4tag.models.heads.transformers.Classifier_Transformer` (cross-
-constituent attention within each jet), mean-pooled over the jet's valid
-constituents, then concatenated with the global projection.  It runs on the
+constituent attention within each jet), optionally projected and normalised
+per token, mean-pooled over the jet's valid constituents, then concatenated
+with the global projection.  It runs on the
 valid constituents only (packed, one varlen attention group per jet), never
 on the padded ``(B, C)`` grid, which is ~80% padding.
 
@@ -35,12 +36,15 @@ class TransformerAggregator(nn.Module):
 
     1. the jet's valid projected embeddings → cross-constituent transformer
        (attention within the jet only)
-    2. mean pool over the jet's valid constituents → ``(B, d_i)``; a jet with
+    2. optionally, per token: a linear projection to ``proj_dim``, then a
+       LayerNorm (``final_norm``) — the transformer is pre-norm, so its
+       residual stream is otherwise never normalised
+    3. mean pool over the jet's valid constituents → ``(B, d_i)``; a jet with
        none pools to a zero vector
 
     The pooled constituent vectors are concatenated with the global projection
-    ``z_global`` to form ``z_jet`` of dimension
-    ``global_dim + sum(const_dims)`` (exposed as :attr:`out_dim`).
+    ``z_global`` to form ``z_jet`` of dimension ``global_dim + sum(d_i)``
+    (exposed as :attr:`out_dim`), with ``d_i = proj_dim or const_dims[i]``.
 
     Args:
         global_dim:   Output dimension of the global encoder's ``projector``.
@@ -53,6 +57,9 @@ class TransformerAggregator(nn.Module):
         ff_mult:      Feed-forward expansion factor in the transformer.
         ff_dropout:   Dropout inside transformer feed-forward sub-layers.
         attn_dropout: Dropout inside transformer attention.
+        proj_dim:     Width of a per-token linear projection after the
+                      transformer, per stream.  ``None`` = no projection.
+        final_norm:   LayerNorm on each token after the (optional) projection.
     """
 
     def __init__(
@@ -65,6 +72,8 @@ class TransformerAggregator(nn.Module):
         ff_mult: int = 4,
         ff_dropout: float = 0.0,
         attn_dropout: float = 0.0,
+        proj_dim: int | None = None,
+        final_norm: bool = False,
     ) -> None:
         super().__init__()
 
@@ -84,7 +93,17 @@ class TransformerAggregator(nn.Module):
             ]
         )
 
-        self.out_dim = global_dim + sum(const_dims)
+        # Identity when off: no parameters, so the state_dict of an aggregator
+        # without them (and its checkpoints) is unchanged.
+        pooled_dims = [proj_dim or d for d in const_dims]
+        self.const_proj = nn.ModuleList(
+            [nn.Linear(d, proj_dim) if proj_dim else nn.Identity() for d in const_dims]
+        )
+        self.const_norm = nn.ModuleList(
+            [nn.LayerNorm(d) if final_norm else nn.Identity() for d in pooled_dims]
+        )
+
+        self.out_dim = global_dim + sum(pooled_dims)
 
     def forward(
         self,
@@ -116,6 +135,7 @@ class TransformerAggregator(nn.Module):
             # length, so no host sync is needed for max_seqlen.
             offsets = F.pad(counts.cumsum(0), (1, 0)).to(torch.int32)
             z = self.const_transformer[i](z, groups=RowGroups(offsets, valid.shape[1]))
+            z = self.const_norm[i](self.const_proj[i](z))
 
             # Mean over each jet's valid constituents, accumulated in fp32.
             jet_ids = torch.repeat_interleave(

@@ -2,8 +2,10 @@
 # Encoder architecture — RowCol with SAINT-style CONCATENATED row attention,
 # REDUCED: the encoder of saint_reduced.yaml.
 #
-# STILL A COPY OF rowcol_concat_v0 (model B): the reduced sizes (depth,
-# row_heads, ff_mult, ...) are yet to be set here.
+# Reduced from rowcol_concat_v0 (model B): depth 6 -> 2 (both encoders) and
+# tracks row_heads 8 -> 4; the track projector widened to 304 -> 256 -> 256,
+# because its output width is the aggregator's width (256, as GN2's
+# transformer); everything else as model B (rriva, 2026-11-25).
 #
 # Same as rowcol_v0, except the row (intersample) step runs `row_mode: concat`:
 # instead of one row attention per feature token (per_token), the N tokens are
@@ -30,7 +32,7 @@ global_encoder:
   # num_features injected at runtime from variables.jets.inputs
   layers:
     - type:         rowcol
-      depth:        6
+      depth:        2
       col_heads:    1
       row_heads:    1
       dim_head:     16
@@ -48,24 +50,20 @@ constituents:
     dim:              16     # row-half params go as (N*dim)^2 with N=19; see
                              # the header before raising this
     cont_embeddings:  MLP    # MLP | pos_singleMLP
-    proj_hidden:      null   # null → auto (3/4 × dim × n_tokens)
-    proj_out:         128    # null → auto (1/2 × dim × n_tokens)
+    proj_hidden:      256    # null → auto (3/4 × dim × n_tokens)
+    proj_out:         256    # = the aggregator's width; null → auto (1/2 × dim × n_tokens)
     # categories and num_continuous are injected at runtime from variables.tracks
     layers:
       - type:          rowcol
-        depth:         6
+        depth:         2
         col_heads:     1
-        row_heads:     8
+        row_heads:     4
         dim_head:      16
         dim_row_head:  32     # inner dim over the concat vector (row_dim = N*dim).
-                              # Attention inner = row_heads*dim_row_head = 8*32 =
-                              # 256, just under row_dim = 19*16 = 304, so the
-                              # projections narrow the residual stream rather than
-                              # expand it.  Watch that ratio when changing dim:
-                              # keeping dim_row_head=64 here would have made the
-                              # inner dim 512, i.e. wider than the stream it reads,
-                              # and the row attention would outweigh the row
-                              # feed-forward (the reverse of the dim=64 regime).
+                              # Attention inner = row_heads*dim_row_head = 4*32 =
+                              # 128 (model B: 8*32 = 256), under row_dim =
+                              # 19*16 = 304, so the projections narrow the
+                              # residual stream rather than expand it.
         ff_mult:       2
         attn_dropout:  0.0
         ff_dropout:    0.0

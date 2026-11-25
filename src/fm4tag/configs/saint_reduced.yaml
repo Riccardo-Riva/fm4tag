@@ -1,9 +1,11 @@
 # ════════════════════════════════════════════════════════════════════════════
 # fm4tag — SAINT reduced: model B's architecture with a smaller encoder
-# (encoder/rowcol_concat_v1_small.yaml), for a fair comparison with GN2 (2.2 M).
+# (encoder/rowcol_concat_v1_small.yaml), and an aggregator and head shaped like
+# GN2's (aggregator/transformer_v1_small.yaml, head/mlp_v1_small.yaml), for a
+# fair comparison with GN2 (2.2 M).
 #
-# STILL MODEL B'S VALUES apart from the encoder choice: the encoder sizes, and
-# the batch size / lr / chunk_size that depend on them, are yet to be set.
+# STILL MODEL B'S VALUES: the batch size / lr / chunk_size, yet to be set for
+# this model.
 #
 #   fm4tag --config-name=saint_reduced arm=scratch
 #   fm4tag --config-name=saint_reduced arm=pretrain [pretrain.loss_weights.jet_contrastive=1.0]
@@ -18,8 +20,8 @@
 defaults:
   - data: split_152051             # files, objects, variables
   - encoder: rowcol_concat_v1_small   # per-object encoders (reduced)
-  - aggregator: transformer
-  - head: mlp
+  - aggregator: transformer_v1_small  # GN2-like: width 256, 8x32 heads, proj 128 + norm
+  - head: mlp_v1_small               # GN2's: 128 -> 64 -> 32
   - views: cutmix_mixup            # augmentation views + lambda
   - callbacks: default_monitors    # default | default_monitors | smoke
   - logger: csv_wandb              # csv_wandb | csv
