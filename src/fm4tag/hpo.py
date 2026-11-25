@@ -29,7 +29,7 @@ Driven entirely by the ``hpo:`` section of the experiment config::
           - {param: aggregator.ff_mult, type: categorical, choices: [2, 4]}
 
 Each trial deep-copies the config **unresolved**, so interpolations like
-``pretrain.lr: ${optimizer.lr}`` keep following the overridden value.  With
+``views[0].augmentations[0].lam: ${lambda}`` keep following the overridden value.  With
 ``phases: [pretrain, finetune]`` the finetune phase loads the pretrain
 phase's best checkpoint; the pruning/metric callback is attached only to the
 last phase.

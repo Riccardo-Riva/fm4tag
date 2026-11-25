@@ -155,6 +155,8 @@ def run(
     encoders = build_encoders(cfg)
     aggregator = build_aggregator(cfg, encoders)
     views = [hydra_instantiate(v) for v in cfg.get('views', [])]
+    # Optimiser + lr schedule: written once in the config, shared by both modules.
+    optimizer_kwargs = OmegaConf.to_container(cfg.optimizer, resolve=True)
 
     if _phase == 'pretrain':
         module: L.LightningModule = hydra_instantiate(
@@ -163,6 +165,7 @@ def run(
             aggregator=aggregator,
             views=views,
             _convert_='all',
+            **optimizer_kwargs,
         )
 
     else:  # finetune
@@ -196,6 +199,7 @@ def run(
             views=views,
             n_classes=n_classes,
             _convert_='all',
+            **optimizer_kwargs,
             **overrides,
         )
 
