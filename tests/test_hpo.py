@@ -91,14 +91,14 @@ def test_build_pruner():
 def test_trial_config_applies_overrides_and_keeps_interpolation():
     cfg = OmegaConf.create(
         {
-            'optimizer': {'lr': 1e-4},
-            'pretrain': {'lr': '${optimizer.lr}'},
+            'lambda': 0.4,
+            'views': [{'lam': '${lambda}'}],
             'hpo': {
                 'search_space': {
                     'finetune': [
                         # degenerate range → deterministic suggestion
                         {
-                            'param': 'optimizer.lr',
+                            'param': 'lambda',
                             'type': 'float',
                             'low': 0.5,
                             'high': 0.5,
@@ -109,9 +109,9 @@ def test_trial_config_applies_overrides_and_keeps_interpolation():
         }
     )
     cfg_trial = _trial_config(cfg, _fresh_trial(), 'finetune')
-    assert cfg_trial.optimizer.lr == 0.5
-    assert cfg_trial.pretrain.lr == 0.5  # interpolation follows the override
-    assert cfg.optimizer.lr == 1e-4  # original config untouched
+    assert cfg_trial['lambda'] == 0.5
+    assert cfg_trial.views[0].lam == 0.5  # interpolation follows the override
+    assert cfg['lambda'] == 0.4  # original config untouched
 
 
 def test_trial_config_phase_without_search_space_is_noop():

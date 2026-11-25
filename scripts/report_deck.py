@@ -319,6 +319,8 @@ def run_fields(run_dir: Path, texts: dict, cache: dict) -> dict:
     trk = enc.constituents[cfg.constituent_objects[0]]
     layer = trk.layers[0]
     clip = sel('trainer.gradient_clip_val')
+    # run configs before 2026-11-25 write the schedule inside the module block
+    warmup = sel('optimizer.warmup_frac', sel(f'{cfg.phase}.warmup_frac'))
     f = {
         'phase': cfg.phase,
         'seed': int(cfg.seed),
@@ -361,7 +363,7 @@ def run_fields(run_dir: Path, texts: dict, cache: dict) -> dict:
             w_denoising_con=float(w.denoising_con),
             t_contrastive=float(cfg.pretrain.contrastive_loss.temperature),
             t_jet_contrastive=float(cfg.pretrain.jet_contrastive_loss.temperature),
-            warmup=float(cfg.pretrain.warmup_frac),
+            warmup=float(warmup),
             agg_state=texts['aggregator'][
                 'trained' if float(w.jet_contrastive) > 0 else 'untrained'
             ],
@@ -370,12 +372,15 @@ def run_fields(run_dir: Path, texts: dict, cache: dict) -> dict:
     else:
         w = cfg.finetune.loss_weights
         meta = pae.classify(run_dir)
-        backbone_lr = sel('optimizer.backbone_lr')
+        # null = optimizer.lr for a run that loads a pretraining (since 2026-11-25)
+        backbone_lr = sel('finetune.backbone_lr')
+        if backbone_lr is None and meta['pretraining_run']:
+            backbone_lr = cfg.optimizer.lr
         f.update(
             w_cross_entropy=float(w.cross_entropy),
             w_jet_contrastive=float(w.jet_contrastive),
             t_jet_contrastive=float(cfg.finetune.jet_contrastive_loss.temperature),
-            warmup=float(cfg.finetune.warmup_frac),
+            warmup=float(warmup),
             unfreeze=int(cfg.finetune.unfreeze_at_epoch),
             backbone_lr_s=sci(float(backbone_lr)) if backbone_lr is not None else '',
         )

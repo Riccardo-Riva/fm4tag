@@ -19,7 +19,7 @@ literals or with ``${ENCODERS}`` / ``${CHUNK}`` (the only variables filled by de
 
 To only MEASURE cells at their own batch size (peak memory and s/step, e.g. the WSD cells at batch 12800)::
 
-    ... --fractions 1.0 --max-peak-gib 45 --skip-baseline --extra finetune.warmup_epochs=0.2
+    ... --fractions 1.0 --max-peak-gib 45 --skip-baseline --extra optimizer.warmup_epochs=0.2
 """
 
 from __future__ import annotations
@@ -260,7 +260,7 @@ def main() -> None:
         '--extra',
         nargs='*',
         default=[],
-        help='overrides appended to every run, e.g. finetune.warmup_epochs=0.2 for '
+        help='overrides appended to every run, e.g. optimizer.warmup_epochs=0.2 for '
         'WSD cells (their 1.6-epoch warmup does not fit a 1-epoch test)',
     )
     parser.add_argument('--dry-run', action='store_true')

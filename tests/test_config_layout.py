@@ -149,6 +149,22 @@ def test_every_callbacks_option_instantiates(base, callbacks, arm):
     assert instantiate_callbacks(node)
 
 
+@pytest.mark.parametrize('base', BASES)
+def test_the_lr_schedule_is_written_only_in_optimizer(base):
+    import inspect
+
+    from fm4tag.modules import FinetuneModule, PretrainModule
+
+    cfg = _compose(base)
+    keys = set(cfg.optimizer)
+    for block, module in (('pretrain', PretrainModule), ('finetune', FinetuneModule)):
+        both = keys & set(cfg[block])
+        assert not both, f'{base}.yaml: {block} also writes {both}'
+        # the runner passes every optimizer key to the module
+        missing = keys - set(inspect.signature(module).parameters)
+        assert not missing, f'{module.__name__} does not take {missing}'
+
+
 @pytest.mark.parametrize('logger', _options('logger'))
 def test_every_logger_option_composes(logger):
     cfg = _compose('default', f'logger={logger}')

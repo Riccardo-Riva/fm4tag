@@ -60,6 +60,42 @@ def test_downstream_arms_build(arm, frozen):
     assert module.loss_weights['jet_contrastive'] == 0.0
 
 
+@pytest.mark.parametrize('arm', ['pretrain', 'scratch'])
+def test_run_builds_the_module_with_the_optimizer_block(arm, tmp_path, monkeypatch):
+    import lightning as L
+
+    from fm4tag.runner.run import run
+
+    built = {}
+    monkeypatch.setattr(
+        L.Trainer, 'fit', lambda self, module, *a, **k: built.update(module=module)
+    )
+    cfg = _cfg(
+        f'arm={arm}',
+        'logger=csv',
+        'callbacks=smoke',
+        f'output_dir={tmp_path}',
+        'trainer.accelerator=cpu',
+        'trainer.precision=32-true',
+        'norm_dict_path=null',
+        'class_dict_path=null',
+        'optimizer.lr=0.123',
+        'optimizer.warmup_epochs=1.5',
+    )
+    run(cfg)
+    m = built['module']
+    assert m.lr == 0.123
+    assert m.weight_decay == cfg.optimizer.weight_decay
+    assert (m.schedule, m.warmup_frac, m.warmup_epochs, m.decay_frac) == (
+        'wsd',
+        0.02,
+        1.5,
+        0.2,
+    )
+    if arm == 'scratch':
+        assert m.backbone_lr == 0.123  # null = optimizer.lr
+
+
 def test_pretrain_arm_builds():
     cfg = _cfg('arm=pretrain', 'pretrain.loss_weights.jet_contrastive=1.0')
     encoders = build_encoders(cfg)

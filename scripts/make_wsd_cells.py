@@ -46,7 +46,7 @@ COMMON = (
     'encoder=rowcol_concat_v0 chunk_size=512 '
     f'datamodule.batch_size={BATCH} '
     # warmup 1.6 epochs (2% of the 80-epoch finals) for any run length, stable, linear decay over the last 20%
-    'finetune.schedule=wsd finetune.warmup_epochs=1.6 finetune.decay_frac=0.2 '
+    'optimizer.schedule=wsd optimizer.warmup_epochs=1.6 optimizer.decay_frac=0.2 '
     # no early stopping: the best-val-CE checkpoint of the full run is kept
     '~callbacks.early_stopping ~callbacks_finetune.early_stopping'
 )
@@ -74,7 +74,7 @@ def cell(arm: str, dropout: bool, lr: float, bb: int | None, seed: int) -> str:
     parts.append(COMMON)
     parts.append(f'optimizer.lr={lr:g}')
     if hydra_arm == 'finetune':
-        parts.append(f'optimizer.backbone_lr={lr / bb:.4g}')
+        parts.append(f'finetune.backbone_lr={lr / bb:.4g}')
     if arm == 'scjc':
         parts.append(
             '+trainer.gradient_clip_val=1.0'
