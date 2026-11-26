@@ -219,7 +219,7 @@ def main() -> None:
     ap.add_argument(
         '--config-name',
         default='default',
-        help='primary config in src/fm4tag/configs (e.g. default, saint_reduced)',
+        help='primary config in src/fm4tag/configs (e.g. default, saint_small_RC)',
     )
     ap.add_argument('--steps', type=int, default=30, help='measured steps')
     ap.add_argument('--warmup', type=int, default=10, help='untimed warmup steps')

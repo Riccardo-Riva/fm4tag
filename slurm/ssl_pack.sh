@@ -25,7 +25,7 @@
 #   CELLS=experiments/<campaign>/configs/S2.cells SEEDS=42 PACKS=4 \
 #     MAX_EPOCHS=10 EST_SECONDS_PER_EPOCH=6000 bash slurm/ssl_pack.sh
 #   CONFIG=<base> ...             base config of the stage, in src/fm4tag/configs/
-#                                 (default: default = model B; e.g. saint_reduced)
+#                                 (default: default = model B; e.g. saint_small_RC)
 #   DRY_RUN=1 ...                 write everything, submit nothing
 #   CELL_FILTER=<regex> ...       only the cells whose name matches (e.g. the
 #                                 probes whose pretrainings have ended)

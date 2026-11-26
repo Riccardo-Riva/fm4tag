@@ -129,27 +129,51 @@ warmup_frac,warmup_epochs,decay_frac}` → `optimizer.*`; `optimizer.backbone_lr
   `mem/gpu_peak_MiB` and the epoch time from its `metrics.csv`, then launch the other 4 seeds (`@mem` / `@est`
   measured).
 
-## 2026-11-26 — variant B (SAINT-small without row steps) prepared
+## 2026-11-26 — four models, one base config each; P0 / P1 / P2 of three of them prepared
 
 **Done.**
-- `encoder/col_v1_small.yaml`: SAINT-small's encoder without its row steps (column attention within each object only,
-  the same column blocks and projectors). With `saint_reduced`: 2.11 M parameters (GN2 2.24 M).
-- `experiments/2026-11_pretrain-saint-small/configs/P_col.cells` (`p1_col`, `p0_col`, same recipe as `P_small`).
-- Checked:
-  - both cells files compose with `saint_reduced`, build, and give a finite loss + backward on a CPU toy batch;
-  - P1 sends gradients to both encoders and the aggregator; P0 leaves the aggregator frozen (0.17 M trainable);
-  - `tests/test_config_layout.py`: 40 passed.
-- Experiment README, `experiments/README.md` and the `usage.md` group table updated.
+- **One base config per model** (owner):
+  | Model | Base | Encoder | Parameters with the head |
+  |---|---|---|---|
+  | normal_RC (model B) | `default.yaml` (name kept: the base used without `--config-name`) | `rowcol_concat_v0` | 7.5 M |
+  | normal_C | `saint_normal_C.yaml` (new) | `col_v0_normal` (new) | 2.2 M |
+  | small_RC (SAINT-small) | `saint_small_RC.yaml` (was `saint_reduced.yaml`) | `rowcol_concat_v1_small` | 3.5 M |
+  | small_C | `saint_small_C.yaml` (new) | `col_v1_small` | 2.1 M |
+  - RC = column + row steps in the encoder, C = column steps only (the same column blocks and projectors).
+  - `col_v0_normal` = model B's encoder minus its row steps (`col_v0` is a different, older encoder).
+  - The new bases are copies of their RC base with only the encoder and `experiment_name` changed.
+  - Every mention of `saint_reduced` updated (README, `usage.md` with a model table, `gpu_packing.md`, `ssl_pack.sh`,
+    scripts' docstrings, encoder headers); earlier DIARY entries left as written.
+- **Cells:** one file per model in `experiments/2026-11_pretrain-saint-small/configs/` (`P_small_RC.cells`,
+  `P_small_C.cells`, `P_normal_C.cells`), cells `p{0,1,2}_<model>`, no `encoder=` (the base picks the model).
+  `P_small.cells` and `P_col.cells` deleted (replaced).
+- **Seed-42 pack of small_RC (7473289) cancelled** before it started (owner), so all runs go into the new stages.
+  Its stage folder is renamed `..._CANCELLED_not_started`.
+- **New `experiments/dev/`** (owner): short CPU / GPU tests as slurm jobs, logs in each test's `outputs/`.
+  First test `2026-11-26_cpu-mem-estimate`: CPU memory of one real-batch pretraining step per cell, turned into a GPU
+  estimate by model B's measured GPU peaks. Running as job 7477983; 7477911 and 7477912 were cancelled (`ff_mult` 2
+  not wanted; then the rename).
+- An uncommitted `ff_mult: 2` in `aggregator/transformer_v1_small.yaml` reverted to the committed 1 (owner).
+- Checked: `tests/test_config_layout.py` 68 passed (4 bases); all 9 cells compose with their base, build, and give a
+  finite loss + backward on a CPU toy batch; P1 / P2 send gradients to the encoders and the aggregator, P0 leaves the
+  aggregator frozen.
 
 **Decisions** (owner):
-- Variant B chosen from the candidates: A = encoder depth 4 (5.01 M); B = no row steps (2.11 M); C = depth 4 +
-  6-layer aggregator (5.94 M); D = row attention within the jet only, which needs code because `chunk_size` also sets
-  the contrastive negatives.
+- The four models and their names above; `col_v0_normal` as normal_C's encoder name.
+- This round: P0 / P1 / P2 of small_RC, small_C and normal_C, seeds 42 / 424 / 4242 (27 runs), same recipe (40 epochs,
+  batch 12800, lr 1e-3, WSD warmup 2 / decay 32–40, clip 1.0, no early stopping).
+- Variant B of yesterday = small_C; the other candidates (A: encoder depth 4; C: depth 4 + 6-layer aggregator; D: row
+  attention within the jet only) are not pursued.
 
-**Numbers.** Pretraining trainable parameters: p1_col 2.05 M, p0_col 0.17 M; p1_small 3.50 M, p0_small 1.62 M.
+**Numbers.**
+- Pretraining trainable parameters: P0 small_RC 1.62 M, small_C 0.17 M, normal_C 0.15 M; P1 / P2 small_RC 3.50 M,
+  small_C 2.05 M, normal_C 2.13 M.
+- Model B's GPU peaks used for the calibration (P_full, batch 12288): P0 32.3, P1 40.8, P2 34.1 GiB. On CPU at batch
+  2560 (float32), model B's P0 step took 34.1 GiB (job 7477912).
 
 **Open questions.**
-- Launch `P_col` seed 42 now, or after the measured P_small epoch. P_small s42 had waited about 10.5 h in the queue
-  at 09:48.
+- How many runs per card for each model (from the memory estimate), and so how many pack jobs. The 10-job limit: 5
+  four-way jobs run until Thu night / Fri.
+- The experiment folder is still called `2026-11_pretrain-saint-small` but now holds normal_C too. Rename it?
 
-**Next.** Launch `P_col` (after the owner's go). Then the other seeds of both.
+**Next.** Read the memory estimate (job 7477983), set `@mem` / `@est` in the three cells files, owner commits, launch.

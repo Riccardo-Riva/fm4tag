@@ -14,7 +14,7 @@ Usage::
 
     scripts/model_summary.py                         # default.yaml, pretrain
     scripts/model_summary.py --phase finetune        # adds the classifier head
-    scripts/model_summary.py --config-name saint_reduced   # another base config
+    scripts/model_summary.py --config-name saint_small_RC  # another base config
 
     scripts/model_summary.py encoder=col_v0          # compare architectures
     scripts/model_summary.py encoder.constituents.tracks.layers.0.row_mode=concat

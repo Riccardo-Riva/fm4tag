@@ -21,7 +21,7 @@ To only MEASURE cells at their own batch size (peak memory and s/step, e.g. the 
 
     ... --fractions 1.0 --max-peak-gib 45 --skip-baseline --extra optimizer.warmup_epochs=0.2
 
-``--config-name`` picks the base config of the cells (default ``default`` = model B; e.g. ``saint_reduced``), as
+``--config-name`` picks the base config of the cells (default ``default`` = model B; e.g. ``saint_small_RC``), as
 ``CONFIG=`` does for ``slurm/ssl_pack.sh``.
 """
 

@@ -21,8 +21,10 @@ tracks  ──► Encoder (col/row/rowcol) ─┤─► TransformerAggregator �
 
 Everything — data, architecture, augmentations, optimiser, Lightning trainer,
 Optuna HPO — is driven by Hydra configs: one base config per model
-([`default.yaml`](src/fm4tag/configs/default.yaml) = model B,
-[`saint_reduced.yaml`](src/fm4tag/configs/saint_reduced.yaml)) built from the
+([`default.yaml`](src/fm4tag/configs/default.yaml) = normal_RC, i.e. model B;
+[`saint_normal_C.yaml`](src/fm4tag/configs/saint_normal_C.yaml),
+[`saint_small_RC.yaml`](src/fm4tag/configs/saint_small_RC.yaml),
+[`saint_small_C.yaml`](src/fm4tag/configs/saint_small_C.yaml)) built from the
 config groups in [`configs/`](src/fm4tag/configs) (data, arm, encoder,
 aggregator, head, views, callbacks, logger, hpo), overridable on the command
 line.
@@ -38,7 +40,7 @@ fm4tag arm=pretrain                                     # pretrain (model B)
 fm4tag arm=finetune \
     encoder_ckpt=outputs/.../checkpoints/best.ckpt      # finetune from a checkpoint
 fm4tag arm=scratch                                      # train from scratch
-fm4tag --config-name=saint_reduced arm=scratch          # another model
+fm4tag --config-name=saint_small_RC arm=scratch         # another model
 
 fm4tag-eval --config-name=my_config ckpt_path=outputs/.../best.ckpt   # representation quality
 fm4tag-hpo hpo.n_trials=50                                            # Optuna sweep
