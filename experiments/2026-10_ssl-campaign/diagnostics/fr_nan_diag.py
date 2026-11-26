@@ -6,6 +6,7 @@ forward output is non-finite, the non-finite gradients and the loss.
 
   python fr_nan_diag.py <run config.yaml> <B> [<B> ...]
 """
+
 import os
 import sys
 
@@ -15,7 +16,12 @@ from lightning.fabric.utilities.apply_func import move_data_to_device
 from omegaconf import OmegaConf
 
 from fm4tag.runner.run import _load_aggregator
-from fm4tag.utils import build_aggregator, build_encoders, build_head, load_pretrained_encoders
+from fm4tag.utils import (
+    build_aggregator,
+    build_encoders,
+    build_head,
+    load_pretrained_encoders,
+)
 
 bad = []
 
@@ -24,9 +30,16 @@ def hook(name):
     def fn(mod, args, out):
         outs = out if isinstance(out, (tuple, list)) else [out]
         for o in outs:
-            if torch.is_tensor(o) and o.is_floating_point() and not torch.isfinite(o).all():
-                bad.append(f'{name} {tuple(o.shape)} nonfinite={(~torch.isfinite(o)).sum().item()}')
+            if (
+                torch.is_tensor(o)
+                and o.is_floating_point()
+                and not torch.isfinite(o).all()
+            ):
+                bad.append(
+                    f'{name} {tuple(o.shape)} nonfinite={(~torch.isfinite(o)).sum().item()}'
+                )
                 return
+
     return fn
 
 
@@ -41,10 +54,17 @@ def main():
     parts = ['encoders'] if load_pretrained_encoders(enc, cfg.encoder_ckpt) else []
     assert not _load_aggregator(cfg.get('load_aggregator', 'auto'), cfg.encoder_ckpt)
     n_classes = len(cfg.variables[cfg.global_object].unique_labels)
-    m = instantiate(cfg.finetune, encoders=enc, aggregator=agg, head=head, views=[instantiate(v) for v in cfg.views],
-                    n_classes=n_classes, pretrained_parts=parts, _convert_='all').cuda()
+    m = instantiate(
+        cfg.finetune,
+        encoders=enc,
+        aggregator=agg,
+        head=head,
+        views=[instantiate(v) for v in cfg.views],
+        n_classes=n_classes,
+        pretrained_parts=parts,
+        _convert_='all',
+    ).cuda()
     init = {k: v.detach().clone() for k, v in m.state_dict().items()}
-
 
     for name, mod in m.named_modules():
         if name:
@@ -53,7 +73,9 @@ def main():
     for B in map(int, sys.argv[2:]):
         m.load_state_dict(init)
         m.train()
-        opt = torch.optim.AdamW([p for p in m.parameters() if p.requires_grad], lr=cfg.optimizer.lr)
+        opt = torch.optim.AdamW(
+            [p for p in m.parameters() if p.requires_grad], lr=cfg.optimizer.lr
+        )
         c = cfg.datamodule.copy()
         c.batch_size, c.num_workers = B, 2
         dm = instantiate(c, _convert_='all', train_dataset_path=cfg.train_dataset_path)
@@ -61,19 +83,27 @@ def main():
         it = iter(dm.train_dataloader())
         for step in range(4):
             batch = move_data_to_device(next(it), 'cuda')
-            n_tracks = sum(int(v['valid'].sum()) for v in batch['constituents'].values())
+            n_tracks = sum(
+                int(v['valid'].sum()) for v in batch['constituents'].values()
+            )
             bad.clear()
             with torch.autocast('cuda', dtype=torch.bfloat16):
                 loss, logits, _ = m._compute_loss(batch)
             fwd = list(bad)
             opt.zero_grad(set_to_none=True)
             loss.backward()
-            gbad = [n for n, p in m.named_parameters() if p.grad is not None and not torch.isfinite(p.grad).all()]
+            gbad = [
+                n
+                for n, p in m.named_parameters()
+                if p.grad is not None and not torch.isfinite(p.grad).all()
+            ]
             opt.step()
             pbad = [n for n, p in m.named_parameters() if not torch.isfinite(p).all()]
-            print(f'B={B} step={step} tracks={n_tracks} loss={loss.item():.4f} '
-                  f'logits_finite={torch.isfinite(logits).all().item()} peak={torch.cuda.max_memory_allocated() / 2**30:.1f}GiB',
-                  flush=True)
+            print(
+                f'B={B} step={step} tracks={n_tracks} loss={loss.item():.4f} '
+                f'logits_finite={torch.isfinite(logits).all().item()} peak={torch.cuda.max_memory_allocated() / 2**30:.1f}GiB',
+                flush=True,
+            )
             for line in fwd[:8]:
                 print('   fwd nonfinite:', line)
             if gbad:

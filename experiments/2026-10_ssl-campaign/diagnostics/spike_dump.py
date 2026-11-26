@@ -19,7 +19,9 @@ import torch
 
 
 class SpikeDump(L.Callback):
-    def __init__(self, out_dir: str, stop_step: int, factor: float = 20.0, n_dumps: int = 3):
+    def __init__(
+        self, out_dir: str, stop_step: int, factor: float = 20.0, n_dumps: int = 3
+    ):
         self.out = Path(out_dir)
         self.out.mkdir(parents=True, exist_ok=True)
         self.stop_step = stop_step
@@ -31,27 +33,57 @@ class SpikeDump(L.Callback):
 
     def on_train_batch_start(self, trainer, pl_module, batch, batch_idx):
         self.batch = batch
-        self.rng = {'cpu': torch.random.get_rng_state(), 'cuda': torch.cuda.get_rng_state_all()}
+        self.rng = {
+            'cpu': torch.random.get_rng_state(),
+            'cuda': torch.cuda.get_rng_state_all(),
+        }
 
     def on_before_optimizer_step(self, trainer, pl_module, optimizer):
-        names, grads = zip(*[(n, p.grad) for n, p in pl_module.named_parameters() if p.grad is not None])
+        names, grads = zip(
+            *[
+                (n, p.grad)
+                for n, p in pl_module.named_parameters()
+                if p.grad is not None
+            ]
+        )
         norms = torch.stack([g.detach().float().norm() for g in grads]).cpu()
         total = float(norms.pow(2).sum().sqrt())
         step = trainer.global_step
-        logs = {k: float(v) for k, v in trainer.callback_metrics.items() if k.startswith('train/') and v.numel() == 1}
+        logs = {
+            k: float(v)
+            for k, v in trainer.callback_metrics.items()
+            if k.startswith('train/') and v.numel() == 1
+        }
         with open(self.out / 'steps.jsonl', 'a') as f:
             f.write(json.dumps({'step': step, 'grad_norm': total, **logs}) + '\n')
-        med = float(torch.tensor(list(self.recent)).median()) if len(self.recent) >= 20 else None
+        med = (
+            float(torch.tensor(list(self.recent)).median())
+            if len(self.recent) >= 20
+            else None
+        )
         if med is not None and total > self.factor * med:
             top = norms.argsort(descending=True)[:15]
-            rec = {'step': step, 'grad_norm': total, 'median': med,
-                   'top': [[names[i], float(norms[i])] for i in top]}
+            rec = {
+                'step': step,
+                'grad_norm': total,
+                'median': med,
+                'top': [[names[i], float(norms[i])] for i in top],
+            }
             with open(self.out / 'spikes.jsonl', 'a') as f:
                 f.write(json.dumps(rec) + '\n')
             if self.dumped < self.n_dumps:
-                torch.save({'step': step, 'batch': self.batch, 'rng': self.rng,
-                            'state_dict': {k: v.detach().cpu() for k, v in pl_module.state_dict().items()}},
-                           self.out / f'spike_{step}.pt')
+                torch.save(
+                    {
+                        'step': step,
+                        'batch': self.batch,
+                        'rng': self.rng,
+                        'state_dict': {
+                            k: v.detach().cpu()
+                            for k, v in pl_module.state_dict().items()
+                        },
+                    },
+                    self.out / f'spike_{step}.pt',
+                )
                 self.dumped += 1
         self.recent.append(total)
 
