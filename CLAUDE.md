@@ -41,10 +41,7 @@ Built step by step together with the user, who wants to understand and review ev
 - Every feature ships with a test on few samples (if data is already provided) that runs on CPU.
 - For models and training code, cover at least: output shapes, determinism under a fixed seed, that a tiny batch can be overfitted, no NaN/inf in loss or gradients, and a checkpoint
 save/load round trip.
-- Tests do not depend on the values in the framework's configs (`src/fm4tag/configs`: data paths, batch size, lr,
-  loss weights, clipping, which callbacks run, ...): those are experiment choices and change with them. A test may
-  compose the configs only to check that they compose, build, follow the layout rules, and reach the module; every
-  value it checks, it sets itself (an override or its own small config).
+- Tests do not depend on the values in the framework's configs (`src/fm4tag/configs`: data paths, batch size, lr, loss weights, clipping, which callbacks run, ...): those are experiment choices and change with them. A test may compose the configs only to check that they compose, build, follow the layout rules, and reach the module; every value it checks, it sets itself (an override or its own small config).
 
 ## ML correctness
 - Seed everything in one place (all RNGs and dataloader workers). Every run logs its resolved
