@@ -47,9 +47,14 @@ Three YAML side-files (paths set in the config):
 ## Configs
 
 One **base config per model** in [configs/](../src/fm4tag/configs/):
-[default.yaml](../src/fm4tag/configs/default.yaml) (model B; used when no
-`--config-name` is given) and
-[saint_reduced.yaml](../src/fm4tag/configs/saint_reduced.yaml).  A base selects
+| Model | Base | Encoder | Aggregator, head |
+|---|---|---|---|
+| normal_RC (model B) | [default.yaml](../src/fm4tag/configs/default.yaml), used when no `--config-name` is given | `rowcol_concat_v0` | `transformer_v0`, `mlp` |
+| normal_C | [saint_normal_C.yaml](../src/fm4tag/configs/saint_normal_C.yaml) | `col_v0_normal` | `transformer_v0`, `mlp` |
+| small_RC (SAINT-small) | [saint_small_RC.yaml](../src/fm4tag/configs/saint_small_RC.yaml) | `rowcol_concat_v1_small` | `transformer_v1_small`, `mlp_v1_small` |
+| small_C | [saint_small_C.yaml](../src/fm4tag/configs/saint_small_C.yaml) | `col_v1_small` | `transformer_v1_small`, `mlp_v1_small` |
+
+RC = column + row (intersample) steps in the encoder; C = column steps only.  A base selects
 one option of each config group and holds the training settings; it never
 includes another base, and every key is written in exactly one file (a group
 option or the base — enforced by `tests/test_config_layout.py`), so a value
@@ -60,7 +65,7 @@ file; a new variant of a part is a new option file in its group.
 |---|---|---|
 | `data/` | `split_152051` | files, objects, `variables`, the dataset half of `datamodule` |
 | `arm/` | `pretrain` `scratch` `finetune` `frozen` | `phase`, `encoder_ckpt`, freezing / unfreeze epoch (+ gradient clipping for pretraining) |
-| `encoder/` | `rowcol_concat_v0` (model B) `rowcol_concat_v1_small` (SAINT-small: depth 2, track projector 256) `col_v1_small` (SAINT-small without the row steps) `rowcol_v0` `col_v0` `row_v0` | `encoder`: one encoder per object |
+| `encoder/` | `rowcol_concat_v0` (model B) `rowcol_concat_v1_small` (SAINT-small: depth 2, track projector 256) `col_v1_small` (SAINT-small without the row steps) `col_v0_normal` (model B without the row steps) `rowcol_v0` `col_v0` `row_v0` | `encoder`: one encoder per object |
 | `aggregator/` | `transformer_v0` (model B) `transformer_v1_small` (GN2-like: 8×32 heads, projection 128 + LayerNorm) | `aggregator` |
 | `head/` | `mlp` (model B) `mlp_v1_small` (GN2's 128 → 64 → 32) | `head` (finetune only) |
 | `views/` | `cutmix_mixup` | `lambda`, `views` (augmentation pipelines, both phases) |
@@ -83,7 +88,7 @@ Anything can be overridden on the command line with Hydra dot-notation.
 
 ```bash
 # Pretrain (P0; P1 adds pretrain.loss_weights.jet_contrastive=1.0).  default.yaml
-# (model B) is the default base; another model: --config-name=saint_reduced.
+# (model B) is the default base; another model: --config-name=saint_small_RC.
 # Swap a part with its group, e.g. encoder=col_v0.
 fm4tag arm=pretrain
 

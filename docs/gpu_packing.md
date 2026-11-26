@@ -65,7 +65,7 @@ share a card.
 #   fr_p0    arm=frozen  ... datamodule.batch_size=12800 ... @est=900  @mem=5
 
 SLOTS_PER_GPU=3 GPU_BUDGET_GIB=40 GPU_NODE=gpu-L40S-open MEM_PER_GPU_GB=60 \
-CONFIG=<base, e.g. default or saint_reduced> \
+CONFIG=<base, e.g. default or saint_small_RC> \
 CELLS=experiments/<experiment>/configs/<stage>.cells SEEDS="42" PACKS=4 \
 MAX_EPOCHS=40 EST_SECONDS_PER_EPOCH=2000 bash slurm/ssl_pack.sh
 ```
