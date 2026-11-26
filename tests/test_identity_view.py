@@ -13,7 +13,7 @@ from __future__ import annotations
 import pytest
 import torch
 
-from fm4tag.augmentations import Compose, Identity, Mixup
+from fm4tag.augmentations import Compose, CutMix, Identity, Mixup
 
 
 # ---------------------------------------------------------------------------
@@ -70,7 +70,8 @@ def finetune_setup():
     encoders = build_encoders(cfg)
     aggregator = build_aggregator(cfg, encoders)
     head = build_head(cfg, aggregator)
-    views = [hydra_instantiate(v) for v in cfg.get('views', [])]
+    # The test's own views, one augmented and one identity (the shipped views are an experiment choice).
+    views = [Compose([CutMix(lam=0.4), Mixup(lam=0.4)]), Compose([Identity()])]
 
     module = hydra_instantiate(
         cfg.finetune,
@@ -106,11 +107,6 @@ def finetune_setup():
         },
     }
     return module, batch
-
-
-def test_default_config_has_exactly_one_identity_view(finetune_setup):
-    module, _ = finetune_setup
-    assert sum(v.is_identity for v in module.views) == 1
 
 
 def test_identity_view_reuses_the_clean_pass_exactly(finetune_setup):

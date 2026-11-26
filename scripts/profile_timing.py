@@ -194,7 +194,7 @@ def synthetic_batch(cfg, B: int) -> dict:
     for obj in cfg.constituent_objects:
         v = cfg.variables[obj].inputs
         C = 40  # constituents per jet (dataset average is ~20 valid of 40 slots)
-        n_cat, n_con = len(v.cat_classes), len(v.continuous)
+        n_con = len(v.continuous)
         valid = torch.rand(B, C) < 0.5
         valid[:, 0] = True
         batch['constituents'][obj] = {

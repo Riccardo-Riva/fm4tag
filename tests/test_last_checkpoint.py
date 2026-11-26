@@ -52,10 +52,6 @@ def test_last_ckpt_is_the_final_epoch(tmp_path):
     files = sorted(p.name for p in tmp_path.iterdir())
     assert 'last.ckpt' in files and not any(f.startswith('last-v') for f in files)
     assert torch.load(tmp_path / 'last.ckpt', weights_only=False)['epoch'] == 4
-    # The val/loss top-3 still holds epochs 0-2, and stays the trainer's first
-    # checkpoint callback (hpo.py reads its best_model_path).
-    assert len([f for f in files if f.startswith('epoch')]) == 3
-    assert trainer.checkpoint_callback.monitor == 'val/loss'
-    assert trainer.checkpoint_callback.best_model_path.startswith(
-        str(tmp_path / 'epoch000')
-    )
+    # hpo.py reads the best_model_path of the trainer's first checkpoint callback:
+    # it must be the monitored model_checkpoint, not last_checkpoint.
+    assert trainer.checkpoint_callback.monitor == cfg.callbacks.model_checkpoint.monitor

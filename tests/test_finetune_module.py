@@ -198,15 +198,14 @@ def test_runner_derives_class_weights_from_the_class_dict(tmp_path):
     with initialize_config_dir(config_dir=str(config_dir), version_base=None):
         cfg = compose(config_name='default', overrides=['use_class_weights=true'])
     assert cfg.use_class_weights is True
-    class_dict = tmp_path / 'class_dict.yaml'
-    class_dict.write_text(
-        yaml.safe_dump({'jets': {'flavour_label': [1.5, 1.5, 1.0, 4.0]}})
-    )
     label_var = cfg.variables[cfg.global_object].label
-    assert cfg.global_object == 'jets' and label_var == 'flavour_label'
+    weights = [
+        1.0 + i for i in range(len(cfg.variables[cfg.global_object].unique_labels))
+    ]
+    class_dict = tmp_path / 'class_dict.yaml'
+    class_dict.write_text(yaml.safe_dump({cfg.global_object: {label_var: weights}}))
     loaded = yaml.safe_load(class_dict.read_text())
-    assert loaded[cfg.global_object][label_var] == [1.5, 1.5, 1.0, 4.0]
-    assert list(cfg.variables[cfg.global_object].unique_labels) == [0, 1, 2, 3]
+    assert loaded[cfg.global_object][label_var] == weights
 
 
 # ---------------------------------------------------------------------------

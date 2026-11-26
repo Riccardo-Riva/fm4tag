@@ -1298,7 +1298,10 @@ def make_plots(cfg: dict, plot_dir: Path) -> dict[str, Path | None]:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument(
-        '--config', default=str(REPO / 'experiments/2026-10_ssl-campaign/configs/slides/ssl_campaign.yaml')
+        '--config',
+        default=str(
+            REPO / 'experiments/2026-10_ssl-campaign/configs/slides/ssl_campaign.yaml'
+        ),
     )
     args = ap.parse_args()
     cfg = yaml.safe_load(Path(args.config).read_text())

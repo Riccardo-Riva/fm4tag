@@ -1,5 +1,6 @@
-"""The model-B base config (default.yaml, the SSL campaign settings): every arm
-composes, builds, and means what it says."""
+"""The runner and the arms, on the default base config: every arm composes and builds, and the runner wires the
+config into the module.  The tests set every value they check themselves; they do not pin the values of the
+shipped configs (data, batch size, loss weights, clipping, callbacks), which are experiment choices."""
 
 from __future__ import annotations
 
@@ -16,33 +17,17 @@ def _cfg(*overrides):
         return compose(config_name='default', overrides=list(overrides))
 
 
-def test_campaign_uses_the_disjoint_split():
-    cfg = _cfg('arm=scratch')
-    assert cfg.base_path.endswith('data_parallel_preprocess_251112_152051')
-    assert cfg.pretrain_dataset_path.endswith('pretrain/output/pp_output_pretrain.h5')
-    assert cfg.datamodule.batch_size % (8 * cfg.chunk_size) == 0
-
-
-def test_pretrain_arm_is_contrastive_only():
-    w = _cfg('arm=pretrain').pretrain.loss_weights
-    assert (w.contrastive, w.denoising_cat, w.denoising_con) == (1.0, 0.0, 0.0)
-    assert w.jet_contrastive == 0.0  # P0; P1 sets it on the command line
-
-
 @pytest.mark.parametrize('arm', ['finetune', 'frozen'])
 def test_pretrained_arms_require_a_checkpoint(arm):
     from fm4tag.runner.run import run
 
-    cfg = _cfg(f'arm={arm}')
-    assert cfg.encoder_ckpt is None and cfg.require_encoder_ckpt
+    cfg = _cfg(f'arm={arm}', 'encoder_ckpt=null', 'require_encoder_ckpt=true')
     with pytest.raises(ValueError, match='require_encoder_ckpt'):
         run(cfg)
 
 
-@pytest.mark.parametrize(
-    'arm,frozen', [('scratch', False), ('finetune', False), ('frozen', True)]
-)
-def test_downstream_arms_build(arm, frozen):
+@pytest.mark.parametrize('arm', ['scratch', 'finetune', 'frozen'])
+def test_downstream_arms_build(arm):
     cfg = _cfg(f'arm={arm}', 'encoder_ckpt=/unused.ckpt')
     encoders = build_encoders(cfg)
     aggregator = build_aggregator(cfg, encoders)
@@ -55,9 +40,8 @@ def test_downstream_arms_build(arm, frozen):
         n_classes=len(cfg.variables[cfg.global_object].unique_labels),
         _convert_='all',
     )
-    assert module.freeze_encoders is frozen
+    assert module.freeze_encoders == cfg.finetune.freeze_encoders
     assert module.chunk_size == cfg.chunk_size
-    assert module.loss_weights['jet_contrastive'] == 0.0
 
 
 @pytest.mark.parametrize('arm', ['pretrain', 'scratch'])
@@ -81,17 +65,20 @@ def test_run_builds_the_module_with_the_optimizer_block(arm, tmp_path, monkeypat
         'class_dict_path=null',
         'optimizer.lr=0.123',
         'optimizer.warmup_epochs=1.5',
+        'finetune.backbone_lr=null',
     )
     run(cfg)
     m = built['module']
     assert m.lr == 0.123
-    assert m.weight_decay == cfg.optimizer.weight_decay
-    assert (m.schedule, m.warmup_frac, m.warmup_epochs, m.decay_frac) == (
-        'wsd',
-        0.02,
-        1.5,
-        0.2,
-    )
+    for key in (
+        'weight_decay',
+        'schedule',
+        'warmup_frac',
+        'warmup_epochs',
+        'decay_frac',
+    ):
+        assert getattr(m, key) == cfg.optimizer[key], key
+    assert m.warmup_epochs == 1.5
     if arm == 'scratch':
         assert m.backbone_lr == 0.123  # null = optimizer.lr
 
@@ -110,35 +97,13 @@ def test_pretrain_arm_builds():
     assert any(p.requires_grad for p in module.aggregator.parameters())  # P1
 
 
-def test_campaign_logs_gpu_memory():
-    from fm4tag.callbacks import MemoryMonitorCallback
-    from fm4tag.utils import instantiate_callbacks
-
-    callbacks = instantiate_callbacks(_cfg('arm=scratch').callbacks)
-    assert any(isinstance(cb, MemoryMonitorCallback) for cb in callbacks)
-
-
-def test_campaign_logs_grad_norm():
-    from fm4tag.callbacks import GradNormMonitorCallback
-    from fm4tag.utils import instantiate_callbacks
-
-    callbacks = instantiate_callbacks(_cfg('arm=scratch').callbacks)
-    assert any(isinstance(cb, GradNormMonitorCallback) for cb in callbacks)
-
-
-def test_only_pretraining_clips_gradients():
-    assert _cfg('arm=pretrain').trainer.gradient_clip_val == 1.0
-    for arm in ('scratch', 'finetune', 'frozen'):
-        assert _cfg(f'arm={arm}').trainer.get('gradient_clip_val') is None
-
-
 @pytest.mark.parametrize('arm', ['pretrain', 'scratch', 'finetune', 'frozen'])
-def test_every_arm_has_qk_norm_in_its_row_attention(arm):
+def test_the_qk_norm_switch_reaches_every_row_attention(arm):
     from fm4tag.models.attention import RowAttention
 
     attns = [
         m
-        for m in build_encoders(_cfg(f'arm={arm}')).modules()
+        for m in build_encoders(_cfg(f'arm={arm}', 'row_qk_norm=true')).modules()
         if isinstance(m, RowAttention)
     ]
     assert attns and all(m.qk_norm for m in attns)
@@ -153,11 +118,3 @@ def test_qk_norm_is_off_for_run_configs_without_the_switch():
     with open_dict(cfg):
         del cfg.row_qk_norm
     assert not any('q_norm' in k for k in build_encoders(cfg).state_dict())
-
-
-def test_campaign_monitors_row_attention():
-    from fm4tag.callbacks import RowAttentionMonitor
-    from fm4tag.utils import instantiate_callbacks
-
-    callbacks = instantiate_callbacks(_cfg('arm=pretrain').callbacks)
-    assert any(isinstance(cb, RowAttentionMonitor) for cb in callbacks)
