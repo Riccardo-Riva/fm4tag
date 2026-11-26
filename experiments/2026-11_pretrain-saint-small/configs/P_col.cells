@@ -1,0 +1,12 @@
+# Variant B of the SAINT-small pretrainings (rriva, 2026-11-26): the encoder WITHOUT its row steps
+# (encoder=col_v1_small: column attention within each object only; no track sees another track, no jet another jet,
+# in the encoder).  Same base (CONFIG=saint_reduced), aggregator, head and recipe as P_small.cells, so the comparison
+# with P_small isolates the row steps.  2.11 M parameters with the head (SAINT-small 3.56 M, GN2 2.24 M).
+# Recipe: 40 epochs, batch 12800, AdamW lr 1e-3, gradient clip 1.0, contrastive T 0.1, noise lambda 0.4, no dropout;
+# WSD: warmup 2 epochs, constant, decay over epochs 32-40; no early stopping, the downstream loads last.ckpt.
+#   p1_col = p0 + jet contrastive (weight 1.0, T 0.1) on the aggregator output (the aggregator is trained)
+#   p0_col = per-object contrastive on the track and jet-feature embeddings: pretrains only the per-feature embeddings,
+#            the column layers and the projectors (~0.2 M parameters)
+# @est / @mem: set from the measured P_small epoch before the launch (this encoder is lighter than SAINT-small's).
+p1_col  arm=pretrain encoder=col_v1_small chunk_size=512 datamodule.batch_size=12800 optimizer.lr=1e-3 pretrain.loss_weights.jet_contrastive=1.0 optimizer.schedule=wsd optimizer.warmup_epochs=2 optimizer.decay_frac=0.2 ~callbacks.early_stopping
+p0_col  arm=pretrain encoder=col_v1_small chunk_size=512 datamodule.batch_size=12800 optimizer.lr=1e-3 optimizer.schedule=wsd optimizer.warmup_epochs=2 optimizer.decay_frac=0.2 ~callbacks.early_stopping

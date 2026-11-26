@@ -100,7 +100,12 @@ warmup_frac,warmup_epochs,decay_frac}` → `optimizer.*`; `optimizer.backbone_lr
 **Decisions** (owner):
 - the SAINT-small sizes above;
 - GEGLU kept (not ReLU), no register token, mean pool kept, jet pT/η not attached to the tracks;
-- t4 cancelled.
+- t4 cancelled;
+- SAINT-small pretraining:
+  - 40 epochs, WSD with warmup 2 epochs and decay over epochs 32–40;
+  - 5 seeds per setting in the end;
+  - seed 42 launched without a prior measurement (the measurement job 7470396 sat in the queue and was cancelled), one
+    pretraining per card.
 
 **Numbers.**
 - Parameters (fine-tune phase): track encoder 1.60 M, jet encoder 0.04 M, aggregator 1.88 M, head 0.04 M.
@@ -111,12 +116,40 @@ warmup_frac,warmup_epochs,decay_frac}` → `optimizer.*`; `optimizer.backbone_lr
   seeds 0.653 and 0.663). GN2: 0.6137–0.6154.
 
 **Open questions.**
-- Pretraining epochs (P_v1's 80, or 40) and seeds (2 seeds per pack if a P0 and a P1 fit on one card).
-- Batch size, lr and `chunk_size` of `saint_reduced` are still model B's.
+- The other 4 seeds: two per card if a P0 and a P1 fit on one card (from seed 42's first epoch).
+- Batch size, lr and `chunk_size` of `saint_reduced` are still model B's. The pretraining cells set batch 12800, lr
+  1e-3 and chunk 512 themselves.
 - `docs/param_scan_guide.md` describes a closed experiment's launcher (`2026-08_lambda-scan`). Should it move to that
   experiment's `notes/`?
 
 **Next.**
-- Code, configs and the experiment folder are committed (bc107ea, 5d0ba97, 29b0235). The doc edits of this entry are
-  not yet committed.
-- Read the measurement, set `@est` / `@mem` in `P_small.cells`, launch `P_small`.
+- Committed up to b32f889. Not yet committed: `P_small.cells` (40 epochs, warmup 2, `@est`), the experiment README
+  and this entry.
+- Seed 42 (stage `P_small_s42_20261125_231824`, pack 7473289) is in the queue. After its first epoch: read
+  `mem/gpu_peak_MiB` and the epoch time from its `metrics.csv`, then launch the other 4 seeds (`@mem` / `@est`
+  measured).
+
+## 2026-11-26 — variant B (SAINT-small without row steps) prepared
+
+**Done.**
+- `encoder/col_v1_small.yaml`: SAINT-small's encoder without its row steps (column attention within each object only,
+  the same column blocks and projectors). With `saint_reduced`: 2.11 M parameters (GN2 2.24 M).
+- `experiments/2026-11_pretrain-saint-small/configs/P_col.cells` (`p1_col`, `p0_col`, same recipe as `P_small`).
+- Checked:
+  - both cells files compose with `saint_reduced`, build, and give a finite loss + backward on a CPU toy batch;
+  - P1 sends gradients to both encoders and the aggregator; P0 leaves the aggregator frozen (0.17 M trainable);
+  - `tests/test_config_layout.py`: 40 passed.
+- Experiment README, `experiments/README.md` and the `usage.md` group table updated.
+
+**Decisions** (owner):
+- Variant B chosen from the candidates: A = encoder depth 4 (5.01 M); B = no row steps (2.11 M); C = depth 4 +
+  6-layer aggregator (5.94 M); D = row attention within the jet only, which needs code because `chunk_size` also sets
+  the contrastive negatives.
+
+**Numbers.** Pretraining trainable parameters: p1_col 2.05 M, p0_col 0.17 M; p1_small 3.50 M, p0_small 1.62 M.
+
+**Open questions.**
+- Launch `P_col` seed 42 now, or after the measured P_small epoch. P_small s42 had waited about 10.5 h in the queue
+  at 09:48.
+
+**Next.** Launch `P_col` (after the owner's go). Then the other seeds of both.

@@ -1,0 +1,54 @@
+# ════════════════════════════════════════════════════════════════════════════
+# Encoder architecture — COLUMN attention only: rowcol_concat_v1_small without
+# its row steps (variant B of the SAINT-small pretrainings, rriva 2026-11-26).
+#
+# Each object (the jet, each track) is a set of per-feature tokens of width 16;
+# the column attention mixes the feature tokens of ONE object.  No row
+# (intersample) step: the encoder never lets a track see another track or a
+# jet see another jet.  All mixing across tracks happens in the aggregator
+# (within each jet), so with aggregator/transformer_v1_small the model is
+# GN2-shaped: per-track embedding -> 4-layer transformer over the jet's tracks
+# -> projection + norm -> pool -> head (2.11 M parameters with head/mlp_v1_small;
+# GN2: 2.24 M).
+#
+# The column blocks are the column half of rowcol_concat_v1_small's steps (same
+# heads, dim_head, ff_mult, depth), and the projectors are the same, so this
+# encoder is SAINT-small's minus its row steps — the comparison isolates them.
+#
+# The contrastive loss still draws its negatives from the chunk_size-jet chunk
+# (the chunk only sets the attention context where a row step exists).
+#
+# Select with:  encoder=col_v1_small
+# ════════════════════════════════════════════════════════════════════════════
+
+global_encoder:
+  _target_: fm4tag.models.GlobalTransformerEncoder
+  dim:          16     # token width — the backbone runs at this width
+  proj_hidden:  null   # null → auto (2 × dim × n_tokens)
+  proj_out:     128    # projector output width — head only, never the backbone
+  # num_features injected at runtime from variables.jets.inputs
+  layers:
+    - type:         col
+      depth:        2
+      heads:        1
+      dim_head:     16
+      ff_mult:      2
+      attn_dropout: 0.0
+      ff_dropout:   0.0
+
+constituents:
+  tracks:
+    _target_: fm4tag.models.Encoder
+    dim:              16
+    cont_embeddings:  MLP    # MLP | pos_singleMLP
+    proj_hidden:      256    # null → auto (3/4 × dim × n_tokens)
+    proj_out:         256    # = the aggregator's width; null → auto (1/2 × dim × n_tokens)
+    # categories and num_continuous are injected at runtime from variables.tracks
+    layers:
+      - type:          col
+        depth:         2
+        heads:         1
+        dim_head:      16
+        ff_mult:       2
+        attn_dropout:  0.0
+        ff_dropout:    0.0
