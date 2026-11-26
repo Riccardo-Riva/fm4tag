@@ -1,0 +1,5 @@
+# Model B's P0 / P1 / P2 of P_full (experiments/2026-10_ssl-campaign, run with batch 12288), in today's key names, base
+# `default`.  Their GPU peaks were measured (README), so they turn a CPU number into a GPU estimate.
+p0_B  arm=pretrain chunk_size=512 optimizer.lr=1e-3
+p1_B  arm=pretrain chunk_size=512 optimizer.lr=1e-3 pretrain.loss_weights.jet_contrastive=1.0 pretrain.jet_contrastive_loss.temperature=0.1
+p2_B  arm=pretrain chunk_size=512 optimizer.lr=1e-3 pretrain.loss_weights.contrastive=0.0 pretrain.loss_weights.jet_contrastive=1.0 pretrain.jet_contrastive_loss.temperature=0.1

@@ -1,0 +1,13 @@
+# P0 / P1 / P2 pretrainings of small_C: small_RC without the row steps (encoder col_v1_small)
+# (rriva, 2026-11-26).  The model is the base config: CONFIG=saint_small_C.
+# Same recipe for every model of this experiment:
+#   40 epochs, batch 12800, AdamW lr 1e-3, gradient clip 1.0 (arm=pretrain), contrastive T 0.1, noise lambda 0.4,
+#   no dropout; WSD: warmup 2 epochs, constant, decay over epochs 32-40; no early stopping, downstream loads last.ckpt.
+#   p0 = per-object contrastive on the track and jet-feature embeddings (the aggregator is not trained)
+#   p1 = p0 + jet contrastive (weight 1.0, T 0.1) on the aggregator output
+#   p2 = jet contrastive only (per-object contrastive weight 0)
+# Seeds 42 424 4242.  @mem / @est: set from the CPU memory estimate (experiments/dev/2026-11-26_cpu-mem-estimate)
+# before the launch.
+p0_small_C  arm=pretrain chunk_size=512 datamodule.batch_size=12800 optimizer.lr=1e-3 optimizer.schedule=wsd optimizer.warmup_epochs=2 optimizer.decay_frac=0.2 ~callbacks.early_stopping
+p1_small_C  arm=pretrain chunk_size=512 datamodule.batch_size=12800 optimizer.lr=1e-3 optimizer.schedule=wsd optimizer.warmup_epochs=2 optimizer.decay_frac=0.2 ~callbacks.early_stopping pretrain.loss_weights.jet_contrastive=1.0
+p2_small_C  arm=pretrain chunk_size=512 datamodule.batch_size=12800 optimizer.lr=1e-3 optimizer.schedule=wsd optimizer.warmup_epochs=2 optimizer.decay_frac=0.2 ~callbacks.early_stopping pretrain.loss_weights.contrastive=0.0 pretrain.loss_weights.jet_contrastive=1.0
