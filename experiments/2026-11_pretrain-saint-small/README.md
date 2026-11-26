@@ -1,7 +1,7 @@
 # P0 / P1 / P2 pretrainings of small_RC, small_C and normal_C (2026-11-25 →)
 
-**Status:** being prepared. The GPU memory of each cell is being estimated on CPU (`experiments/dev/2026-11-26_cpu-mem-estimate`);
-then 3 seeds of each cell, several runs per card.
+**Status:** small_RC and normal_C submitted on 2026-11-26 (pending in the queue); small_C follows once small_RC's first
+epoch is timed.
 
 ## Question
 First contrastive pretrainings of three models, to be fine-tuned and compared with the same models trained from scratch:
@@ -57,13 +57,20 @@ normal_C 2.13 M.
   - batch 12800, AdamW lr 1e-3, gradient-norm clipping 1.0, no dropout;
   - WSD: warmup 2 epochs (5 %), constant, linear decay over epochs 32–40 (20 %);
   - no early stopping; the downstream loads the last checkpoint.
-- **Seeds:** 42, 424, 4242 for now (5 per setting in the end).
+- **Seeds:** 42, 424, 4242, 42424 (owner, 2026-11-26; 5 per setting in the end).
+- **Packing:** two runs per card (`SLOTS_PER_GPU=2`, budget 40 GiB). `@mem` per cell from the CPU estimate
+  (`experiments/dev/2026-11-26_cpu-mem-estimate`): small_RC 12 / 19 / 14 GiB, normal_C 9 / 20 / 16, small_C 6 / 12 / 8
+  (P0 / P1 / P2). `@est` 13300 s per epoch while two share a card: twice normal_RC's P1 alone on an A40, an upper
+  bound (40 epochs = 148 h of the 167.5 h a 7-day job leaves). small_C does a subset of small_RC's work, so small_RC's
+  first measured epoch bounds small_C's time; small_C then runs 3–4 per card.
 
 ## Stages and configs
 | Stage | What |
 |---|---|
 | `P_small_s42_20261125_231824_CANCELLED_not_started` | P0 / P1 of small_RC, seed 42 (pack 7473289), cancelled on 2026-11-26 before it started: replaced by the stages below |
-| (next) | `configs/P_small_RC.cells` (`CONFIG=saint_small_RC`), `P_small_C.cells` (`saint_small_C`), `P_normal_C.cells` (`saint_normal_C`), 3 seeds each; `@mem` / `@est` from the CPU estimate |
+| `P_small_RC_20261126_123135` | small_RC, `configs/P_small_RC.cells`, `CONFIG=saint_small_RC`, 12 runs, packs 7478206–08 (3 × 2 GPUs) |
+| `P_normal_C_20261126_123145` | normal_C, `configs/P_normal_C.cells`, `CONFIG=saint_normal_C`, 12 runs, packs 7478209–10; a third pack when a job slot frees (`STAGE_DIR=<this stage> PACKS=1 bash slurm/ssl_pack.sh`) |
+| (next) | small_C, `configs/P_small_C.cells`, `CONFIG=saint_small_C`, after small_RC's first epoch |
 
 Before launch, each cells file was composed with its base, built, and run for one loss + backward step on a toy batch on
 CPU (`cells_loss_check.py` in the session scratchpad): all 9 cells give a finite loss; P1 and P2 send gradients to both

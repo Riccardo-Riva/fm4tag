@@ -6,4 +6,4 @@ logs and results to the folder's `outputs/` (not in git). Results that drive a d
 
 | Test | Question | Status |
 |---|---|---|
-| `2026-11-26_cpu-mem-estimate` | GPU memory of the small_RC / small_C / normal_C pretrainings, before choosing how many share a card | running (job 7477983) |
+| `2026-11-26_cpu-mem-estimate` | GPU memory of the small_RC / small_C / normal_C pretrainings, before choosing how many share a card | done (job 7477983): `@mem` per cell in its README |

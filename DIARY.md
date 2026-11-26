@@ -165,14 +165,23 @@ warmup_frac,warmup_epochs,decay_frac}` → `optimizer.*`; `optimizer.backbone_lr
     fixture (its own views);
   - kept: the layout tests and the tests that compose and build the configs.
 - ruff: unused `import re` (`scripts/permutation_importance.py`) and `n_cat` (`scripts/profile_timing.py`) removed.
+- **GPU memory estimated on CPU** (dev test, job 7477983; result in its README): `@mem` per cell with margin, P0 / P1 /
+  P2 = small_RC 12 / 19 / 14 GiB, normal_C 9 / 20 / 16, small_C 6 / 12 / 8. Any 2 runs of small_RC or normal_C fit a
+  card (40 GiB budget); small_C fits 3–5.
+- **Launched** (two runs per card, `@est` 13300 s per shared epoch = 2 × normal_RC's P1 alone on an A40):
+  - `P_small_RC_20261126_123135`: 12 runs, packs 7478206–08;
+  - `P_normal_C_20261126_123145`: 12 runs, packs 7478209–10 (a third pack when a job slot frees).
 - Checked: `tests/test_config_layout.py` 68 passed (4 bases); all 9 cells compose with their base, build, and give a
   finite loss + backward on a CPU toy batch; P1 / P2 send gradients to the encoders and the aggregator, P0 leaves the
   aggregator frozen.
 
 **Decisions** (owner):
 - The four models and their names above; `col_v0_normal` as normal_C's encoder name.
-- This round: P0 / P1 / P2 of small_RC, small_C and normal_C, seeds 42 / 424 / 4242 (27 runs), same recipe (40 epochs,
-  batch 12800, lr 1e-3, WSD warmup 2 / decay 32–40, clip 1.0, no early stopping).
+- This round: P0 / P1 / P2 of small_RC, small_C and normal_C, seeds 42 / 424 / 4242 / 42424 (36 runs; 4 seeds so that
+  every card holds two runs), same recipe (40 epochs, batch 12800, lr 1e-3, WSD warmup 2 / decay 32–40, clip 1.0, no
+  early stopping).
+- small_C waits for small_RC's first timed epoch (an upper bound for small_C's time), then runs 3–4 per card.
+- From now on model B is called normal_RC.
 - Variant B of yesterday = small_C; the other candidates (A: encoder depth 4; C: depth 4 + 6-layer aggregator; D: row
   attention within the jet only) are not pursued.
 
@@ -186,8 +195,9 @@ warmup_frac,warmup_epochs,decay_frac}` → `optimizer.*`; `optimizer.backbone_lr
   2560 (float32), model B's P0 step took 34.1 GiB (job 7477912).
 
 **Open questions.**
-- How many runs per card for each model (from the memory estimate), and so how many pack jobs. The 10-job limit: 5
-  four-way jobs run until Thu night / Fri.
 - The experiment folder is still called `2026-11_pretrain-saint-small` but now holds normal_C too. Rename it?
 
-**Next.** Read the memory estimate (job 7477983), set `@mem` / `@est` in the three cells files, owner commits, launch.
+**Next.**
+- When a four-way job ends (t2 jobs ~Thu 21:10): the third normal_C pack (`STAGE_DIR=<P_normal_C stage> PACKS=1`).
+- small_RC's first epoch: compare `mem/gpu_peak_MiB` with the estimate; time per epoch → small_C's `@est`, launch
+  small_C (3–4 per card).

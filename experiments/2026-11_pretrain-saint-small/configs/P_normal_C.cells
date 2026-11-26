@@ -6,8 +6,16 @@
 #   p0 = per-object contrastive on the track and jet-feature embeddings (the aggregator is not trained)
 #   p1 = p0 + jet contrastive (weight 1.0, T 0.1) on the aggregator output
 #   p2 = jet contrastive only (per-object contrastive weight 0)
-# Seeds 42 424 4242.  @mem / @est: set from the CPU memory estimate (experiments/dev/2026-11-26_cpu-mem-estimate)
-# before the launch.
-p0_normal_C  arm=pretrain chunk_size=512 datamodule.batch_size=12800 optimizer.lr=1e-3 optimizer.schedule=wsd optimizer.warmup_epochs=2 optimizer.decay_frac=0.2 ~callbacks.early_stopping
-p1_normal_C  arm=pretrain chunk_size=512 datamodule.batch_size=12800 optimizer.lr=1e-3 optimizer.schedule=wsd optimizer.warmup_epochs=2 optimizer.decay_frac=0.2 ~callbacks.early_stopping pretrain.loss_weights.jet_contrastive=1.0
-p2_normal_C  arm=pretrain chunk_size=512 datamodule.batch_size=12800 optimizer.lr=1e-3 optimizer.schedule=wsd optimizer.warmup_epochs=2 optimizer.decay_frac=0.2 ~callbacks.early_stopping pretrain.loss_weights.contrastive=0.0 pretrain.loss_weights.jet_contrastive=1.0
+# Seeds 42 424 4242 42424 (owner, 2026-11-26), two runs per card (SLOTS_PER_GPU=2).
+# @mem: estimated peak GPU GiB with margin (experiments/dev/2026-11-26_cpu-mem-estimate).
+# @est: seconds per epoch WHILE two share a card, upper bound = 2 x normal_RC's P1 alone on an A40 (6650 s);
+#       40 epochs = 148 h of the 167.5 h a 7-day job leaves.
+# Launched 2026-11-26 (stage P_normal_C_20261126_123145):
+#   CONFIG=saint_normal_C MAX_EPOCHS=40 SEEDS="42 424 4242 42424" WALLTIME=7-00:00:00 EST_SECONDS_PER_EPOCH=13300 \
+#   GPU_NODE=gpu-L40S-open,gpu-A40 STAGE=P_normal_C PACKS=2 SLOTS_PER_GPU=2 GPU_BUDGET_GIB=40 MEM_PER_GPU_GB=48 \
+#   CELLS=experiments/2026-11_pretrain-saint-small/configs/P_normal_C.cells bash slurm/ssl_pack.sh
+#   (normal_C: 2 packs on 2026-11-26, the third when a job slot frees:
+#    STAGE_DIR=<repo>/experiments/2026-11_pretrain-saint-small/outputs/P_normal_C_20261126_123145 PACKS=1 bash slurm/ssl_pack.sh)
+p0_normal_C  arm=pretrain chunk_size=512 datamodule.batch_size=12800 optimizer.lr=1e-3 optimizer.schedule=wsd optimizer.warmup_epochs=2 optimizer.decay_frac=0.2 ~callbacks.early_stopping @est=13300 @mem=9
+p1_normal_C  arm=pretrain chunk_size=512 datamodule.batch_size=12800 optimizer.lr=1e-3 optimizer.schedule=wsd optimizer.warmup_epochs=2 optimizer.decay_frac=0.2 ~callbacks.early_stopping pretrain.loss_weights.jet_contrastive=1.0 @est=13300 @mem=20
+p2_normal_C  arm=pretrain chunk_size=512 datamodule.batch_size=12800 optimizer.lr=1e-3 optimizer.schedule=wsd optimizer.warmup_epochs=2 optimizer.decay_frac=0.2 ~callbacks.early_stopping pretrain.loss_weights.contrastive=0.0 pretrain.loss_weights.jet_contrastive=1.0 @est=13300 @mem=16
