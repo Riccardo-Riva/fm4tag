@@ -154,6 +154,17 @@ warmup_frac,warmup_epochs,decay_frac}` → `optimizer.*`; `optimizer.backbone_lr
   estimate by model B's measured GPU peaks. Running as job 7477983; 7477911 and 7477912 were cancelled (`ff_mult` 2
   not wanted; then the rename).
 - An uncommitted `ff_mult: 2` in `aggregator/transformer_v1_small.yaml` reverted to the committed 1 (owner).
+- **Tests no longer pin the values of the shipped configs** (owner; rule added to CLAUDE.md § Testing):
+  - removed (they only checked values): `test_campaign_uses_the_disjoint_split` (the failing one: batch 12800 is not
+    a multiple of 8 × 512), `test_pretrain_arm_is_contrastive_only`, `test_only_pretraining_clips_gradients`,
+    `test_campaign_logs_gpu_memory`, `test_campaign_logs_grad_norm`, `test_campaign_monitors_row_attention`,
+    `test_default_config_has_exactly_one_identity_view`;
+  - rewritten to set what they check: the checkpoint guard (`require_encoder_ckpt`), the optimizer-block wiring
+    (compared with the composed config, not literals), QK-norm (the switch set by the test reaches every row
+    attention), the class-dict test, the last-checkpoint test (no top-k count or monitor literal), the identity-view
+    fixture (its own views);
+  - kept: the layout tests and the tests that compose and build the configs.
+- ruff: unused `import re` (`scripts/permutation_importance.py`) and `n_cat` (`scripts/profile_timing.py`) removed.
 - Checked: `tests/test_config_layout.py` 68 passed (4 bases); all 9 cells compose with their base, build, and give a
   finite loss + backward on a CPU toy batch; P1 / P2 send gradients to the encoders and the aggregator, P0 leaves the
   aggregator frozen.
@@ -166,6 +177,9 @@ warmup_frac,warmup_epochs,decay_frac}` → `optimizer.*`; `optimizer.backbone_lr
   attention within the jet only) are not pursued.
 
 **Numbers.**
+- `pytest -m "not ddp"`: 371 passed, 14 skipped, 0 failed (DDP suite not run). `ruff check src tests scripts
+  experiments/dev slurm`: clean (old notebooks and `experiments/2026-10_ssl-campaign/diagnostics/` still have
+  findings).
 - Pretraining trainable parameters: P0 small_RC 1.62 M, small_C 0.17 M, normal_C 0.15 M; P1 / P2 small_RC 3.50 M,
   small_C 2.05 M, normal_C 2.13 M.
 - Model B's GPU peaks used for the calibration (P_full, batch 12288): P0 32.3, P1 40.8, P2 34.1 GiB. On CPU at batch
