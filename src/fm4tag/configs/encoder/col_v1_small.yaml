@@ -1,6 +1,6 @@
 # ════════════════════════════════════════════════════════════════════════════
 # Encoder architecture — COLUMN attention only: rowcol_concat_v1_small without
-# its row steps (variant B of the SAINT-small pretrainings, rriva 2026-11-26).
+# its row steps: the encoder of small_C (saint_small_C.yaml, rriva 2026-11-26).
 #
 # Each object (the jet, each track) is a set of per-feature tokens of width 16;
 # the column attention mixes the feature tokens of ONE object.  No row

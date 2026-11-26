@@ -1,6 +1,6 @@
 # ════════════════════════════════════════════════════════════════════════════
 # Encoder architecture — RowCol with SAINT-style CONCATENATED row attention,
-# REDUCED: the encoder of saint_reduced.yaml.
+# REDUCED: the encoder of small_RC (saint_small_RC.yaml).
 #
 # Reduced from rowcol_concat_v0 (model B): depth 6 -> 2 (both encoders) and
 # tracks row_heads 8 -> 4; the track projector widened to 304 -> 256 -> 256,

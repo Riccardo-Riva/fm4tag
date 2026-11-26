@@ -1,5 +1,5 @@
 # ════════════════════════════════════════════════════════════════════════════
-# fm4tag — model B: SAINT-like per-feature encoders (6 row + column steps,
+# fm4tag — normal_RC (model B): SAINT-like per-feature encoders (6 row + column steps,
 # intersample attention over 512-jet chunks) + a 6-layer transformer
 # aggregator; 7.5 M parameters.  The base config `fm4tag` uses when no
 # --config-name is given.
@@ -10,10 +10,11 @@
 #   fm4tag arm=finetune encoder_ckpt=<ckpt>               # FT
 #   fm4tag arm=frozen   encoder_ckpt=<ckpt>               # FR
 #
-# Layout: one base config per model (this file, saint_reduced.yaml, ...); a
-# base never includes another base.  The pieces live in the config groups
-# below; every key is written in exactly one file (a group or this base), so
-# nothing is overwritten except on the command line / in a cells file.
+# Layout: one base config per model: default.yaml (normal_RC = model B),
+# saint_normal_C.yaml, saint_small_RC.yaml, saint_small_C.yaml; a base never
+# includes another base.  The pieces live in the config groups below; every
+# key is written in exactly one file (a group or this base), so nothing is
+# overwritten except on the command line / in a cells file.
 # ════════════════════════════════════════════════════════════════════════════
 
 defaults:

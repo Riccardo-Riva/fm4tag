@@ -1,20 +1,21 @@
 # ════════════════════════════════════════════════════════════════════════════
-# fm4tag — SAINT reduced: model B's architecture with a smaller encoder
-# (encoder/rowcol_concat_v1_small.yaml), and an aggregator and head shaped like
-# GN2's (aggregator/transformer_v1_small.yaml, head/mlp_v1_small.yaml), for a
-# fair comparison with GN2 (2.2 M).
+# fm4tag — small_RC (SAINT-small): model B's architecture with a smaller
+# encoder (encoder/rowcol_concat_v1_small.yaml: column + row steps, depth 2),
+# and an aggregator and head shaped like GN2's (aggregator/transformer_v1_small.yaml,
+# head/mlp_v1_small.yaml), for a fair comparison with GN2 (2.2 M).
 #
 # STILL MODEL B'S VALUES: the batch size / lr / chunk_size, yet to be set for
-# this model.
+# this model (the pretraining cells set their own).
 #
-#   fm4tag --config-name=saint_reduced arm=scratch
-#   fm4tag --config-name=saint_reduced arm=pretrain [pretrain.loss_weights.jet_contrastive=1.0]
-#   fm4tag --config-name=saint_reduced arm=finetune encoder_ckpt=<ckpt>
+#   fm4tag --config-name=saint_small_RC arm=scratch
+#   fm4tag --config-name=saint_small_RC arm=pretrain [pretrain.loss_weights.jet_contrastive=1.0]
+#   fm4tag --config-name=saint_small_RC arm=finetune encoder_ckpt=<ckpt>
 #
-# Layout: one base config per model (default.yaml, this file, ...); a base
-# never includes another base.  The pieces live in the config groups below;
-# every key is written in exactly one file (a group or this base), so nothing
-# is overwritten except on the command line / in a cells file.
+# Layout: one base config per model: default.yaml (normal_RC = model B),
+# saint_normal_C.yaml, saint_small_RC.yaml, saint_small_C.yaml; a base never
+# includes another base.  The pieces live in the config groups below; every
+# key is written in exactly one file (a group or this base), so nothing is
+# overwritten except on the command line / in a cells file.
 # ════════════════════════════════════════════════════════════════════════════
 
 defaults:
@@ -32,7 +33,7 @@ defaults:
 # ── Run control ─────────────────────────────────────────────────────────────
 action: fit        # fit | test | predict
 seed:   42
-experiment_name: saint_reduced
+experiment_name: saint_small_RC
 output_dir: outputs
 float32_matmul_precision: high   # highest | high | medium
 ckpt_path: null    # Lightning checkpoint to resume fit / run test / predict
