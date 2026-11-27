@@ -197,7 +197,23 @@ warmup_frac,warmup_epochs,decay_frac}` → `optimizer.*`; `optimizer.backbone_lr
 **Open questions.**
 - The experiment folder is still called `2026-11_pretrain-saint-small` but now holds normal_C too. Rename it?
 
+**Evening (23:15).**
+- small_RC started at 20:05 / 20:17 (packs 7478206 node101, 7478207 node102; L40S). **The CPU memory estimate was 1.5–1.9×
+  too low**: GPU peaks P0 16.6, P1 22.5, P2 15.3 GiB (estimated 8.6 / 13.6 / 10.2). Two P1 shared a card twice and the
+  second ran out of memory after 1 min (p1 seeds 424 and 4242). Why, in the dev test's README.
+- Fixed in the stage files, which the workers read at every claim:
+  - small_RC `task_mem.tsv` → 17 / 23 / 16; the two P1 re-queued (folders kept as `seed_<s>_OOM_20261126`); the pending
+    third pack will run them, each next to a P2.
+  - normal_C (not started) → one run per card, `@mem` 40, `@est` 6650 s (normal_RC's P1 alone on an A40: an upper bound,
+    normal_C does a subset of its work); two normal_C per card one after the other.
+- small_C launched with small_RC's numbers as upper bounds (subset of its work): `@mem` 17 / 23 / 16, `@est` 9000 s;
+  stage `P_small_C_20261126_231531`, packs 7597873–74.
+- Measured, two per card on L40S (small_RC): P0 next to P0 61 min per epoch; P1 next to P2 91 min, P2 56 min.
+- To watch: p2_small_RC seed 42's val loss went up, 1.54 → 3.60 → 3.25 (seed 424: 0.83 → 0.49 → 0.40).
+
 **Next.**
-- When a four-way job ends (t2 jobs ~Thu 21:10): the third normal_C pack (`STAGE_DIR=<P_normal_C stage> PACKS=1`).
-- small_RC's first epoch: compare `mem/gpu_peak_MiB` with the estimate; time per epoch → small_C's `@est`, launch
-  small_C (3–4 per card).
+- The third packs of normal_C (7599134) and small_C (7599135) submitted at 23:30 with `MAX_GPU_JOBS=12`: the owner allows
+  going over the 10-job limit by the number of jobs that end during the night (four-way 7385112: last epoch of 80 at
+  23:20; 7385110: 2 epochs left). 7385111 ends ~Fri 16:00.
+- normal_C's first epoch: real peak → pairs for its later claims (`task_mem.tsv`, `tasks.tsv` EST).
+- Check the re-queued small_RC P1 runs once pack 7478208 starts.

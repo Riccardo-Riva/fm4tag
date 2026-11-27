@@ -7,9 +7,15 @@
 #   p1 = p0 + jet contrastive (weight 1.0, T 0.1) on the aggregator output
 #   p2 = jet contrastive only (per-object contrastive weight 0)
 # Seeds 42 424 4242 42424 (owner, 2026-11-26).
-# @mem: estimated peak GPU GiB with margin (experiments/dev/2026-11-26_cpu-mem-estimate).  @est: not set yet;
-# small_C does a subset of small_RC's work, so small_RC's first measured epoch (two per card) bounds it, and
-# small_C then runs 3-4 per card.
-p0_small_C  arm=pretrain chunk_size=512 datamodule.batch_size=12800 optimizer.lr=1e-3 optimizer.schedule=wsd optimizer.warmup_epochs=2 optimizer.decay_frac=0.2 ~callbacks.early_stopping @mem=6
-p1_small_C  arm=pretrain chunk_size=512 datamodule.batch_size=12800 optimizer.lr=1e-3 optimizer.schedule=wsd optimizer.warmup_epochs=2 optimizer.decay_frac=0.2 ~callbacks.early_stopping pretrain.loss_weights.jet_contrastive=1.0 @mem=12
-p2_small_C  arm=pretrain chunk_size=512 datamodule.batch_size=12800 optimizer.lr=1e-3 optimizer.schedule=wsd optimizer.warmup_epochs=2 optimizer.decay_frac=0.2 ~callbacks.early_stopping pretrain.loss_weights.contrastive=0.0 pretrain.loss_weights.jet_contrastive=1.0 @mem=8
+# Two runs per card (SLOTS_PER_GPU=2).  small_C does a subset of small_RC's work, so small_RC's measurements
+# (stage P_small_RC_20261126_123135, first epochs, two per card on L40S) bound it:
+#   @mem = small_RC's GPU peak + margin: P0 16.6 -> 17, P1 22.5 -> 23, P2 15.3 -> 16 GiB (never two P1 on a card);
+#   @est = small_RC's slowest shared epoch (P1 next to P2, 5460 s) x 1.56 (A40 vs L40S) = 8520 -> 9000 s.
+# (The CPU estimate of experiments/dev/2026-11-26_cpu-mem-estimate was 1.5-1.9x too low: not used.)
+# Launched 2026-11-26 23:15 (stage P_small_C_20261126_231531), 2 packs (a third when a job slot frees: STAGE_DIR=<stage> PACKS=1 bash slurm/ssl_pack.sh):
+#   CONFIG=saint_small_C MAX_EPOCHS=40 SEEDS="42 424 4242 42424" WALLTIME=7-00:00:00 EST_SECONDS_PER_EPOCH=9000 \
+#   GPU_NODE=gpu-L40S-open,gpu-A40 STAGE=P_small_C PACKS=2 SLOTS_PER_GPU=2 GPU_BUDGET_GIB=40 MEM_PER_GPU_GB=48 \
+#   CELLS=experiments/2026-11_pretrain-saint-small/configs/P_small_C.cells bash slurm/ssl_pack.sh
+p0_small_C  arm=pretrain chunk_size=512 datamodule.batch_size=12800 optimizer.lr=1e-3 optimizer.schedule=wsd optimizer.warmup_epochs=2 optimizer.decay_frac=0.2 ~callbacks.early_stopping @est=9000 @mem=17
+p1_small_C  arm=pretrain chunk_size=512 datamodule.batch_size=12800 optimizer.lr=1e-3 optimizer.schedule=wsd optimizer.warmup_epochs=2 optimizer.decay_frac=0.2 ~callbacks.early_stopping pretrain.loss_weights.jet_contrastive=1.0 @est=9000 @mem=23
+p2_small_C  arm=pretrain chunk_size=512 datamodule.batch_size=12800 optimizer.lr=1e-3 optimizer.schedule=wsd optimizer.warmup_epochs=2 optimizer.decay_frac=0.2 ~callbacks.early_stopping pretrain.loss_weights.contrastive=0.0 pretrain.loss_weights.jet_contrastive=1.0 @est=9000 @mem=16

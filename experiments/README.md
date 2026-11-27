@@ -19,7 +19,7 @@ Python tools and the config-driven `scripts/submit_*.sh`, which write to the exp
 | [`2026-11_wsd-lr-search`](2026-11_wsd-lr-search/README.md) | 2026-11-16 → 11-23 | one batch size, WSD, no early stopping: lr per case (protocol v1) | `exp/ssl-wsd-lr-search` | closed |
 | [`2026-11_four-way-jc-dropout`](2026-11_four-way-jc-dropout/README.md) | 2026-11-23 → | CE / CE+JC / CE+dropout / CE+JC+dropout, from scratch, class-weighted CE | `main` | running |
 | [`2026-11_pretrain-v1`](2026-11_pretrain-v1/README.md) | 2026-11-23 → 11-25 | P0 / P1 pretrained again with the protocol-v1 settings (batch 12800, WSD 80 epochs, no early stopping) | `main` | cancelled (model B replaced by a small model) |
-| [`2026-11_pretrain-saint-small`](2026-11_pretrain-saint-small/README.md) | 2026-11-25 → | P0 / P1 / P2 of small_RC (`saint_small_RC`, 3.5 M), small_C (`saint_small_C`, 2.1 M) and normal_C (`saint_normal_C`, 2.2 M), P_v1 recipe over 40 epochs, 4 seeds for now (5 in the end) | `main` | small_RC + normal_C queued (2026-11-26); small_C next |
+| [`2026-11_pretrain-saint-small`](2026-11_pretrain-saint-small/README.md) | 2026-11-25 → | P0 / P1 / P2 of small_RC (`saint_small_RC`, 3.5 M), small_C (`saint_small_C`, 2.1 M) and normal_C (`saint_normal_C`, 2.2 M), P_v1 recipe over 40 epochs, 4 seeds for now (5 in the end) | `main` | small_RC running, normal_C and small_C queued (2026-11-26) |
 | GN2 on the same 18.6 M slice | 2026-11-06 | same-data GN2 reference (salt, CE only, 8 seeds) | salt-ririva `6e43f64` | done; outputs in `/storage3/DSIP/rriva/research/salt-ririva/slurm/scratch_lambda_scan/output/run_20261106_092332/` |
 
 ## Old paths

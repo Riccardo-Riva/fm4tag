@@ -1,7 +1,6 @@
 # P0 / P1 / P2 pretrainings of small_RC, small_C and normal_C (2026-11-25 →)
 
-**Status:** small_RC and normal_C submitted on 2026-11-26 (pending in the queue); small_C follows once small_RC's first
-epoch is timed.
+**Status (2026-11-26 23:15):** small_RC running (8 of 12 runs; its third pack pending); normal_C and small_C queued.
 
 ## Question
 First contrastive pretrainings of three models, to be fine-tuned and compared with the same models trained from scratch:
@@ -58,19 +57,24 @@ normal_C 2.13 M.
   - WSD: warmup 2 epochs (5 %), constant, linear decay over epochs 32–40 (20 %);
   - no early stopping; the downstream loads the last checkpoint.
 - **Seeds:** 42, 424, 4242, 42424 (owner, 2026-11-26; 5 per setting in the end).
-- **Packing:** two runs per card (`SLOTS_PER_GPU=2`, budget 40 GiB). `@mem` per cell from the CPU estimate
-  (`experiments/dev/2026-11-26_cpu-mem-estimate`): small_RC 12 / 19 / 14 GiB, normal_C 9 / 20 / 16, small_C 6 / 12 / 8
-  (P0 / P1 / P2). `@est` 13300 s per epoch while two share a card: twice normal_RC's P1 alone on an A40, an upper
-  bound (40 epochs = 148 h of the 167.5 h a 7-day job leaves). small_C does a subset of small_RC's work, so small_RC's
-  first measured epoch bounds small_C's time; small_C then runs 3–4 per card.
+- **Packing** (`SLOTS_PER_GPU=2`, budget 40 GiB per card):
+  - The CPU memory estimate (`experiments/dev/2026-11-26_cpu-mem-estimate`) was 1.5–1.9× too low: small_RC's GPU peaks
+    are P0 16.6, P1 22.5, P2 15.3 GiB (estimated 8.6 / 13.6 / 10.2). Two P1 on one card ran out of memory (seeds 424 and
+    4242, after 1 min; re-queued).
+  - small_RC: two per card, `@mem` 17 / 23 / 16 (measured + margin; never two P1), `@est` 13300 s.
+  - small_C: two per card with small_RC's numbers as upper bounds (small_C does a subset of its work): `@mem`
+    17 / 23 / 16, `@est` 9000 s (small_RC's slowest shared epoch, P1 next to P2: 5460 s on L40S, × 1.56 for an A40).
+  - normal_C: one per card first (`@mem` 40, `@est` 6650 s = normal_RC's P1 alone on an A40), two trainings one after
+    the other per card; pairs once its first epoch has measured the real peak.
+  - Measured with two per card on L40S (small_RC): P0 next to P0 61 min per epoch, P1 next to P2 91 min, P2 56 min.
 
 ## Stages and configs
 | Stage | What |
 |---|---|
 | `P_small_s42_20261125_231824_CANCELLED_not_started` | P0 / P1 of small_RC, seed 42 (pack 7473289), cancelled on 2026-11-26 before it started: replaced by the stages below |
 | `P_small_RC_20261126_123135` | small_RC, `configs/P_small_RC.cells`, `CONFIG=saint_small_RC`, 12 runs, packs 7478206–08 (3 × 2 GPUs) |
-| `P_normal_C_20261126_123145` | normal_C, `configs/P_normal_C.cells`, `CONFIG=saint_normal_C`, 12 runs, packs 7478209–10; a third pack when a job slot frees (`STAGE_DIR=<this stage> PACKS=1 bash slurm/ssl_pack.sh`) |
-| (next) | small_C, `configs/P_small_C.cells`, `CONFIG=saint_small_C`, after small_RC's first epoch |
+| `P_normal_C_20261126_123145` | normal_C, `configs/P_normal_C.cells`, `CONFIG=saint_normal_C`, 12 runs, packs 7478209–10, 7599134 |
+| `P_small_C_20261126_231531` | small_C, `configs/P_small_C.cells`, `CONFIG=saint_small_C`, 12 runs, packs 7597873–74, 7599135 |
 
 Before launch, each cells file was composed with its base, built, and run for one loss + backward step on a toy batch on
 CPU (`cells_loss_check.py` in the session scratchpad): all 9 cells give a finite loss; P1 and P2 send gradients to both

@@ -35,6 +35,19 @@ Run 7477983 measures all of them under the new names.
     sbatch experiments/dev/2026-11-26_cpu-mem-estimate/mem_estimate_cpu.sh
 
 ## Result
+**The estimate was wrong: 1.5–1.9× too low.** small_RC's real GPU peaks (stage `P_small_RC_20261126_123135`, first
+epochs, `mem/gpu_peak_MiB`) are P0 16.6, P1 22.5, P2 15.3 GiB against 8.6 / 13.6 / 10.2 estimated. Two P1 runs on one
+card ran out of memory. Do not reuse this method between models of different depth.
+
+Why: on GPU, small_RC's P0 needs 51 % of normal_RC's; on CPU, 26 %. A large part of the GPU memory does not shrink with
+the encoder's depth (embeddings, projectors, contrastive losses, the views), while on CPU each attention layer also
+stores the full attention matrices that the GPU's flash kernels never build, which inflates the part that does shrink.
+The two-model calibration (normal_RC) therefore overstated how much a shallower model saves. With two measured models
+an affine fit (GPU = a + b · CPU) is possible, but it still assumes the CPU-only part scales alike in models with and
+without row steps; the real numbers come from each stage's first epoch.
+
+What follows is the original result, kept for the record.
+
 Job 7477983 (commit 6e28201 configs, node1, 16 threads), `outputs/results_7477983.jsonl`. The calibration cells are
 named `p*_B`: B = normal_RC (model B).
 
